@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -22,7 +24,6 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // Simulated login function. Replace with actual authentication logic.
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -30,20 +31,42 @@ class _LoginScreenState extends State<LoginScreen> {
       _isLoading = true;
     });
 
-    // Simulate network delay.
-    await Future.delayed(const Duration(seconds: 2));
+    final url = Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/login');
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'email': _emailController.text.trim(),
+          'password': _passwordController.text.trim(),
+        }),
+      );
 
-    // Check credentials (for demonstration only).
-    if (_emailController.text.trim() == "user@example.com" && _passwordController.text.trim() == "password") {
-      if (!mounted) return; // Check if the widget is still mounted.
-      Navigator.pushReplacementNamed(context, '/home');
-    } else {
-      if (!mounted) return; // Check if the widget is still mounted.
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        Navigator.pushReplacementNamed(context, '/home');
+      } else {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text("Login Failed"),
+            content: const Text("Invalid email or password."),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("OK"),
+              )
+            ],
+          ),
+        );
+      }
+    } catch (e) {
       showDialog(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text("Login Failed"),
-          content: const Text("Invalid email or password."),
+          title: const Text("Error"),
+          content: const Text("An error occurred. Please try again later."),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -52,17 +75,18 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
         ),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
-
-    setState(() {
-      _isLoading = false;
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Gradient background for a modern look.
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -88,7 +112,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Logo and welcome header.
                         CircleAvatar(
                           radius: 40,
                           backgroundColor: Colors.blue.shade50,
@@ -107,7 +130,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         const SizedBox(height: 32),
-                        // Email Field.
                         TextFormField(
                           controller: _emailController,
                           keyboardType: TextInputType.emailAddress,
@@ -121,7 +143,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           },
                         ),
                         const SizedBox(height: 20),
-                        // Password Field.
                         TextFormField(
                           controller: _passwordController,
                           obscureText: _obscurePassword,
@@ -145,7 +166,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           },
                         ),
                         const SizedBox(height: 10),
-                        // Remember Me and Forgot Password row.
                         Row(
                           children: [
                             Checkbox(
@@ -167,7 +187,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           ],
                         ),
                         const SizedBox(height: 20),
-                        // Login Button.
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
@@ -185,7 +204,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        // Divider with text.
                         Row(
                           children: const [
                             Expanded(child: Divider(thickness: 1)),
@@ -196,7 +214,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        // Social Login Buttons.
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
@@ -213,7 +230,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           ],
                         ),
                         const SizedBox(height: 20),
-                        // Sign Up link.
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
