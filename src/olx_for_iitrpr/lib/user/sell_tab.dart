@@ -1,10 +1,14 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:logging/logging.dart';
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http_parser/http_parser.dart';
 
-final Logger _logger = Logger('SellTab');
 
 class SellTab extends StatefulWidget {
-  const SellTab({super.key});
+  const SellTab({Key? key}) : super(key: key);
 
   @override
   State<SellTab> createState() => _SellTabState();
@@ -12,123 +16,236 @@ class SellTab extends StatefulWidget {
 
 class _SellTabState extends State<SellTab> {
   final _formKey = GlobalKey<FormState>();
-  String _title = '';
-  String _description = '';
-  double _price = 0.0;
-  String _category = 'Electronics';
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _priceController = TextEditingController();
+  String _selectedCategory = 'electronics';
+  List<File> _images = [];
+  bool _isLoading = false;
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
-  final List<String> _categories = [
-    'Electronics',
-    'Furniture',
-    'Books',
-    'Clothing',
-    'Other'
-  ];
+  final List<String> _categories = ['electronics', 'furniture', 'books', 'clothing', 'others'];
+
+  // Picks multiple images using image_picker
+  Future<void> _pickImages() async {
+    final ImagePicker picker = ImagePicker();
+    final List<XFile>? pickedFiles = await picker.pickMultiImage();
+    if (pickedFiles != null && pickedFiles.isNotEmpty) {
+      setState(() {
+        _images = pickedFiles.map((e) => File(e.path)).toList();
+      });
+    }
+  }
+
+  // Submits the product using a multipart POST request
+  Future<void> _submitProduct() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_images.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select at least one image")),
+      );
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      if (authCookie == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Not authenticated")),
+        );
+        return;
+      }
+      final uri = Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products');
+      var request = http.MultipartRequest('POST', uri);
+      
+      // Set the auth cookie header; do not manually set Content-Type
+      request.headers['auth-cookie'] = authCookie;
+
+      // Add form fields
+      request.fields['name'] = _nameController.text.trim();
+      request.fields['description'] = _descriptionController.text.trim();
+      request.fields['price'] = _priceController.text.trim();
+      request.fields['category'] = _selectedCategory;
+
+      // Attach images
+      for (File image in _images) {
+        var stream = http.ByteStream(image.openRead());
+        var length = await image.length();
+        var multipartFile = http.MultipartFile(
+          'images',
+          stream,
+          length,
+          filename: image.path.split('/').last,
+          contentType: MediaType('image', 'jpeg'), // adjust if not JPEG
+        );
+        request.files.add(multipartFile);
+      }
+
+      // Send the request and capture the response
+      final response = await request.send();
+      final responseBody = await response.stream.bytesToString();
+
+      // Debug logging
+      print("Response status: ${response.statusCode}");
+      print("Response body: $responseBody");
+
+      // Attempt to decode the response as JSON.
+      // If responseBody starts with '<html>', it indicates an error page.
+      if (responseBody.startsWith("<html>")) {
+        throw Exception("Server returned an HTML error page");
+      }
+
+      final resData = json.decode(responseBody);
+
+      if (response.statusCode == 201 && resData['success'] == true) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Product posted successfully")),
+        );
+        // Clear the form fields on success
+        _nameController.clear();
+        _descriptionController.clear();
+        _priceController.clear();
+        setState(() {
+          _images.clear();
+          _selectedCategory = _categories.first;
+        });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(resData['error'] ?? "Product submission failed")),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e")),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    _priceController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text("Sell Product"),
+      ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Sell an Item',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 20),
+              // Product Name
               TextFormField(
+                controller: _nameController,
                 decoration: const InputDecoration(
-                  labelText: 'Title',
+                  labelText: "Product Name",
                   border: OutlineInputBorder(),
                 ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a title';
-                  }
-                  return null;
-                },
-                onSaved: (value) => _title = value!,
+                validator: (value) =>
+                    (value == null || value.isEmpty) ? "Enter product name" : null,
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+              // Description
               TextFormField(
+                controller: _descriptionController,
                 decoration: const InputDecoration(
-                  labelText: 'Description',
+                  labelText: "Description",
                   border: OutlineInputBorder(),
                 ),
                 maxLines: 3,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a description';
-                  }
-                  return null;
-                },
-                onSaved: (value) => _description = value!,
+                validator: (value) =>
+                    (value == null || value.isEmpty) ? "Enter product description" : null,
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+              // Price
               TextFormField(
+                controller: _priceController,
                 decoration: const InputDecoration(
-                  labelText: 'Price',
+                  labelText: "Price",
                   border: OutlineInputBorder(),
-                  prefixText: '₹ ',
                 ),
                 keyboardType: TextInputType.number,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a price';
-                  }
-                  if (double.tryParse(value) == null) {
-                    return 'Please enter a valid number';
-                  }
-                  return null;
-                },
-                onSaved: (value) => _price = double.parse(value!),
+                validator: (value) =>
+                    (value == null || value.isEmpty) ? "Enter product price" : null,
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+              // Category Dropdown
               DropdownButtonFormField<String>(
-                decoration: const InputDecoration(
-                  labelText: 'Category',
-                  border: OutlineInputBorder(),
-                ),
-                value: _category,
-                items: _categories.map((String category) {
+                value: _selectedCategory,
+                items: _categories.map((cat) {
                   return DropdownMenuItem(
-                    value: category,
-                    child: Text(category),
+                    value: cat,
+                    child: Text(cat[0].toUpperCase() + cat.substring(1)),
                   );
                 }).toList(),
-                onChanged: (String? newValue) {
-                  setState(() {
-                    _category = newValue!;
-                  });
-                },
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: () {
-                  if (_formKey.currentState!.validate()) {
-                    _formKey.currentState!.save();
-                    // Here you would typically send the data to your backend
-                    // For now, we'll just print it
-                    _logger.info('Title: $_title');
-                    _logger.info('Description: $_description');
-                    _logger.info('Price: $_price');
-                    _logger.info('Category: $_category');
-                                        
-                    // Show a success message
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Item posted successfully!')),
-                    );
-                    
-                    // Clear the form
-                    _formKey.currentState!.reset();
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() {
+                      _selectedCategory = value;
+                    });
                   }
                 },
-                child: const Text('Post Item'),
+                decoration: const InputDecoration(
+                  labelText: "Category",
+                  border: OutlineInputBorder(),
+                ),
               ),
+              const SizedBox(height: 16),
+              // Image Picker
+              ElevatedButton.icon(
+                onPressed: _pickImages,
+                icon: const Icon(Icons.image),
+                label: const Text("Select Images"),
+              ),
+              const SizedBox(height: 8),
+              _images.isNotEmpty
+                  ? SizedBox(
+                      height: 100,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _images.length,
+                        itemBuilder: (context, index) {
+                          return Padding(
+                            padding: const EdgeInsets.all(4.0),
+                            child: Image.file(
+                              _images[index],
+                              width: 100,
+                              height: 100,
+                              fit: BoxFit.cover,
+                            ),
+                          );
+                        },
+                      ),
+                    )
+                  : const Text("No images selected"),
+              const SizedBox(height: 24),
+              // Submit Button
+              _isLoading
+                  ? const CircularProgressIndicator()
+                  : SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _submitProduct,
+                        child: const Text("Submit Product"),
+                      ),
+                    ),
             ],
           ),
         ),
