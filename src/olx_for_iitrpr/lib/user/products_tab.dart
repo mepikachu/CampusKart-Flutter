@@ -55,41 +55,68 @@ class _ProductsTabState extends State<ProductsTab> {
     }
   }
 
-  // Build each product card, checking if image data is stored as Buffer data
+  // Helper function to convert the images field to a List
+  List<dynamic> parseImages(dynamic imagesField) {
+    if (imagesField == null) return [];
+    if (imagesField is List) return imagesField;
+    if (imagesField is Map) return [imagesField];
+    return [];
+  }
+
   Widget buildProductCard(dynamic product, int index) {
     Widget imageWidget;
-    if (product['images'] != null &&
-        product['images'].isNotEmpty &&
-        product['images'][0] is Map &&
-        product['images'][0]['data'] != null) {
-      // The image is stored in MongoDB as an object with a 'data' field (list of ints)
-      List<dynamic> dataList = product['images'][0]['data'];
-      Uint8List bytes = Uint8List.fromList(dataList.cast<int>());
-      imageWidget = Image.memory(
-        bytes,
-        fit: BoxFit.cover,
-      );
-    } else if (product['images'] != null &&
-        product['images'].isNotEmpty &&
-        product['images'][0] is String) {
-      // Otherwise, assume it's a URL (or base64 string if already prefixed)
-      imageWidget = Image.network(
-        product['images'][0],
-        fit: BoxFit.cover,
-      );
+    final imagesList = parseImages(product['images']);
+
+    if (imagesList.isNotEmpty && imagesList[0] is Map) {
+      final firstImage = imagesList[0];
+      // Check for binary data
+      if (firstImage.containsKey('data')) {
+        try {
+          List<dynamic> dataList = firstImage['data'];
+          // Convert to Uint8List
+          Uint8List bytes = Uint8List.fromList(dataList.cast<int>());
+          // Convert binary data to base64
+          String base64Image = base64Encode(bytes);
+          // Use provided contentType or default to image/jpeg
+          String contentType = (firstImage['contentType'] is String &&
+                  (firstImage['contentType'] as String).isNotEmpty)
+              ? firstImage['contentType']
+              : 'image/jpeg';
+          // Build the data URL correctly: "data:<mime>;base64,<data>"
+          String dataUrl = 'data:$contentType;base64,$base64Image';
+          imageWidget = Image.network(
+            dataUrl,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                color: Colors.grey[300],
+                child: const Center(child: Text('Image could not be loaded')),
+              );
+            },
+          );
+        } catch (e) {
+          imageWidget = Container(
+            color: Colors.grey[300],
+            child: const Center(child: Text('Image could not be loaded')),
+          );
+        }
+      } else {
+        imageWidget = Container(
+          color: Colors.grey[300],
+          child: const Center(child: Text('Image could not be loaded')),
+        );
+      }
     } else {
-      // Fallback image
-      imageWidget = Image.network(
-        'https://picsum.photos/200?random=$index',
-        fit: BoxFit.cover,
+      // Fallback if no valid image data is present
+      imageWidget = Container(
+        color: Colors.grey[300],
+        child: const Center(child: Text('Image could not be loaded')),
       );
     }
 
     return Card(
       elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(15),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
