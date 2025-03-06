@@ -1,3 +1,4 @@
+import 'dart:async'; // Add this import for TimeoutException
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -17,87 +18,116 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   bool _rememberMe = false;
   bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _loadLoginInfo();
-  }
-
-  Future<void> _loadLoginInfo() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _emailController.text = prefs.getString('email') ?? '';
-      _passwordController.text = prefs.getString('password') ?? '';
-      _rememberMe = prefs.getBool('rememberMe') ?? false;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadLoginInfo();
     });
   }
 
+  Future<void> _loadLoginInfo() async {
+    print('Loading saved credentials...');
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      setState(() {
+        _emailController.text = prefs.getString('email') ?? '';
+        _passwordController.text = prefs.getString('password') ?? '';
+        _rememberMe = prefs.getBool('rememberMe') ?? false;
+      });
+
+      if (_rememberMe && _emailController.text.isNotEmpty && _passwordController.text.isNotEmpty) {
+        print('Attempting auto-login...');
+        await _handleLogin();
+      }
+    } catch (e) {
+      print('Error loading credentials: $e');
+    }
+  }
+
   Future<void> _saveLoginInfo() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (_rememberMe) {
-      await prefs.setString('email', _emailController.text);
-      await prefs.setString('password', _passwordController.text);
-      await prefs.setBool('rememberMe', true);
-    } else {
-      await prefs.remove('email');
-      await prefs.remove('password');
-      await prefs.setBool('rememberMe', false);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_rememberMe) {
+        await prefs.setString('email', _emailController.text);
+        await prefs.setString('password', _passwordController.text);
+        await prefs.setBool('rememberMe', true);
+      } else {
+        await prefs.remove('email');
+        await prefs.remove('password');
+        await prefs.setBool('rememberMe', false);
+      }
+    } catch (e) {
+      print('Error saving credentials: $e');
     }
   }
 
   Future<void> _handleLogin() async {
-    if (!_formKey.currentState!.validate()) return;
+    print('=== Login Process Started ===');
+    if (!_formKey.currentState!.validate()) {
+      print('Validation failed');
+      return;
+    }
+
+    if (_isLoading) return;
 
     setState(() {
       _isLoading = true;
+      _errorMessage = null;
     });
 
-    await _saveLoginInfo();
-
-    final url = Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/login');
     try {
+      await _saveLoginInfo();
+
       final response = await http.post(
-        url,
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/login'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'email': _emailController.text.trim(),
           'password': _passwordController.text.trim(),
         }),
-      );
+      ).timeout(const Duration(seconds: 15));
+
+      print('Response Status: ${response.statusCode}');
+      print('Response Body: ${response.body}');
 
       if (!mounted) return;
 
-      if (response.statusCode == 200) {
+      final responseBody = json.decode(response.body);
+      
+      if (response.statusCode == 200 && responseBody['message'] == 'Login successful') {
+        print('Login successful! Navigating to home...');
         Navigator.pushReplacementNamed(context, '/home');
       } else {
-        _showErrorDialog("Login Failed", "Invalid email or password.");
+        setState(() {
+          _errorMessage = responseBody['message'] ?? 'Login failed. Please try again.';
+        });
       }
+    } on http.ClientException catch (e) {
+      print('Network error: $e');
+      setState(() {
+        _errorMessage = 'Network error. Check your connection.';
+      });
+    } on TimeoutException {
+      print('Request timed out');
+      setState(() {
+        _errorMessage = 'Server response timed out. Try again.';
+      });
     } catch (e) {
-      _showErrorDialog("Error", "An error occurred. Please try again later.");
+      print('Unexpected error: $e');
+      setState(() {
+        _errorMessage = 'An unexpected error occurred.';
+      });
     } finally {
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
       }
+      print('=== Login Process Ended ===');
     }
-  }
-
-  void _showErrorDialog(String title, String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("OK"),
-          )
-        ],
-      ),
-    );
   }
 
   @override
