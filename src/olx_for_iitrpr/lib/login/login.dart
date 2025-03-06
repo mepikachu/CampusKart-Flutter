@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,10 +19,31 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
 
   @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _loadLoginInfo();
+  }
+
+  Future<void> _loadLoginInfo() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _emailController.text = prefs.getString('email') ?? '';
+      _passwordController.text = prefs.getString('password') ?? '';
+      _rememberMe = prefs.getBool('rememberMe') ?? false;
+    });
+  }
+
+  Future<void> _saveLoginInfo() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_rememberMe) {
+      await prefs.setString('email', _emailController.text);
+      await prefs.setString('password', _passwordController.text);
+      await prefs.setBool('rememberMe', true);
+    } else {
+      await prefs.remove('email');
+      await prefs.remove('password');
+      await prefs.setBool('rememberMe', false);
+    }
   }
 
   Future<void> _handleLogin() async {
@@ -30,6 +52,8 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _isLoading = true;
     });
+
+    await _saveLoginInfo();
 
     final url = Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/login');
     try {
@@ -47,34 +71,10 @@ class _LoginScreenState extends State<LoginScreen> {
       if (response.statusCode == 200) {
         Navigator.pushReplacementNamed(context, '/home');
       } else {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text("Login Failed"),
-            content: const Text("Invalid email or password."),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text("OK"),
-              )
-            ],
-          ),
-        );
+        _showErrorDialog("Login Failed", "Invalid email or password.");
       }
     } catch (e) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text("Error"),
-          content: const Text("An error occurred. Please try again later."),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("OK"),
-            )
-          ],
-        ),
-      );
+      _showErrorDialog("Error", "An error occurred. Please try again later.");
     } finally {
       if (mounted) {
         setState(() {
@@ -82,6 +82,22 @@ class _LoginScreenState extends State<LoginScreen> {
         });
       }
     }
+  }
+
+  void _showErrorDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("OK"),
+          )
+        ],
+      ),
+    );
   }
 
   @override
