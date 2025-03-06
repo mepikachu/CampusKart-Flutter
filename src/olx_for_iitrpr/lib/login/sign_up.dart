@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -53,20 +55,66 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _isLoading = true;
     });
 
-    // Simulate network delay
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      final response = await http.post(
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/signup'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'name': _nameController.text,
+          'email': _emailController.text,
+          'password': _passwordController.text,
+        }),
+      );
 
-    // Navigate to HomeScreen after successful sign up
-    if (!mounted) return; // Check if the widget is still mounted.
-    Navigator.pushReplacementNamed(context, '/home');
+      if (!mounted) return;
 
-    setState(() {
-      _isLoading = false;
-    });
+      if (response.statusCode == 201) {
+        // Sign up successful
+        Navigator.pushReplacementNamed(context, '/home');
+      } else {
+        // Sign up failed
+        final errorMessage = json.decode(response.body)['error'] ?? 'Sign up failed';
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text("Sign Up Failed"),
+            content: Text(errorMessage),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text("OK"),
+              )
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      // Handle network errors
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text("Error"),
+          content: const Text("An error occurred. Please try again later."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("OK"),
+            )
+          ],
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    // The build method remains the same as in your original code
     return Scaffold(
       appBar: AppBar(
         title: const Text("Sign Up"),
