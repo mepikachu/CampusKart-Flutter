@@ -14,10 +14,12 @@ class ProductsTab extends StatefulWidget {
 
 class _ProductsTabState extends State<ProductsTab> {
   List<dynamic> products = [];
+  List<dynamic> filteredProducts = []; // Add this line
+  String searchQuery = ''; // Add this line
   bool isLoading = true;
   String errorMessage = '';
   String currentUserName = '';
-  final FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
   @override
   void initState() {
@@ -49,11 +51,11 @@ class _ProductsTabState extends State<ProductsTab> {
         final data = json.decode(response.body);
         if (data['success'] == true) {
           setState(() {
-            // Filter out current user's products
             products = (data['products'] as List)
                 .where((product) => 
                     product['seller']?['userName'] != currentUserName)
                 .toList();
+            filteredProducts = List.from(products); // Initialize filtered products
             isLoading = false;
           });
         } else {
@@ -179,6 +181,28 @@ class _ProductsTabState extends State<ProductsTab> {
     );
   }
 
+  // Add this method to filter products
+  void _filterProducts(String query) {
+    setState(() {
+      searchQuery = query.toLowerCase();
+      if (searchQuery.isEmpty) {
+        filteredProducts = List.from(products);
+      } else {
+        filteredProducts = products.where((product) {
+          final name = product['name']?.toString().toLowerCase() ?? '';
+          final description = product['description']?.toString().toLowerCase() ?? '';
+          final category = product['category']?.toString().toLowerCase() ?? '';
+          final seller = product['seller']?['userName']?.toString().toLowerCase() ?? '';
+          
+          return name.contains(searchQuery) ||
+              description.contains(searchQuery) ||
+              category.contains(searchQuery) ||
+              seller.contains(searchQuery);
+        }).toList();
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -191,16 +215,14 @@ class _ProductsTabState extends State<ProductsTab> {
               Expanded(
                 child: TextField(
                   decoration: InputDecoration(
-                    hintText: 'Search...',
+                    hintText: 'Search products...',
                     prefixIcon: const Icon(Icons.search),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(25),
                     ),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                   ),
-                  onChanged: (value) {
-                    // Implement search functionality
-                  },
+                  onChanged: _filterProducts, // Add the filter callback
                 ),
               ),
               IconButton(
@@ -228,9 +250,9 @@ class _ProductsTabState extends State<ProductsTab> {
                           crossAxisSpacing: 10,
                           mainAxisSpacing: 10,
                         ),
-                        itemCount: products.length,
+                        itemCount: filteredProducts.length, // Use filteredProducts instead of products
                         itemBuilder: (context, index) {
-                          return buildProductCard(products[index], index);
+                          return buildProductCard(filteredProducts[index], index); // Use filteredProducts
                         },
                       ),
                     ),

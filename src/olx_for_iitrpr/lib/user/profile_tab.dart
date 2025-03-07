@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'my_listings_screen.dart';
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -117,7 +118,15 @@ class _ProfileTabState extends State<ProfileTab> {
       title: Text(title),
       trailing: const Icon(Icons.arrow_forward_ios),
       onTap: () {
-        // Add navigation to respective sections if needed
+        if (title == 'My Listings') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const MyListingsScreen(),
+            ),
+          );
+        }
+        // Add other section navigations here
       },
     );
   }
