@@ -24,7 +24,6 @@ class _ProfileTabState extends State<ProfileTab> {
 
   Future<void> fetchUserData() async {
     try {
-      // Read the authCookie from secure storage
       final authCookie = await _secureStorage.read(key: 'authCookie');
       if (authCookie == null) {
         throw Exception('Not authenticated');
@@ -34,7 +33,6 @@ class _ProfileTabState extends State<ProfileTab> {
         Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/me'),
         headers: {
           'Content-Type': 'application/json',
-          // Send the authCookie in header so backend can identify the user
           'auth-cookie': authCookie,
         },
       );
@@ -59,7 +57,6 @@ class _ProfileTabState extends State<ProfileTab> {
 
   Future<void> _logout() async {
     try {
-      // Optionally, call the backend logout endpoint if it exists
       final authCookie = await _secureStorage.read(key: 'authCookie');
       if (authCookie != null) {
         await http.post(
@@ -88,7 +85,8 @@ class _ProfileTabState extends State<ProfileTab> {
 
   String _formatAddress(Map<String, dynamic>? address) {
     if (address == null) return 'No address';
-    return '${address['street']}, ${address['city']}, ${address['state']}, ${address['zipCode']}';
+    return '${address['street']}, ${address['city']}, '
+           '${address['state']}, ${address['zipCode']}';
   }
 
   String _formatDate(String? dateString) {
@@ -119,7 +117,7 @@ class _ProfileTabState extends State<ProfileTab> {
       title: Text(title),
       trailing: const Icon(Icons.arrow_forward_ios),
       onTap: () {
-        // Add navigation to respective sections
+        // Add navigation to respective sections if needed
       },
     );
   }
@@ -144,34 +142,44 @@ class _ProfileTabState extends State<ProfileTab> {
               backgroundImage: NetworkImage('https://picsum.photos/200'),
             ),
             const SizedBox(height: 10),
+            // Username (large text)
             Text(
               userData?['userName'] ?? 'No Name',
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
+            // Email in light grey color
             Text(
               userData?['email'] ?? 'No Email',
-              style: const TextStyle(fontSize: 16, color: Colors.grey),
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey.shade600, // A subtle grey
+              ),
             ),
             const SizedBox(height: 20),
             _buildInfoCard('Phone', userData?['phone'] ?? 'Not provided'),
             _buildInfoCard('Address', _formatAddress(userData?['address'])),
-            _buildInfoCard('Member Since', _formatDate(userData?['registrationDate'])),
+            _buildInfoCard(
+                'Member Since', _formatDate(userData?['registrationDate'])),
             const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                // Add edit profile functionality if needed
-              },
-              child: const Text('Edit Profile'),
-            ),
-            const SizedBox(height: 20),
+
+            // Edit Profile button removed
+
             _buildSection('My Listings', Icons.list),
             _buildSection('My Purchases', Icons.shopping_bag),
             _buildSection('My Donations', Icons.volunteer_activism),
             _buildSection('Settings', Icons.settings),
             const SizedBox(height: 20),
-            ElevatedButton(
+
+            // Logout button: a TextButton with red text
+            TextButton(
               onPressed: _logout,
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.red,
+                textStyle: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               child: const Text('Logout'),
             ),
             const SizedBox(height: 20),
