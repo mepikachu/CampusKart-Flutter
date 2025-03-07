@@ -316,7 +316,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
 class ChatScreen extends StatefulWidget {
   final String conversationId;
   final String partnerNames;
-  const ChatScreen({super.key, required this.conversationId, required this.partnerNames});
+  final String? sellerId; // Add this
+
+  const ChatScreen({
+    super.key, 
+    required this.conversationId, 
+    required this.partnerNames,
+    this.sellerId, // Add this
+  });
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -335,17 +342,47 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _loadCurrentUserName().then((_) {
-      fetchConversation().then((_) async {
-        // Mark the conversation as read when opened.
-        await _secureStorage.write(
-          key: 'lastRead_${widget.conversationId}',
-          value: DateTime.now().toIso8601String(),
-        );
-      });
-      _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (widget.sellerId != null) {
+        // If sellerId is provided, create a new conversation
+        _createConversation();
+      } else {
+        // Otherwise fetch existing conversation
         fetchConversation();
-      });
+      }
     });
+  }
+
+  Future<void> _createConversation() async {
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      final response = await http.post(
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+        body: json.encode({'participantId': widget.sellerId}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] && data['conversation'] != null) {
+          // Use the new conversation ID to fetch messages
+          String newConversationId = data['conversation']['_id'];
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ChatScreen(
+                conversationId: newConversationId,
+                partnerNames: widget.partnerNames,
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error creating conversation: $e');
+    }
   }
 
   Future<void> _loadCurrentUserName() async {

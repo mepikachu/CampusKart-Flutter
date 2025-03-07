@@ -2,6 +2,8 @@ import 'dart:convert'; // for base64Decode
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // Add if missing
+import 'product_details.dart'; // Add this import
 
 class ProductsTab extends StatefulWidget {
   const ProductsTab({super.key});
@@ -14,38 +16,51 @@ class _ProductsTabState extends State<ProductsTab> {
   List<dynamic> products = [];
   bool isLoading = true;
   String errorMessage = '';
+  String currentUserName = '';
+  final FlutterSecureStorage _secureStorage = FlutterSecureStorage();
 
   @override
   void initState() {
     super.initState();
-    fetchAvailableProducts();
+    _loadCurrentUserName().then((_) => fetchAvailableProducts());
+  }
+
+  Future<void> _loadCurrentUserName() async {
+    String? name = await _secureStorage.read(key: 'userName');
+    if (mounted) {
+      setState(() {
+        currentUserName = name ?? '';
+      });
+    }
   }
 
   Future<void> fetchAvailableProducts() async {
     try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
         Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products?status=available'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
       );
 
       if (response.statusCode == 200) {
-        final responseBody = json.decode(response.body);
-        if (responseBody['success'] == true) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
           setState(() {
-            products = responseBody['products'];
+            // Filter out current user's products
+            products = (data['products'] as List)
+                .where((product) => 
+                    product['seller']?['userName'] != currentUserName)
+                .toList();
             isLoading = false;
           });
         } else {
-          setState(() {
-            errorMessage = responseBody['error'] ?? 'Failed to fetch products';
-            isLoading = false;
-          });
+          throw Exception(data['error']);
         }
       } else {
-        setState(() {
-          errorMessage = 'Server error: ${response.statusCode}';
-          isLoading = false;
-        });
+        throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
       setState(() {
@@ -61,6 +76,15 @@ class _ProductsTabState extends State<ProductsTab> {
     if (imagesField is List) return imagesField;
     if (imagesField is Map) return [imagesField];
     return [];
+  }
+
+  void _showProductDetails(dynamic product) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProductDetailsScreen(product: product),
+      ),
+    );
   }
 
   Widget buildProductCard(dynamic product, int index) {
@@ -104,50 +128,53 @@ class _ProductsTabState extends State<ProductsTab> {
       );
     }
 
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Product Image
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
-              ),
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
-                child: imageWidget,
+    return GestureDetector(
+      onTap: () => _showProductDetails(product),
+      child: Card(
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Product Image
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                ),
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                  child: imageWidget,
+                ),
               ),
             ),
-          ),
-          // Product Details
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  product['name'] ?? 'Product ${index + 1}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '₹${product['price']?.toString() ?? ''}',
-                  style: const TextStyle(color: Colors.green),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Seller: ${product['seller']?['userName'] ?? 'Unknown'}',
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ],
+            // Product Details
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    product['name'] ?? 'Product ${index + 1}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '₹${product['price']?.toString() ?? ''}',
+                    style: const TextStyle(color: Colors.green),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Seller: ${product['seller']?['userName'] ?? 'Unknown'}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
