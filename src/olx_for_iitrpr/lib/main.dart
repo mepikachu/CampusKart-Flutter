@@ -21,7 +21,7 @@ class MyApp extends StatelessWidget {
         '/': (context) => const LoginScreen(),
         '/home': (context) => const HomeScreen(),
         '/signup': (context) => const SignUpScreen(),
-        '/forgot': (context) => const ForgotPasswordScreen(),
+        '/forgot-password': (context) => const ForgotPasswordScreen(),
       },
       theme: ThemeData(
         primarySwatch: Colors.blue,

@@ -46,7 +46,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     super.dispose();
   }
 
-  // Constructs address map to send as JSON.
   Map<String, dynamic> _getAddress() {
     return {
       'street': _streetController.text,
@@ -57,7 +56,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     };
   }
 
-  // Handles registration; on success stores the authCookie and navigates to home.
   Future<void> _handleSignUp() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -84,13 +82,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
           .timeout(const Duration(seconds: 15));
 
       final responseBody = json.decode(response.body);
-      
+
       if (response.statusCode == 201 && responseBody['success'] == true) {
-        // Registration successful, store the authCookie for auto login.
         final authCookie = responseBody['authCookie'];
         await _secureStorage.write(key: 'authCookie', value: authCookie);
 
-        // Optionally, if you want to remember the identifier:
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('identifier', _emailController.text);
 
@@ -111,7 +107,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
   }
 
-  // Shows an error dialog with the given message.
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
@@ -131,38 +126,37 @@ class _SignUpScreenState extends State<SignUpScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white, // Plain white background
       appBar: AppBar(title: const Text("Sign Up")),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Card(
-          elevation: 8,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          margin: const EdgeInsets.all(16),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  _buildUserNameField(),
-                  const SizedBox(height: 20),
-                  _buildNameField(),
-                  const SizedBox(height: 20),
-                  _buildEmailField(),
-                  const SizedBox(height: 20),
-                  _buildPhoneField(),
-                  const SizedBox(height: 20),
-                  _buildPasswordField(),
-                  const SizedBox(height: 20),
-                  _buildConfirmPasswordField(),
-                  const SizedBox(height: 20),
-                  _buildAddressSection(),
-                  const SizedBox(height: 30),
-                  _buildSignUpButton(),
-                  const SizedBox(height: 16),
-                  _buildLoginLink(),
-                ],
-              ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                _buildUserNameField(),
+                const SizedBox(height: 20),
+                _buildNameField(),
+                const SizedBox(height: 20),
+                _buildEmailField(),
+                const SizedBox(height: 20),
+                _buildPhoneField(),
+                const SizedBox(height: 20),
+                _buildPasswordField(),
+                const SizedBox(height: 20),
+                _buildConfirmPasswordField(),
+                const SizedBox(height: 20),
+                _buildAddressSection(),
+                const SizedBox(height: 30),
+
+                // Sign Up "button" as a text link, with a spinner if loading
+                _buildSignUpButton(),
+
+                const SizedBox(height: 16),
+                _buildLoginLink(),
+              ],
             ),
           ),
         ),
@@ -180,7 +174,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
       ),
       validator: (value) {
         if (value == null || value.isEmpty) return "Username is required";
-        if (value.length < 3 || value.length > 30) return "Must be 3-30 characters";
+        if (value.length < 3 || value.length > 30) {
+          return "Must be 3-30 characters";
+        }
         return null;
       },
     );
@@ -229,7 +225,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
       ),
       validator: (value) {
         if (value == null || value.isEmpty) return "Phone number is required";
-        if (!RegExp(r'^[0-9]{10}$').hasMatch(value)) return "Invalid phone number";
+        if (!RegExp(r'^[0-9]{10}$').hasMatch(value)) {
+          return "Invalid phone number";
+        }
         return null;
       },
     );
@@ -279,48 +277,66 @@ class _SignUpScreenState extends State<SignUpScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text("Address Details", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        const Text(
+          "Address Details",
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
         const SizedBox(height: 10),
         TextFormField(
           controller: _streetController,
-          decoration: const InputDecoration(labelText: "Street", prefixIcon: Icon(Icons.home)),
+          decoration: const InputDecoration(
+            labelText: "Street",
+            prefixIcon: Icon(Icons.home),
+          ),
           validator: (value) => (value?.isEmpty ?? true) ? "Street is required" : null,
         ),
         TextFormField(
           controller: _cityController,
-          decoration: const InputDecoration(labelText: "City", prefixIcon: Icon(Icons.location_city)),
+          decoration: const InputDecoration(
+            labelText: "City",
+            prefixIcon: Icon(Icons.location_city),
+          ),
           validator: (value) => (value?.isEmpty ?? true) ? "City is required" : null,
         ),
         TextFormField(
           controller: _stateController,
-          decoration: const InputDecoration(labelText: "State", prefixIcon: Icon(Icons.map)),
+          decoration: const InputDecoration(
+            labelText: "State",
+            prefixIcon: Icon(Icons.map),
+          ),
           validator: (value) => (value?.isEmpty ?? true) ? "State is required" : null,
         ),
         TextFormField(
           controller: _zipCodeController,
           keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: "ZIP Code", prefixIcon: Icon(Icons.numbers)),
+          decoration: const InputDecoration(
+            labelText: "ZIP Code",
+            prefixIcon: Icon(Icons.numbers),
+          ),
           validator: (value) => (value?.isEmpty ?? true) ? "ZIP Code is required" : null,
         ),
       ],
     );
   }
 
+  /// **Sign Up "button"** as a text link, showing a loading spinner if busy
   Widget _buildSignUpButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: _isLoading ? null : _handleSignUp,
-        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-        child: _isLoading 
-            ? const SizedBox(
-                height: 24,
-                width: 24,
-                child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
-              )
-            : const Text("Sign Up", style: TextStyle(fontSize: 16)),
-      ),
-    );
+    return _isLoading
+        ? const SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          )
+        : TextButton(
+            onPressed: _handleSignUp,
+            child: const Text(
+              "Sign Up",
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          );
   }
 
   Widget _buildLoginLink() {
@@ -330,8 +346,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
         const Text("Already have an account? "),
         TextButton(
           onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
-          child: const Text("Login", style: TextStyle(fontWeight: FontWeight.bold)),
-        )
+          child: const Text(
+            "Login",
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
       ],
     );
   }

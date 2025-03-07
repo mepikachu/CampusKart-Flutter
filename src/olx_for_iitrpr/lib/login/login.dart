@@ -5,8 +5,12 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+// Import your ForgotPasswordScreen
+import 'forgot_password.dart';
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -28,7 +32,6 @@ class _LoginScreenState extends State<LoginScreen> {
     _checkExistingSession();
   }
 
-  // Check if an authCookie is already stored, and auto-login if present.
   Future<void> _checkExistingSession() async {
     final authCookie = await _secureStorage.read(key: 'authCookie');
     if (authCookie != null && mounted) {
@@ -36,7 +39,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // Attempt login via credentials
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
@@ -57,13 +59,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final responseBody = json.decode(response.body);
       if (response.statusCode == 200 && responseBody['success'] == true) {
-        // Save authCookie securely
         await _secureStorage.write(
           key: 'authCookie',
           value: responseBody['authCookie'],
         );
 
-        // Handle remember me: save identifier in SharedPreferences if checked.
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('rememberMe', _rememberMe);
         if (_rememberMe) {
@@ -91,7 +91,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // Load saved identifier if "remember me" was enabled
   Future<void> _loadSavedIdentifier() async {
     final prefs = await SharedPreferences.getInstance();
     final identifier = prefs.getString('identifier');
@@ -113,106 +112,130 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF00C6FF), Color(0xFF0072FF)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Card(
-                elevation: 8,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+      backgroundColor: Colors.white, // Plain single-color background
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const SizedBox(height: 16),
+                const CircleAvatar(
+                  radius: 40,
+                  backgroundColor: Colors.white,
+                  child: Icon(Icons.person, size: 50, color: Colors.black54),
                 ),
-                margin: const EdgeInsets.all(16),
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const CircleAvatar(
-                          radius: 40,
-                          child: Icon(Icons.person, size: 50),
-                        ),
-                        const SizedBox(height: 20),
-                        TextFormField(
-                          controller: _identifierController,
-                          decoration: const InputDecoration(
-                            labelText: "Email/Username",
-                            prefixIcon: Icon(Icons.person_outline),
-                          ),
-                          validator: (value) => (value?.isEmpty ?? true) ? "Required" : null,
-                        ),
-                        const SizedBox(height: 20),
-                        TextFormField(
-                          controller: _passwordController,
-                          obscureText: _obscurePassword,
-                          decoration: InputDecoration(
-                            labelText: "Password",
-                            prefixIcon: const Icon(Icons.lock_outline),
-                            suffixIcon: IconButton(
-                              icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                              onPressed: () =>
-                                  setState(() => _obscurePassword = !_obscurePassword),
-                            ),
-                          ),
-                          validator: (value) => (value?.isEmpty ?? true) ? "Required" : null,
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Checkbox(
-                              value: _rememberMe,
-                              onChanged: (value) =>
-                                  setState(() => _rememberMe = value ?? false),
-                            ),
-                            const Text("Remember me"),
-                            const Spacer(),
-                            TextButton(
-                              onPressed: () => Navigator.pushNamed(context, '/forgot-password'),
-                              child: const Text("Forgot Password?"),
-                            ),
-                          ],
-                        ),
-                        if (_errorMessage != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 16),
-                            child: Text(
-                              _errorMessage!,
-                              style: const TextStyle(color: Colors.red, fontSize: 16),
-                            ),
-                          ),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handleLogin,
-                            child: _isLoading
-                                ? const SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(strokeWidth: 2.5),
-                                  )
-                                : const Text("Login"),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        TextButton(
-                          onPressed: () => Navigator.pushNamed(context, '/signup'),
-                          child: const Text("Create Account"),
-                        ),
-                      ],
-                    ),
+                const SizedBox(height: 16),
+                const Text(
+                  "Welcome Back!",
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
                   ),
                 ),
-              ),
+                const SizedBox(height: 20),
+
+                // Email/Username field
+                TextFormField(
+                  controller: _identifierController,
+                  decoration: const InputDecoration(
+                    labelText: "Email/Username",
+                    prefixIcon: Icon(Icons.person_outline),
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) =>
+                      (value?.isEmpty ?? true) ? "Required" : null,
+                ),
+                const SizedBox(height: 16),
+
+                // Password field
+                TextFormField(
+                  controller: _passwordController,
+                  obscureText: _obscurePassword,
+                  decoration: InputDecoration(
+                    labelText: "Password",
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                      ),
+                      onPressed: () => setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      }),
+                    ),
+                    border: const OutlineInputBorder(),
+                  ),
+                  validator: (value) =>
+                      (value?.isEmpty ?? true) ? "Required" : null,
+                ),
+
+                // Remember me & Forgot Password row
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Checkbox(
+                      value: _rememberMe,
+                      onChanged: (value) =>
+                          setState(() => _rememberMe = value ?? false),
+                    ),
+                    const Text("Remember me"),
+                    const Spacer(),
+
+                    // Directly navigate to ForgotPasswordScreen
+                    TextButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ForgotPasswordScreen(),
+                          ),
+                        );
+                      },
+                      child: const Text("Forgot Password?"),
+                    ),
+                  ],
+                ),
+
+                if (_errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(
+                        color: Colors.red,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+
+                // Login "button" as a text link (same style as "Create Account")
+                _isLoading
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(strokeWidth: 2.5),
+                      )
+                    : TextButton(
+                        onPressed: _handleLogin,
+                        child: const Text(
+                          "Login",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                const SizedBox(height: 20),
+
+                // Create account link
+                TextButton(
+                  onPressed: () => Navigator.pushNamed(context, '/signup'),
+                  child: const Text("Create Account"),
+                ),
+              ],
             ),
           ),
         ),
