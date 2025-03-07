@@ -17,11 +17,44 @@ class _ChatListScreenState extends State<ChatListScreen> {
   List<dynamic> conversations = [];
   bool isLoading = true;
   String errorMessage = '';
+  String currentUserName = '';
 
   @override
   void initState() {
     super.initState();
-    fetchConversations();
+    _loadCurrentUserName().then((_) => fetchConversations());
+  }
+
+  Future<void> _loadCurrentUserName() async {
+    // Try reading from secure storage first.
+    String? name = await _secureStorage.read(key: 'userName');
+    if (name != null && name.isNotEmpty) {
+      setState(() {
+        currentUserName = name;
+      });
+    } else {
+      // If not available, fetch current user details from the server.
+      String? authCookie = await _secureStorage.read(key: 'authCookie');
+      if (authCookie != null) {
+        final response = await http.get(
+          Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/me'),
+          headers: {
+            'Content-Type': 'application/json',
+            'auth-cookie': authCookie,
+          },
+        );
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['success'] == true && data['user'] != null) {
+            setState(() {
+              currentUserName = data['user']['userName'] ?? '';
+            });
+            // Optionally, save the userName locally for future use.
+            await _secureStorage.write(key: 'userName', value: currentUserName);
+          }
+        }
+      }
+    }
   }
 
   Future<void> fetchConversations() async {
@@ -70,12 +103,18 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }
   }
 
-  // Returns the conversation partner's name (assuming the current user is known)
+  // Updated getPartnerName: returns the other user's name by comparing current user name.
   String getPartnerName(dynamic conversation) {
-    // Assuming conversation.participants is a list with two user objects containing userName.
     if (conversation['participants'] != null &&
-        conversation['participants'].length == 2) {
-      return "${conversation['participants'][0]['userName']} & ${conversation['participants'][1]['userName']}";
+        conversation['participants'] is List &&
+        conversation['participants'].length == 2 &&
+        currentUserName.isNotEmpty) {
+      final participant0 = conversation['participants'][0];
+      final participant1 = conversation['participants'][1];
+      // If currentUserName matches participant0, then partner is participant1, else vice versa.
+      return (participant0['userName'] == currentUserName)
+          ? participant1['userName']
+          : participant0['userName'];
     }
     return "Chat";
   }
@@ -100,7 +139,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true && data['conversation'] != null) {
-          // Navigate to the new chat.
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -226,14 +264,49 @@ class _ChatScreenState extends State<ChatScreen> {
   String errorMessage = '';
   final TextEditingController _messageController = TextEditingController();
   Timer? _pollingTimer;
+  String currentUserName = '';
 
   @override
   void initState() {
     super.initState();
-    fetchConversation();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+    _loadCurrentUserName().then((_) {
       fetchConversation();
+      _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+        fetchConversation();
+      });
     });
+  }
+
+  Future<void> _loadCurrentUserName() async {
+    // Try reading from secure storage first.
+    String? name = await _secureStorage.read(key: 'userName');
+    if (name != null && name.isNotEmpty) {
+      setState(() {
+        currentUserName = name;
+      });
+    } else {
+      // If not available, fetch current user details from the server.
+      String? authCookie = await _secureStorage.read(key: 'authCookie');
+      if (authCookie != null) {
+        final response = await http.get(
+          Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/me'),
+          headers: {
+            'Content-Type': 'application/json',
+            'auth-cookie': authCookie,
+          },
+        );
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['success'] == true && data['user'] != null) {
+            setState(() {
+              currentUserName = data['user']['userName'] ?? '';
+            });
+            // Optionally, save the userName locally for future use.
+            await _secureStorage.write(key: 'userName', value: currentUserName);
+          }
+        }
+      }
+    }
   }
 
   Future<void> fetchConversation() async {
@@ -306,12 +379,12 @@ class _ChatScreenState extends State<ChatScreen> {
           _messageController.clear();
           fetchConversation();
         } else {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(data['error'] ?? 'Failed to send message')));
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(data['error'] ?? 'Failed to send message')));
         }
       } else {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Server error: ${response.statusCode}')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Server error: ${response.statusCode}')));
       }
     } catch (e) {
       ScaffoldMessenger.of(context)
@@ -326,14 +399,40 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
+  // Updated buildMessageItem: aligns messages right if sent by current user and left otherwise,
+  // and formats the createdAt timestamp.
   Widget buildMessageItem(dynamic message) {
-    return ListTile(
-      title: Text(message['text'] ?? ''),
-      subtitle: Text(
-        message['timestamp'] != null
-            ? DateTime.parse(message['timestamp']).toLocal().toString()
-            : '',
-        style: const TextStyle(fontSize: 10),
+    final bool isSentByMe = message['sender'] != null &&
+        message['sender']['userName'] == currentUserName;
+    return Align(
+      alignment: isSentByMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isSentByMe ? Colors.blue[200] : Colors.grey[300],
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment:
+              isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            Text(
+              message['text'] ?? '',
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              message['createdAt'] != null
+                  ? DateTime.parse(message['createdAt'])
+                      .toLocal()
+                      .toString()
+                      .split('.')[0]
+                  : '',
+              style: const TextStyle(fontSize: 10, color: Colors.black54),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -357,14 +456,16 @@ class _ChatScreenState extends State<ChatScreen> {
                             reverse: true,
                             itemCount: messages.length,
                             itemBuilder: (context, index) {
-                              final message = messages[messages.length - index - 1];
+                              final message =
+                                  messages[messages.length - index - 1];
                               return buildMessageItem(message);
                             },
                           ),
           ),
           const Divider(height: 1),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             child: Row(
               children: [
                 Expanded(
