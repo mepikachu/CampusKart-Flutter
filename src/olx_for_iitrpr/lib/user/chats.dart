@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -224,11 +225,15 @@ class _ChatScreenState extends State<ChatScreen> {
   bool isLoading = true;
   String errorMessage = '';
   final TextEditingController _messageController = TextEditingController();
+  Timer? _pollingTimer;
 
   @override
   void initState() {
     super.initState();
     fetchConversation();
+    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      fetchConversation();
+    });
   }
 
   Future<void> fetchConversation() async {
@@ -255,6 +260,7 @@ class _ChatScreenState extends State<ChatScreen> {
           setState(() {
             messages = data['conversation']['messages'] ?? [];
             isLoading = false;
+            errorMessage = '';
           });
         } else {
           setState(() {
@@ -315,6 +321,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    _pollingTimer?.cancel();
     _messageController.dispose();
     super.dispose();
   }
