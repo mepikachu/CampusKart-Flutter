@@ -27,13 +27,16 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("OLX-IITRPR"),
-        backgroundColor: const Color(0xFF25D366), // New light green
+        title: const Text(
+          "OLX-IITRPR",
+          style: TextStyle(color: Colors.black87),
+        ),
+        centerTitle: false, // This aligns the title to the left
         actions: [
           IconButton(
-            icon: CircleAvatar(
-              backgroundColor: Colors.white,
-              child: Icon(Icons.chat_bubble, color: const Color(0xFF25D366)),
+            icon: const Icon(
+              Icons.chat_bubble,
+              color: Colors.black87,
             ),
             onPressed: () {
               Navigator.push(
@@ -43,7 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               );
             },
-          )
+          ),
         ],
       ),
       body: _tabs[_selectedIndex],

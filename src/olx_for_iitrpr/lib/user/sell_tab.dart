@@ -133,121 +133,115 @@ class _SellTabState extends State<SellTab> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Sell"),
-        backgroundColor: const Color(0xFF25D366),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              // Image placeholder with a pencil icon at the top-right
-              Stack(
-                children: [
-                  Container(
-                    height: 200,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      color: Colors.grey.shade300,
-                    ),
-                    child: _images.isNotEmpty
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.file(
-                              _images.first,
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                            ),
-                          )
-                        : const Center(
-                            child: Text(
-                              'No image selected',
-                              style: TextStyle(color: Colors.black54),
-                            ),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          children: [
+            // Image placeholder with a pencil icon at the top-right
+            Stack(
+              children: [
+                Container(
+                  height: 200,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.grey.shade300,
+                  ),
+                  child: _images.isNotEmpty
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.file(
+                            _images.first,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
                           ),
+                        )
+                      : const Center(
+                          child: Text(
+                            'No image selected',
+                            style: TextStyle(color: Colors.black54),
+                          ),
+                        ),
+                ),
+                // Pencil icon button in the top-right corner
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: IconButton(
+                    icon: const Icon(Icons.edit, color: Colors.white),
+                    onPressed: _pickImages,
                   ),
-                  // Pencil icon button in the top-right corner
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: IconButton(
-                      icon: const Icon(Icons.edit, color: Colors.white),
-                      onPressed: _pickImages,
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            // Product Name
+            TextFormField(
+              controller: _nameController,
+              decoration: const InputDecoration(
+                labelText: "Product Name",
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) => (value == null || value.isEmpty) ? "Enter product name" : null,
+            ),
+            const SizedBox(height: 16),
+            // Description
+            TextFormField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(
+                labelText: "Description",
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+              validator: (value) => (value == null || value.isEmpty) ? "Enter product description" : null,
+            ),
+            const SizedBox(height: 16),
+            // Price
+            TextFormField(
+              controller: _priceController,
+              decoration: const InputDecoration(
+                labelText: "Price",
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+              validator: (value) => (value == null || value.isEmpty) ? "Enter product price" : null,
+            ),
+            const SizedBox(height: 16),
+            // Category Dropdown
+            DropdownButtonFormField<String>(
+              value: _selectedCategory,
+              items: _categories.map((cat) {
+                return DropdownMenuItem(
+                  value: cat,
+                  child: Text(cat[0].toUpperCase() + cat.substring(1)),
+                );
+              }).toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _selectedCategory = value;
+                  });
+                }
+              },
+              decoration: const InputDecoration(
+                labelText: "Category",
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 24),
+            // Submit Button
+            _isLoading
+                ? const CircularProgressIndicator()
+                : SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _submitProduct,
+                      child: const Text("Submit Product"),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              // Product Name
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: "Product Name",
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) => (value == null || value.isEmpty) ? "Enter product name" : null,
-              ),
-              const SizedBox(height: 16),
-              // Description
-              TextFormField(
-                controller: _descriptionController,
-                decoration: const InputDecoration(
-                  labelText: "Description",
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
-                validator: (value) => (value == null || value.isEmpty) ? "Enter product description" : null,
-              ),
-              const SizedBox(height: 16),
-              // Price
-              TextFormField(
-                controller: _priceController,
-                decoration: const InputDecoration(
-                  labelText: "Price",
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.number,
-                validator: (value) => (value == null || value.isEmpty) ? "Enter product price" : null,
-              ),
-              const SizedBox(height: 16),
-              // Category Dropdown
-              DropdownButtonFormField<String>(
-                value: _selectedCategory,
-                items: _categories.map((cat) {
-                  return DropdownMenuItem(
-                    value: cat,
-                    child: Text(cat[0].toUpperCase() + cat.substring(1)),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() {
-                      _selectedCategory = value;
-                    });
-                  }
-                },
-                decoration: const InputDecoration(
-                  labelText: "Category",
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 24),
-              // Submit Button
-              _isLoading
-                  ? const CircularProgressIndicator()
-                  : SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _submitProduct,
-                        child: const Text("Submit Product"),
-                      ),
-                    ),
-            ],
-          ),
+          ],
         ),
       ),
     );

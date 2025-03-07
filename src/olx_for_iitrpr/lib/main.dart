@@ -23,9 +23,11 @@ class MyApp extends StatelessWidget {
       },
       home: const LoginScreen(),
       theme: ThemeData(
-        primaryColor: const Color(0xFF25D366),
+        primaryColor: Colors.white,
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF25D366), // WhatsApp-like green
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black, // This makes the text and icons black
+          elevation: 1, // Subtle shadow
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(

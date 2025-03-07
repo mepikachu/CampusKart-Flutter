@@ -154,25 +154,61 @@ class _ProductsTabState extends State<ProductsTab> {
 
   @override
   Widget build(BuildContext context) {
-    return RefreshIndicator(
-      onRefresh: fetchAvailableProducts,
-      child: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : errorMessage.isNotEmpty
-              ? Center(child: Text('Error: $errorMessage'))
-              : GridView.builder(
-                  padding: const EdgeInsets.all(8),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    childAspectRatio: 0.75,
-                    crossAxisSpacing: 10,
-                    mainAxisSpacing: 10,
+    return Column(
+      children: [
+        // Search and Filter Bar
+        Container(
+          padding: const EdgeInsets.all(8.0),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: 'Search...',
+                    prefixIcon: const Icon(Icons.search),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                   ),
-                  itemCount: products.length,
-                  itemBuilder: (context, index) {
-                    return buildProductCard(products[index], index);
+                  onChanged: (value) {
+                    // Implement search functionality
                   },
                 ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.filter_list),
+                onPressed: () {
+                  // Implement filter functionality
+                },
+              ),
+            ],
+          ),
+        ),
+        // Products List
+        Expanded(
+          child: isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : errorMessage.isNotEmpty
+                  ? Center(child: Text(errorMessage))
+                  : RefreshIndicator(
+                      onRefresh: fetchAvailableProducts,
+                      child: GridView.builder(
+                        padding: const EdgeInsets.all(8),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 0.75,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                        ),
+                        itemCount: products.length,
+                        itemBuilder: (context, index) {
+                          return buildProductCard(products[index], index);
+                        },
+                      ),
+                    ),
+        ),
+      ],
     );
   }
 }
