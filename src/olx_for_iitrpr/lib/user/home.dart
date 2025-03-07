@@ -28,10 +28,13 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("OLX-IITRPR"),
-        backgroundColor: const Color.fromARGB(255, 117, 117, 117),
+        backgroundColor: const Color(0xFF25D366), // New light green
         actions: [
           IconButton(
-            icon: const Icon(Icons.chat_bubble_outline),
+            icon: CircleAvatar(
+              backgroundColor: Colors.white,
+              child: Icon(Icons.chat_bubble, color: const Color(0xFF25D366)),
+            ),
             onPressed: () {
               Navigator.push(
                 context,
@@ -40,7 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               );
             },
-          ),
+          )
         ],
       ),
       body: _tabs[_selectedIndex],

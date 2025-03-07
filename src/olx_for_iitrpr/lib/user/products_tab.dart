@@ -1,10 +1,10 @@
-import 'dart:convert';
+import 'dart:convert'; // for base64Decode
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 class ProductsTab extends StatefulWidget {
-  const ProductsTab({Key? key}) : super(key: key);
+  const ProductsTab({super.key});
 
   @override
   State<ProductsTab> createState() => _ProductsTabState();
@@ -69,23 +69,13 @@ class _ProductsTabState extends State<ProductsTab> {
 
     if (imagesList.isNotEmpty && imagesList[0] is Map) {
       final firstImage = imagesList[0];
-      // Check for binary data
-      if (firstImage.containsKey('data')) {
+      if (firstImage.containsKey('data') && firstImage['data'] != null) {
         try {
-          List<dynamic> dataList = firstImage['data'];
-          // Convert to Uint8List
-          Uint8List bytes = Uint8List.fromList(dataList.cast<int>());
-          // Convert binary data to base64
-          String base64Image = base64Encode(bytes);
-          // Use provided contentType or default to image/jpeg
-          String contentType = (firstImage['contentType'] is String &&
-                  (firstImage['contentType'] as String).isNotEmpty)
-              ? firstImage['contentType']
-              : 'image/jpeg';
-          // Build the data URL correctly: "data:<mime>;base64,<data>"
-          String dataUrl = 'data:$contentType;base64,$base64Image';
-          imageWidget = Image.network(
-            dataUrl,
+          // Decode the base64 image string to Uint8List.
+          final String base64Str = firstImage['data'];
+          final Uint8List bytes = base64Decode(base64Str);
+          imageWidget = Image.memory(
+            bytes,
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) {
               return Container(
@@ -103,7 +93,7 @@ class _ProductsTabState extends State<ProductsTab> {
       } else {
         imageWidget = Container(
           color: Colors.grey[300],
-          child: const Center(child: Text('Image could not be loaded')),
+          child: const Center(child: Text('Image data not found')),
         );
       }
     } else {

@@ -6,7 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 // Chat List Screen: Fetch and display all conversations for the authenticated user.
 class ChatListScreen extends StatefulWidget {
-  const ChatListScreen({Key? key}) : super(key: key);
+  const ChatListScreen({super.key});
 
   @override
   State<ChatListScreen> createState() => _ChatListScreenState();
@@ -211,14 +211,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   // Function to show a dialog to enter the partner's identifier.
   void showNewChatDialog() {
-    final _identifierController = TextEditingController();
+    final identifierController = TextEditingController();
     showDialog(
       context: context,
       builder: (context) {
         return AlertDialog(
           title: const Text('New Chat'),
           content: TextField(
-            controller: _identifierController,
+            controller: identifierController,
             decoration: const InputDecoration(
               hintText: 'Enter user identifier',
             ),
@@ -230,7 +230,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
             ),
             ElevatedButton(
               onPressed: () {
-                final identifier = _identifierController.text.trim();
+                final identifier = identifierController.text.trim();
                 if (identifier.isNotEmpty) {
                   Navigator.pop(context); // close the dialog
                   createConversation(identifier);
@@ -316,8 +316,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
 class ChatScreen extends StatefulWidget {
   final String conversationId;
   final String partnerNames;
-  const ChatScreen({Key? key, required this.conversationId, required this.partnerNames})
-      : super(key: key);
+  const ChatScreen({super.key, required this.conversationId, required this.partnerNames});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();

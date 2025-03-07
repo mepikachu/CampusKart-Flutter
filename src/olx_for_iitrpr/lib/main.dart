@@ -16,15 +16,25 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Olx for IITRPR',
       debugShowCheckedModeBanner: false,
-      initialRoute: '/',
       routes: {
-        '/': (context) => const LoginScreen(),
         '/home': (context) => const HomeScreen(),
         '/signup': (context) => const SignUpScreen(),
         '/forgot-password': (context) => const ForgotPasswordScreen(),
       },
+      home: const LoginScreen(),
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        primaryColor: const Color(0xFF25D366),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF25D366), // WhatsApp-like green
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: Colors.grey.shade100,
@@ -34,14 +44,6 @@ class MyApp extends StatelessWidget {
           ),
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 18),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
         ),
       ),
     );

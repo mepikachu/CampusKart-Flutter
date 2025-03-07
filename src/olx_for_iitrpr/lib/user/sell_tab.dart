@@ -6,9 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http_parser/http_parser.dart';
 
-
 class SellTab extends StatefulWidget {
-  const SellTab({Key? key}) : super(key: key);
+  const SellTab({super.key});
 
   @override
   State<SellTab> createState() => _SellTabState();
@@ -32,7 +31,7 @@ class _SellTabState extends State<SellTab> {
     final List<XFile>? pickedFiles = await picker.pickMultiImage();
     if (pickedFiles != null && pickedFiles.isNotEmpty) {
       setState(() {
-        _images = pickedFiles.map((e) => File(e.path)).toList();
+        _images = pickedFiles.map((xfile) => File(xfile.path)).toList();
       });
     }
   }
@@ -60,8 +59,7 @@ class _SellTabState extends State<SellTab> {
       }
       final uri = Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products');
       var request = http.MultipartRequest('POST', uri);
-      
-      // Set the auth cookie header; do not manually set Content-Type
+      // Set auth cookie header (do not manually set Content-Type)
       request.headers['auth-cookie'] = authCookie;
 
       // Add form fields
@@ -79,7 +77,7 @@ class _SellTabState extends State<SellTab> {
           stream,
           length,
           filename: image.path.split('/').last,
-          contentType: MediaType('image', 'jpeg'), // adjust if not JPEG
+          contentType: MediaType('image', 'jpeg'), // update if needed
         );
         request.files.add(multipartFile);
       }
@@ -88,33 +86,28 @@ class _SellTabState extends State<SellTab> {
       final response = await request.send();
       final responseBody = await response.stream.bytesToString();
 
-      // Debug logging
-      print("Response status: ${response.statusCode}");
-      print("Response body: $responseBody");
-
-      // Attempt to decode the response as JSON.
-      // If responseBody starts with '<html>', it indicates an error page.
-      if (responseBody.startsWith("<html>")) {
-        throw Exception("Server returned an HTML error page");
-      }
-
-      final resData = json.decode(responseBody);
-
-      if (response.statusCode == 201 && resData['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Product posted successfully")),
-        );
-        // Clear the form fields on success
-        _nameController.clear();
-        _descriptionController.clear();
-        _priceController.clear();
-        setState(() {
-          _images.clear();
-          _selectedCategory = _categories.first;
-        });
+      if (response.statusCode == 201) {
+        final resData = json.decode(responseBody);
+        if (resData['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Product posted successfully")),
+          );
+          // Clear form fields on success
+          _nameController.clear();
+          _descriptionController.clear();
+          _priceController.clear();
+          setState(() {
+            _images.clear();
+            _selectedCategory = _categories.first;
+          });
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(resData['error'] ?? "Product submission failed")),
+          );
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(resData['error'] ?? "Product submission failed")),
+          SnackBar(content: Text("Server error: ${response.statusCode}")),
         );
       }
     } catch (e) {
@@ -130,7 +123,6 @@ class _SellTabState extends State<SellTab> {
     }
   }
 
-
   @override
   void dispose() {
     _nameController.dispose();
@@ -143,7 +135,8 @@ class _SellTabState extends State<SellTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Sell Product"),
+        title: const Text("Sell"),
+        backgroundColor: const Color(0xFF25D366),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -151,6 +144,44 @@ class _SellTabState extends State<SellTab> {
           key: _formKey,
           child: Column(
             children: [
+              // Image placeholder with a pencil icon at the top-right
+              Stack(
+                children: [
+                  Container(
+                    height: 200,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.grey.shade300,
+                    ),
+                    child: _images.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.file(
+                              _images.first,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                            ),
+                          )
+                        : const Center(
+                            child: Text(
+                              'No image selected',
+                              style: TextStyle(color: Colors.black54),
+                            ),
+                          ),
+                  ),
+                  // Pencil icon button in the top-right corner
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: IconButton(
+                      icon: const Icon(Icons.edit, color: Colors.white),
+                      onPressed: _pickImages,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
               // Product Name
               TextFormField(
                 controller: _nameController,
@@ -158,8 +189,7 @@ class _SellTabState extends State<SellTab> {
                   labelText: "Product Name",
                   border: OutlineInputBorder(),
                 ),
-                validator: (value) =>
-                    (value == null || value.isEmpty) ? "Enter product name" : null,
+                validator: (value) => (value == null || value.isEmpty) ? "Enter product name" : null,
               ),
               const SizedBox(height: 16),
               // Description
@@ -170,8 +200,7 @@ class _SellTabState extends State<SellTab> {
                   border: OutlineInputBorder(),
                 ),
                 maxLines: 3,
-                validator: (value) =>
-                    (value == null || value.isEmpty) ? "Enter product description" : null,
+                validator: (value) => (value == null || value.isEmpty) ? "Enter product description" : null,
               ),
               const SizedBox(height: 16),
               // Price
@@ -182,8 +211,7 @@ class _SellTabState extends State<SellTab> {
                   border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.number,
-                validator: (value) =>
-                    (value == null || value.isEmpty) ? "Enter product price" : null,
+                validator: (value) => (value == null || value.isEmpty) ? "Enter product price" : null,
               ),
               const SizedBox(height: 16),
               // Category Dropdown
@@ -207,34 +235,6 @@ class _SellTabState extends State<SellTab> {
                   border: OutlineInputBorder(),
                 ),
               ),
-              const SizedBox(height: 16),
-              // Image Picker
-              ElevatedButton.icon(
-                onPressed: _pickImages,
-                icon: const Icon(Icons.image),
-                label: const Text("Select Images"),
-              ),
-              const SizedBox(height: 8),
-              _images.isNotEmpty
-                  ? SizedBox(
-                      height: 100,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: _images.length,
-                        itemBuilder: (context, index) {
-                          return Padding(
-                            padding: const EdgeInsets.all(4.0),
-                            child: Image.file(
-                              _images[index],
-                              width: 100,
-                              height: 100,
-                              fit: BoxFit.cover,
-                            ),
-                          );
-                        },
-                      ),
-                    )
-                  : const Text("No images selected"),
               const SizedBox(height: 24),
               // Submit Button
               _isLoading
