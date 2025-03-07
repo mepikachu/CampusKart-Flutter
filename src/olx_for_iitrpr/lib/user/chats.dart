@@ -18,11 +18,29 @@ class _ChatListScreenState extends State<ChatListScreen> {
   bool isLoading = true;
   String errorMessage = '';
   String currentUserName = '';
+  Map<String, int> unreadCounts = {}; // stores unread count per conversation
+  Timer? _pollingTimer; // new: automatically refresh chat list
 
   @override
   void initState() {
     super.initState();
-    _loadCurrentUserName().then((_) => fetchConversations());
+    _loadCurrentUserName().then((_) {
+      fetchConversations().then((_) {
+        updateUnreadCounts();
+      });
+    });
+
+    // Start a periodic timer to refresh conversations
+    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      await fetchConversations();
+      await updateUnreadCounts();
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadCurrentUserName() async {
@@ -101,6 +119,33 @@ class _ChatListScreenState extends State<ChatListScreen> {
         isLoading = false;
       });
     }
+  }
+
+  // New: update unreadCounts for each conversation by comparing stored lastRead time.
+  Future<void> updateUnreadCounts() async {
+    Map<String, int> counts = {};
+    for (var conv in conversations) {
+      String convId = conv['_id'];
+      // Read last read timestamp; default to epoch if missing.
+      String? lastReadStr = await _secureStorage.read(key: 'lastRead_$convId');
+      DateTime lastRead = lastReadStr != null ? DateTime.parse(lastReadStr) : DateTime.fromMillisecondsSinceEpoch(0);
+      int count = 0;
+      if (conv['messages'] != null) {
+        for (var msg in conv['messages']) {
+          if (msg['sender'] != null &&
+              msg['sender']['userName'] != currentUserName) {
+            DateTime msgTime = DateTime.parse(msg['createdAt']);
+            if (msgTime.isAfter(lastRead)) {
+              count++;
+            }
+          }
+        }
+      }
+      counts[convId] = count;
+    }
+    setState(() {
+      unreadCounts = counts;
+    });
   }
 
   // Updated getPartnerName: returns the other user's name by comparing current user name.
@@ -224,12 +269,30 @@ class _ChatListScreenState extends State<ChatListScreen> {
                         conversation['messages'] != null && conversation['messages'].isNotEmpty
                             ? conversation['messages'].last['text']
                             : 'No messages yet';
+                    int unreadCount = unreadCounts[conversation['_id']] ?? 0;
                     return ListTile(
                       leading: const CircleAvatar(child: Icon(Icons.person)),
                       title: Text(title),
                       subtitle: Text(lastMessage),
-                      onTap: () {
-                        Navigator.push(
+                      trailing: unreadCount > 0
+                          ? Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: const BoxDecoration(
+                                  color: Colors.red, shape: BoxShape.circle),
+                              child: Text(
+                                '$unreadCount',
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            )
+                          : null,
+                      onTap: () async {
+                        // When opening, update last read to now.
+                        await _secureStorage.write(
+                          key: 'lastRead_${conversation['_id']}',
+                          value: DateTime.now().toIso8601String(),
+                        );
+                        // Navigate to ChatScreen.
+                        await Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (context) => ChatScreen(
@@ -238,6 +301,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
                             ),
                           ),
                         );
+                        // When returning, refresh conversations and unread counts.
+                        await fetchConversations();
+                        await updateUnreadCounts();
                       },
                     );
                   },
@@ -270,7 +336,13 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _loadCurrentUserName().then((_) {
-      fetchConversation();
+      fetchConversation().then((_) async {
+        // Mark the conversation as read when opened.
+        await _secureStorage.write(
+          key: 'lastRead_${widget.conversationId}',
+          value: DateTime.now().toIso8601String(),
+        );
+      });
       _pollingTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
         fetchConversation();
       });
@@ -278,14 +350,12 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _loadCurrentUserName() async {
-    // Try reading from secure storage first.
     String? name = await _secureStorage.read(key: 'userName');
     if (name != null && name.isNotEmpty) {
       setState(() {
         currentUserName = name;
       });
     } else {
-      // If not available, fetch current user details from the server.
       String? authCookie = await _secureStorage.read(key: 'authCookie');
       if (authCookie != null) {
         final response = await http.get(
@@ -301,7 +371,6 @@ class _ChatScreenState extends State<ChatScreen> {
             setState(() {
               currentUserName = data['user']['userName'] ?? '';
             });
-            // Optionally, save the userName locally for future use.
             await _secureStorage.write(key: 'userName', value: currentUserName);
           }
         }
@@ -326,7 +395,6 @@ class _ChatScreenState extends State<ChatScreen> {
           'auth-cookie': authCookie,
         },
       );
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
@@ -335,6 +403,11 @@ class _ChatScreenState extends State<ChatScreen> {
             isLoading = false;
             errorMessage = '';
           });
+          // Update last read time each time the conversation is fetched.
+          await _secureStorage.write(
+            key: 'lastRead_${widget.conversationId}',
+            value: DateTime.now().toIso8601String(),
+          );
         } else {
           setState(() {
             errorMessage = data['error'] ?? 'Failed to fetch conversation';
@@ -360,8 +433,9 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       if (authCookie == null) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Not authenticated')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Not authenticated')),
+        );
         return;
       }
       final response = await http.post(
@@ -372,7 +446,6 @@ class _ChatScreenState extends State<ChatScreen> {
         },
         body: json.encode({'text': _messageController.text.trim()}),
       );
-
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
@@ -380,15 +453,18 @@ class _ChatScreenState extends State<ChatScreen> {
           fetchConversation();
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(data['error'] ?? 'Failed to send message')));
+            SnackBar(content: Text(data['error'] ?? 'Failed to send message')),
+          );
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Server error: ${response.statusCode}')));
+          SnackBar(content: Text('Server error: ${response.statusCode}')),
+        );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Error: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
     }
   }
 
@@ -399,8 +475,7 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  // Updated buildMessageItem: aligns messages right if sent by current user and left otherwise,
-  // and formats the createdAt timestamp.
+  // Aligns messages: right for current user, left for partner.
   Widget buildMessageItem(dynamic message) {
     final bool isSentByMe = message['sender'] != null &&
         message['sender']['userName'] == currentUserName;
@@ -464,8 +539,7 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           const Divider(height: 1),
           Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             child: Row(
               children: [
                 Expanded(
