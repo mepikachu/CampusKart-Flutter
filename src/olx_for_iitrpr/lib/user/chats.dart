@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:intl/intl.dart' show DateFormat; // explicit import of DateFormat
 
 // Chat List Screen: Fetch and display all conversations for the authenticated user.
 class ChatListScreen extends StatefulWidget {
@@ -99,6 +100,19 @@ class _ChatListScreenState extends State<ChatListScreen> {
         if (data['success'] == true) {
           setState(() {
             conversations = data['conversations'];
+            // Sort conversations so that the conversation with the newest
+            // last message comes first.
+            conversations.sort((a, b) {
+              DateTime aTime = DateTime.fromMillisecondsSinceEpoch(0);
+              DateTime bTime = DateTime.fromMillisecondsSinceEpoch(0);
+              if (a['messages'] != null && a['messages'].isNotEmpty) {
+                aTime = DateTime.parse(a['messages'].last['createdAt']);
+              }
+              if (b['messages'] != null && b['messages'].isNotEmpty) {
+                bTime = DateTime.parse(b['messages'].last['createdAt']);
+              }
+              return bTime.compareTo(aTime);
+            });
             isLoading = false;
           });
         } else {
@@ -270,23 +284,21 @@ class _ChatListScreenState extends State<ChatListScreen> {
                             ? conversation['messages'].last['text']
                             : 'No messages yet';
                     int unreadCount = unreadCounts[conversation['_id']] ?? 0;
+                    String lastMessageTime = '';
+                    if (conversation['messages'] != null &&
+                        conversation['messages'].isNotEmpty) {
+                      lastMessageTime = formatTimestamp(conversation['messages'].last['createdAt']);
+                    }
                     return ListTile(
                       leading: const CircleAvatar(child: Icon(Icons.person)),
                       title: Text(title),
                       subtitle: Text(lastMessage),
-                      trailing: unreadCount > 0
-                          ? Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: const BoxDecoration(
-                                  color: Colors.red, shape: BoxShape.circle),
-                              child: Text(
-                                '$unreadCount',
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                            )
-                          : null,
+                      trailing: Text(
+                        lastMessageTime,
+                        style: const TextStyle(fontSize: 12, color: Colors.black54),
+                      ),
                       onTap: () async {
-                        // When opening, update last read to now.
+                        // When opening, update last read timestamp.
                         await _secureStorage.write(
                           key: 'lastRead_${conversation['_id']}',
                           value: DateTime.now().toIso8601String(),
@@ -332,6 +344,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   List<dynamic> messages = [];
+  List<Message> pendingMessages = [];
   bool isLoading = true;
   String errorMessage = '';
   final TextEditingController _messageController = TextEditingController();
@@ -415,6 +428,16 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> fetchConversation() async {
+    // First, load cached conversation from device memory.
+    final String? cached = await _secureStorage.read(key: 'cached_messages_${widget.conversationId}');
+    if (cached != null) {
+      final cachedMessages = json.decode(cached);
+      setState(() {
+        messages = cachedMessages;
+        isLoading = false;
+      });
+    }
+
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       if (authCookie == null) {
@@ -424,6 +447,7 @@ class _ChatScreenState extends State<ChatScreen> {
         });
         return;
       }
+
       final response = await http.get(
         Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations/${widget.conversationId}'),
         headers: {
@@ -431,19 +455,34 @@ class _ChatScreenState extends State<ChatScreen> {
           'auth-cookie': authCookie,
         },
       );
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
+          final newMessages = data['conversation']['messages'] ?? [];
+
+          // For each pending message we previously added optimistically:
+          for (var pending in pendingMessages) {
+            bool found = newMessages.any((msg) =>
+                msg['text'] == pending.text &&
+                msg['createdAt'] == pending.createdAt);
+            if (found) {
+              // Mark as delivered (remove from pending list)
+              pending.isPending = false;
+            } else {
+              // If still not in confirmed messages, add it so it remains visible.
+              newMessages.add(pending.toMap());
+            }
+          }
           setState(() {
-            messages = data['conversation']['messages'] ?? [];
+            messages = newMessages;
             isLoading = false;
             errorMessage = '';
           });
-          // Update last read time each time the conversation is fetched.
+          // Cache updated conversation locally.
           await _secureStorage.write(
-            key: 'lastRead_${widget.conversationId}',
-            value: DateTime.now().toIso8601String(),
-          );
+              key: 'cached_messages_${widget.conversationId}',
+              value: json.encode(newMessages));
         } else {
           setState(() {
             errorMessage = data['error'] ?? 'Failed to fetch conversation';
@@ -465,28 +504,54 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> sendMessage() async {
-    if (_messageController.text.trim().isEmpty) return;
+    final trimmedText = _messageController.text.trim();
+    if (trimmedText.isEmpty) return;
+
+    // Create an optimistic pending message.
+    final tempId = DateTime.now().millisecondsSinceEpoch.toString();
+    final nowIso = DateTime.now().toIso8601String();
+    final optimisticMessage = Message(
+      id: tempId,
+      text: trimmedText,
+      senderName: currentUserName,
+      createdAt: nowIso,
+      isPending: true,
+    );
+
+    // Immediately add the message to our messages list and clear the TextField.
+    setState(() {
+      messages = [...messages, optimisticMessage.toMap()];
+      pendingMessages.add(optimisticMessage);
+      _messageController.clear();
+    });
+
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       if (authCookie == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Not authenticated')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Not authenticated')));
         return;
       }
+
       final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations/${widget.conversationId}/messages'),
+        Uri.parse(
+            'https://olx-for-iitrpr-backend.onrender.com/api/conversations/${widget.conversationId}/messages'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie,
         },
-        body: json.encode({'text': _messageController.text.trim()}),
+        body: json.encode({'text': trimmedText}),
       );
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
-          _messageController.clear();
-          fetchConversation();
+          // On successful send, remove the pending flag from that message.
+          setState(() {
+            pendingMessages.removeWhere((m) => m.id == tempId);
+          });
+          // Refresh the conversation—this will update the pending message with confirmed data.
+          await fetchConversation();
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text(data['error'] ?? 'Failed to send message')),
@@ -498,9 +563,8 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -512,7 +576,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   // Aligns messages: right for current user, left for partner.
-  Widget buildMessageItem(dynamic message) {
+  Widget buildMessageItem(dynamic message, {bool isPending = false}) {
     final bool isSentByMe = message['sender'] != null &&
         message['sender']['userName'] == currentUserName;
     return Align(
@@ -524,24 +588,35 @@ class _ChatScreenState extends State<ChatScreen> {
           color: isSentByMe ? Colors.blue[200] : Colors.grey[300],
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Column(
-          crossAxisAlignment:
-              isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text(
-              message['text'] ?? '',
-              style: const TextStyle(fontSize: 16),
+            Column(
+              crossAxisAlignment:
+                  isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              children: [
+                Text(
+                  message['text'] ?? '',
+                  style: const TextStyle(fontSize: 16),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  message['createdAt'] != null
+                      ? formatTimestamp(message['createdAt'])
+                      : '',
+                  style: const TextStyle(fontSize: 10, color: Colors.black54),
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
-            Text(
-              message['createdAt'] != null
-                  ? DateTime.parse(message['createdAt'])
-                      .toLocal()
-                      .toString()
-                      .split('.')[0]
-                  : '',
-              style: const TextStyle(fontSize: 10, color: Colors.black54),
-            ),
+            if (isSentByMe && isPending) ...[
+              const SizedBox(width: 4),
+              const Icon(
+                Icons.access_time,
+                size: 12,
+                color: Colors.black54,
+              ),
+            ],
           ],
         ),
       ),
@@ -569,7 +644,9 @@ class _ChatScreenState extends State<ChatScreen> {
                             itemBuilder: (context, index) {
                               final message =
                                   messages[messages.length - index - 1];
-                              return buildMessageItem(message);
+                              final isPending = pendingMessages.any((m) =>
+                                  m.id == (message['_id'] ?? message['id'])); // compare id from server or optimistic message id
+                              return buildMessageItem(message, isPending: isPending);
                             },
                           ),
           ),
@@ -596,5 +673,51 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       ),
     );
+  }
+}
+
+// Example Message model for optimistic sending
+class Message {
+  final String id; // temporary id when pending or real _id from server
+  final String text;
+  final String senderName;
+  final String createdAt; // ISO String
+  bool isPending;
+
+  Message({
+    required this.id,
+    required this.text,
+    required this.senderName,
+    required this.createdAt,
+    this.isPending = true,
+  });
+
+  // Converts Message to Map to match server data format
+  Map<String, dynamic> toMap() {
+    return {
+      '_id': id,
+      'text': text,
+      'sender': {'userName': senderName},
+      'createdAt': createdAt,
+    };
+  }
+}
+
+String formatTimestamp(String isoTime) {
+  DateTime messageTime = DateTime.parse(isoTime).toLocal();
+  DateTime now = DateTime.now();
+  if (messageTime.year == now.year &&
+      messageTime.month == now.month &&
+      messageTime.day == now.day) {
+    // Today: show time only.
+    return DateFormat('HH:mm').format(messageTime);
+  } else if (messageTime.year == now.year &&
+      messageTime.month == now.month &&
+      messageTime.day == now.day - 1) {
+    // Yesterday.
+    return 'Yesterday';
+  } else {
+    // Else show date.
+    return DateFormat('dd MMM yyyy').format(messageTime);
   }
 }

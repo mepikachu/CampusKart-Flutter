@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'product_details.dart';
 
@@ -54,6 +55,128 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
     }
   }
 
+  // Helper function to convert the images field to a List (same as in ProductsTab)
+  List<dynamic> parseImages(dynamic imagesField) {
+    if (imagesField == null) return [];
+    if (imagesField is List) return imagesField;
+    if (imagesField is Map) return [imagesField];
+    return [];
+  }
+
+  Widget buildProductCard(dynamic product, int index) {
+    final imagesList = parseImages(product['images']);
+    Widget imageWidget;
+    
+    if (imagesList.isNotEmpty && imagesList[0] is Map) {
+      final firstImage = imagesList[0];
+      if (firstImage.containsKey('data') && firstImage['data'] != null) {
+        try {
+          final String base64Str = firstImage['data'];
+          final Uint8List bytes = base64Decode(base64Str);
+          imageWidget = Stack(
+            children: [
+              Image.memory(
+                bytes,
+                fit: BoxFit.cover,
+              ),
+              if (imagesList.length > 1)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.7),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '+${imagesList.length - 1}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        } catch (e) {
+          imageWidget = Container(
+            color: Colors.grey[300],
+            child: const Center(child: Text('Image could not be loaded')),
+          );
+        }
+      } else {
+        imageWidget = Container(
+          color: Colors.grey[300],
+          child: const Center(child: Text('Image data not found')),
+        );
+      }
+    } else {
+      imageWidget = Container(
+        color: Colors.grey[300],
+        child: const Center(child: Text('Image could not be loaded')),
+      );
+    }
+    
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ProductDetailsScreen(product: product),
+          ),
+        );
+      },
+      child: Card(
+        elevation: 4,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Product Image
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                ),
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                  child: imageWidget,
+                ),
+              ),
+            ),
+            // Product Details
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    product['name'] ?? 'Product ${index + 1}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '₹${product['price']?.toString() ?? ''}',
+                    style: const TextStyle(color: Colors.green),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Status: ${product['status'] ?? 'Unknown'}',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -70,40 +193,17 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                   ? const Center(child: Text('No listings yet'))
                   : RefreshIndicator(
                       onRefresh: fetchMyListings,
-                      child: ListView.builder(
+                      child: GridView.builder(
                         padding: const EdgeInsets.all(8),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 0.75,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                        ),
                         itemCount: myListings.length,
                         itemBuilder: (context, index) {
-                          final product = myListings[index];
-                          return Card(
-                            margin: const EdgeInsets.symmetric(
-                                vertical: 8, horizontal: 16),
-                            child: ListTile(
-                              leading: product['images']?.isNotEmpty ?? false
-                                  ? SizedBox(
-                                      width: 50,
-                                      height: 50,
-                                      child: Image.memory(
-                                        base64Decode(
-                                            product['images'][0]['data']),
-                                        fit: BoxFit.cover,
-                                      ),
-                                    )
-                                  : const Icon(Icons.image_not_supported),
-                              title: Text(product['name'] ?? 'Unnamed Product'),
-                              subtitle: Text(
-                                  '₹${product['price']}\nStatus: ${product['status']}'),
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        ProductDetailsScreen(product: product),
-                                  ),
-                                );
-                              },
-                            ),
-                          );
+                          return buildProductCard(myListings[index], index);
                         },
                       ),
                     ),

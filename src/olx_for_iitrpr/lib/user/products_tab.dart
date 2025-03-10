@@ -5,6 +5,16 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // Add if missing
 import 'product_details.dart'; // Add this import
 
+// Add this enum at the top of the file, after the imports
+enum SortOption {
+  nameAsc,
+  nameDesc,
+  priceAsc,
+  priceDesc,
+  dateAsc,
+  dateDesc,
+}
+
 class ProductsTab extends StatefulWidget {
   const ProductsTab({super.key});
 
@@ -20,6 +30,9 @@ class _ProductsTabState extends State<ProductsTab> {
   String errorMessage = '';
   String currentUserName = '';
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+
+  // Add these variables to your existing state
+  SortOption _currentSort = SortOption.dateDesc;
 
   @override
   void initState() {
@@ -56,6 +69,7 @@ class _ProductsTabState extends State<ProductsTab> {
                     product['seller']?['userName'] != currentUserName)
                 .toList();
             filteredProducts = List.from(products); // Initialize filtered products
+            _sortProducts(); // Apply initial sort
             isLoading = false;
           });
         } else {
@@ -203,6 +217,128 @@ class _ProductsTabState extends State<ProductsTab> {
     });
   }
 
+  // Add this method to handle sorting
+  void _sortProducts() {
+    setState(() {
+      filteredProducts.sort((a, b) {
+        switch (_currentSort) {
+          case SortOption.nameAsc:
+            return (a['name'] ?? '').toString()
+                .toLowerCase()
+                .compareTo((b['name'] ?? '').toString().toLowerCase());
+          case SortOption.nameDesc:
+            return (b['name'] ?? '').toString()
+                .toLowerCase()
+                .compareTo((a['name'] ?? '').toString().toLowerCase());
+          case SortOption.priceAsc:
+            return (a['price'] ?? 0)
+                .toString()
+                .compareTo((b['price'] ?? 0).toString());
+          case SortOption.priceDesc:
+            return (b['price'] ?? 0)
+                .toString()
+                .compareTo((a['price'] ?? 0).toString());
+          case SortOption.dateDesc:
+            return (b['createdAt'] ?? '')
+                .toString()
+                .compareTo((a['createdAt'] ?? '').toString());
+          case SortOption.dateAsc:
+            return (a['createdAt'] ?? '')
+                .toString()
+                .compareTo((b['createdAt'] ?? '').toString());
+        }
+      });
+    });
+  }
+
+  // Add this method to show the sort menu
+  void _showSortMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                title: const Text('Sort by'),
+                subtitle: const Text('Choose sorting option'),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.sort_by_alpha),
+                title: const Text('Name (A to Z)'),
+                onTap: () {
+                  setState(() {
+                    _currentSort = SortOption.nameAsc;
+                    _sortProducts();
+                  });
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.sort_by_alpha),
+                title: const Text('Name (Z to A)'),
+                onTap: () {
+                  setState(() {
+                    _currentSort = SortOption.nameDesc;
+                    _sortProducts();
+                  });
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.arrow_upward),
+                title: const Text('Price (Low to High)'),
+                onTap: () {
+                  setState(() {
+                    _currentSort = SortOption.priceAsc;
+                    _sortProducts();
+                  });
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.arrow_downward),
+                title: const Text('Price (High to Low)'),
+                onTap: () {
+                  setState(() {
+                    _currentSort = SortOption.priceDesc;
+                    _sortProducts();
+                  });
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.access_time),
+                title: const Text('Date (Newest First)'),
+                onTap: () {
+                  setState(() {
+                    _currentSort = SortOption.dateDesc;
+                    _sortProducts();
+                  });
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.access_time),
+                title: const Text('Date (Oldest First)'),
+                onTap: () {
+                  setState(() {
+                    _currentSort = SortOption.dateAsc;
+                    _sortProducts();
+                  });
+                  Navigator.pop(context);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -226,10 +362,9 @@ class _ProductsTabState extends State<ProductsTab> {
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.filter_list),
-                onPressed: () {
-                  // Implement filter functionality
-                },
+                icon: const Icon(Icons.sort),
+                onPressed: () => _showSortMenu(context),
+                tooltip: 'Sort products',
               ),
             ],
           ),

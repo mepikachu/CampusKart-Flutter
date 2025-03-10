@@ -29,9 +29,16 @@ class _SellTabState extends State<SellTab> {
   Future<void> _pickImages() async {
     final ImagePicker picker = ImagePicker();
     final List<XFile>? pickedFiles = await picker.pickMultiImage();
+    
     if (pickedFiles != null && pickedFiles.isNotEmpty) {
       setState(() {
-        _images = pickedFiles.map((xfile) => File(xfile.path)).toList();
+        _images.addAll(pickedFiles.map((xfile) => File(xfile.path)));
+        if (_images.length > 5) {
+          _images = _images.sublist(0, 5); // Limit to 5 images
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Maximum 5 images allowed')),
+          );
+        }
       });
     }
   }
@@ -131,6 +138,78 @@ class _SellTabState extends State<SellTab> {
     super.dispose();
   }
 
+  // Update the build method to show image previews
+  Widget _buildImagePreviews() {
+    return Container(
+      height: 200,
+      child: Stack(
+        children: [
+          if (_images.isEmpty)
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: IconButton(
+                  icon: const Icon(Icons.add_photo_alternate),
+                  onPressed: _pickImages,
+                ),
+              ),
+            )
+          else
+            ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _images.length + 1,
+              itemBuilder: (context, index) {
+                if (index == _images.length) {
+                  return Container(
+                    width: 100,
+                    margin: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.add_photo_alternate),
+                      onPressed: _pickImages,
+                    ),
+                  );
+                }
+                return Stack(
+                  children: [
+                    Container(
+                      width: 100,
+                      margin: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        image: DecorationImage(
+                          image: FileImage(_images[index]),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: IconButton(
+                        icon: const Icon(Icons.clear, color: Colors.white),
+                        onPressed: () {
+                          setState(() {
+                            _images.removeAt(index);
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -140,42 +219,7 @@ class _SellTabState extends State<SellTab> {
         child: Column(
           children: [
             // Image placeholder with a pencil icon at the top-right
-            Stack(
-              children: [
-                Container(
-                  height: 200,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    color: Colors.grey.shade300,
-                  ),
-                  child: _images.isNotEmpty
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.file(
-                            _images.first,
-                            fit: BoxFit.cover,
-                            width: double.infinity,
-                          ),
-                        )
-                      : const Center(
-                          child: Text(
-                            'No image selected',
-                            style: TextStyle(color: Colors.black54),
-                          ),
-                        ),
-                ),
-                // Pencil icon button in the top-right corner
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: IconButton(
-                    icon: const Icon(Icons.edit, color: Colors.white),
-                    onPressed: _pickImages,
-                  ),
-                ),
-              ],
-            ),
+            _buildImagePreviews(),
             const SizedBox(height: 24),
             // Product Name
             TextFormField(
