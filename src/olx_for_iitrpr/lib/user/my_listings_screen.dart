@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'product_details.dart';
+import 'product_management.dart';
 
 class MyListingsScreen extends StatefulWidget {
   const MyListingsScreen({super.key});
@@ -55,76 +55,43 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
     }
   }
 
-  // Helper function to convert the images field to a List (same as in ProductsTab)
-  List<dynamic> parseImages(dynamic imagesField) {
-    if (imagesField == null) return [];
-    if (imagesField is List) return imagesField;
-    if (imagesField is Map) return [imagesField];
-    return [];
-  }
-
   Widget buildProductCard(dynamic product, int index) {
-    final imagesList = parseImages(product['images']);
+    List<dynamic> imagesList = product['images'] ?? [];
     Widget imageWidget;
-    
+
+    // Handle image display
     if (imagesList.isNotEmpty && imagesList[0] is Map) {
       final firstImage = imagesList[0];
       if (firstImage.containsKey('data') && firstImage['data'] != null) {
         try {
           final String base64Str = firstImage['data'];
           final Uint8List bytes = base64Decode(base64Str);
-          imageWidget = Stack(
-            children: [
-              Image.memory(
-                bytes,
-                fit: BoxFit.cover,
-              ),
-              if (imagesList.length > 1)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '+${imagesList.length - 1}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          );
+          imageWidget = Image.memory(bytes, fit: BoxFit.cover);
         } catch (e) {
           imageWidget = Container(
             color: Colors.grey[300],
-            child: const Center(child: Text('Image could not be loaded')),
+            child: const Center(child: Text('Error loading image')),
           );
         }
       } else {
         imageWidget = Container(
           color: Colors.grey[300],
-          child: const Center(child: Text('Image data not found')),
+          child: const Center(child: Text('No image')),
         );
       }
     } else {
       imageWidget = Container(
         color: Colors.grey[300],
-        child: const Center(child: Text('Image could not be loaded')),
+        child: const Center(child: Text('No image')),
       );
     }
-    
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => ProductDetailsScreen(product: product),
+            builder: (context) => SellerOfferManagementScreen(product: product),
           ),
         );
       },
@@ -134,19 +101,12 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Product Image
             Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
-                ),
-                child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
-                  child: imageWidget,
-                ),
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
+                child: imageWidget,
               ),
             ),
-            // Product Details
             Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
@@ -164,10 +124,12 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                     style: const TextStyle(color: Colors.green),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    'Status: ${product['status'] ?? 'Unknown'}',
-                    style: const TextStyle(fontSize: 12),
-                  ),
+                  if (product['offerRequests'] != null &&
+                      (product['offerRequests'] as List).isNotEmpty)
+                    Text(
+                      '${(product['offerRequests'] as List).length} offers',
+                      style: const TextStyle(color: Colors.blue),
+                    ),
                 ],
               ),
             ),
@@ -180,11 +142,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Listings'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-      ),
+      appBar: AppBar(title: const Text('My Listings')),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : errorMessage.isNotEmpty
@@ -195,16 +153,16 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                       onRefresh: fetchMyListings,
                       child: GridView.builder(
                         padding: const EdgeInsets.all(8),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 2,
                           childAspectRatio: 0.75,
                           crossAxisSpacing: 10,
                           mainAxisSpacing: 10,
                         ),
                         itemCount: myListings.length,
-                        itemBuilder: (context, index) {
-                          return buildProductCard(myListings[index], index);
-                        },
+                        itemBuilder: (context, index) =>
+                            buildProductCard(myListings[index], index),
                       ),
                     ),
     );

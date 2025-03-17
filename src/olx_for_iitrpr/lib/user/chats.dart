@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart' show DateFormat; // explicit import of DateFormat
+import 'product_details.dart'; // Import ProductDetailsScreen
 
 // Chat List Screen: Fetch and display all conversations for the authenticated user.
 class ChatListScreen extends StatefulWidget {
@@ -328,13 +329,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
 class ChatScreen extends StatefulWidget {
   final String conversationId;
   final String partnerNames;
-  final String? sellerId; // Add this
+  final String? sellerId; // for new conversation
+  final Map<String, dynamic>? productPreview; // product reply info for new chats
 
   const ChatScreen({
-    super.key, 
-    required this.conversationId, 
+    super.key,
+    required this.conversationId,
     required this.partnerNames,
-    this.sellerId, // Add this
+    this.sellerId,
+    this.productPreview,
   });
 
   @override
@@ -355,47 +358,17 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _loadCurrentUserName().then((_) {
-      if (widget.sellerId != null) {
-        // If sellerId is provided, create a new conversation
-        _createConversation();
+      if (widget.conversationId.isEmpty && widget.sellerId != null && widget.productPreview != null) {
+        // New conversation - create it with the product preview when the first message is sent.
+        // Do not call _createConversation here; instead wait for the send button.
+        setState(() {
+          isLoading = false;
+        });
       } else {
-        // Otherwise fetch existing conversation
+        // Existing conversation: fetch normally.
         fetchConversation();
       }
     });
-  }
-
-  Future<void> _createConversation() async {
-    try {
-      final authCookie = await _secureStorage.read(key: 'authCookie');
-      final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations'),
-        headers: {
-          'Content-Type': 'application/json',
-          'auth-cookie': authCookie ?? '',
-        },
-        body: json.encode({'participantId': widget.sellerId}),
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] && data['conversation'] != null) {
-          // Use the new conversation ID to fetch messages
-          String newConversationId = data['conversation']['_id'];
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ChatScreen(
-                conversationId: newConversationId,
-                partnerNames: widget.partnerNames,
-              ),
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      print('Error creating conversation: $e');
-    }
   }
 
   Future<void> _loadCurrentUserName() async {
@@ -405,6 +378,7 @@ class _ChatScreenState extends State<ChatScreen> {
         currentUserName = name;
       });
     } else {
+      // Fallback: fetch current user details from the server.
       String? authCookie = await _secureStorage.read(key: 'authCookie');
       if (authCookie != null) {
         final response = await http.get(
@@ -427,13 +401,12 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  // For existing conversation
   Future<void> fetchConversation() async {
-    // First, load cached conversation from device memory.
     final String? cached = await _secureStorage.read(key: 'cached_messages_${widget.conversationId}');
     if (cached != null) {
-      final cachedMessages = json.decode(cached);
       setState(() {
-        messages = cachedMessages;
+        messages = json.decode(cached);
         isLoading = false;
       });
     }
@@ -460,17 +433,14 @@ class _ChatScreenState extends State<ChatScreen> {
         final data = json.decode(response.body);
         if (data['success'] == true) {
           final newMessages = data['conversation']['messages'] ?? [];
-
-          // For each pending message we previously added optimistically:
+          // Merge pending messages
           for (var pending in pendingMessages) {
             bool found = newMessages.any((msg) =>
                 msg['text'] == pending.text &&
                 msg['createdAt'] == pending.createdAt);
             if (found) {
-              // Mark as delivered (remove from pending list)
               pending.isPending = false;
             } else {
-              // If still not in confirmed messages, add it so it remains visible.
               newMessages.add(pending.toMap());
             }
           }
@@ -479,7 +449,6 @@ class _ChatScreenState extends State<ChatScreen> {
             isLoading = false;
             errorMessage = '';
           });
-          // Cache updated conversation locally.
           await _secureStorage.write(
               key: 'cached_messages_${widget.conversationId}',
               value: json.encode(newMessages));
@@ -503,11 +472,70 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  // When sending a message
   Future<void> sendMessage() async {
     final trimmedText = _messageController.text.trim();
     if (trimmedText.isEmpty) return;
 
-    // Create an optimistic pending message.
+    if (widget.conversationId.isEmpty && widget.productPreview != null && widget.sellerId != null) {
+      // This is a new conversation: call _createConversationWithReply below.
+      await _createConversationWithReply(trimmedText);
+    } else {
+      // Existing conversation: send message normally.
+      await _sendNormalMessage(trimmedText);
+    }
+  }
+
+  Future<void> _createConversationWithReply(String userMessage) async {
+    // In this method, both the product preview and the user's message are sent
+    final authCookie = await _secureStorage.read(key: 'authCookie');
+    if (authCookie == null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Not authenticated')));
+      return;
+    }
+
+    final response = await http.post(
+      Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations'),
+      headers: {
+        'Content-Type': 'application/json',
+        'auth-cookie': authCookie,
+      },
+      body: json.encode({
+        'participantId': widget.sellerId,
+        'productPreview': widget.productPreview, // pass product preview
+        'firstMessage': userMessage, // user's message text
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['success'] == true && data['conversation'] != null) {
+        // Conversation is created. Navigate by replacing current screen.
+        String newConversationId = data['conversation']['_id'];
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ChatScreen(
+              conversationId: newConversationId,
+              partnerNames: widget.partnerNames,
+            ),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(data['error'] ?? 'Failed to create conversation')),
+        );
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Server error: ${response.statusCode}')),
+      );
+    }
+  }
+
+  Future<void> _sendNormalMessage(String trimmedText) async {
+    // Create a pending message.
     final tempId = DateTime.now().millisecondsSinceEpoch.toString();
     final nowIso = DateTime.now().toIso8601String();
     final optimisticMessage = Message(
@@ -518,67 +546,107 @@ class _ChatScreenState extends State<ChatScreen> {
       isPending: true,
     );
 
-    // Immediately add the message to our messages list and clear the TextField.
     setState(() {
       messages = [...messages, optimisticMessage.toMap()];
       pendingMessages.add(optimisticMessage);
       _messageController.clear();
     });
 
-    try {
-      final authCookie = await _secureStorage.read(key: 'authCookie');
-      if (authCookie == null) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Not authenticated')));
-        return;
-      }
+    final authCookie = await _secureStorage.read(key: 'authCookie');
+    if (authCookie == null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Not authenticated')));
+      return;
+    }
 
-      final response = await http.post(
-        Uri.parse(
-            'https://olx-for-iitrpr-backend.onrender.com/api/conversations/${widget.conversationId}/messages'),
-        headers: {
-          'Content-Type': 'application/json',
-          'auth-cookie': authCookie,
-        },
-        body: json.encode({'text': trimmedText}),
-      );
+    final response = await http.post(
+      Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations/${widget.conversationId}/messages'),
+      headers: {
+        'Content-Type': 'application/json',
+        'auth-cookie': authCookie,
+      },
+      body: json.encode({'text': trimmedText}),
+    );
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] == true) {
-          // On successful send, remove the pending flag from that message.
-          setState(() {
-            pendingMessages.removeWhere((m) => m.id == tempId);
-          });
-          // Refresh the conversation—this will update the pending message with confirmed data.
-          await fetchConversation();
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(data['error'] ?? 'Failed to send message')),
-          );
-        }
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['success'] == true) {
+        setState(() {
+          pendingMessages.removeWhere((m) => m.id == tempId);
+        });
+        await fetchConversation();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Server error: ${response.statusCode}')),
+          SnackBar(content: Text(data['error'] ?? 'Failed to send message')),
         );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Error: $e')));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Server error: ${response.statusCode}')),
+      );
     }
   }
 
-  @override
-  void dispose() {
-    _pollingTimer?.cancel();
-    _messageController.dispose();
-    super.dispose();
-  }
-
-  // Aligns messages: right for current user, left for partner.
+  // Rendering messages
   Widget buildMessageItem(dynamic message, {bool isPending = false}) {
-    final bool isSentByMe = message['sender'] != null &&
-        message['sender']['userName'] == currentUserName;
+    if (message['type'] == 'product_reply') {
+      return InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ProductDetailsScreen(
+                product: {
+                  '_id': message['productId'],
+                  'name': message['productName'],
+                  'price': message['price'],
+                  'images': [
+                    {'data': message['image']}
+                  ],
+                },
+              ),
+            ),
+          );
+        },
+        child: Card(
+          margin: const EdgeInsets.all(8),
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Row(
+              children: [
+                if (message['image'] != null)
+                  SizedBox(
+                    width: 60,
+                    height: 60,
+                    child: Image.memory(
+                      base64Decode(message['image']),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        message['productName'] ?? 'Product',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        '₹${message['price']?.toString() ?? '0'}',
+                        style: const TextStyle(color: Colors.green),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    // Regular text message rendering:
+    final bool isSentByMe = message['sender'] != null && message['sender']['userName'] == currentUserName;
     return Align(
       alignment: isSentByMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -593,8 +661,7 @@ class _ChatScreenState extends State<ChatScreen> {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Column(
-              crossAxisAlignment:
-                  isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              crossAxisAlignment: isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
                 Text(
                   message['text'] ?? '',
@@ -602,9 +669,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  message['createdAt'] != null
-                      ? formatTimestamp(message['createdAt'])
-                      : '',
+                  message['createdAt'] != null ? formatTimestamp(message['createdAt']) : '',
                   style: const TextStyle(fontSize: 10, color: Colors.black54),
                 ),
               ],
@@ -642,10 +707,9 @@ class _ChatScreenState extends State<ChatScreen> {
                             reverse: true,
                             itemCount: messages.length,
                             itemBuilder: (context, index) {
-                              final message =
-                                  messages[messages.length - index - 1];
+                              final message = messages[messages.length - index - 1];
                               final isPending = pendingMessages.any((m) =>
-                                  m.id == (message['_id'] ?? message['id'])); // compare id from server or optimistic message id
+                                  m.id == (message['_id'] ?? message['id']));
                               return buildMessageItem(message, isPending: isPending);
                             },
                           ),
@@ -676,12 +740,12 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-// Example Message model for optimistic sending
+// Example Message model for optimistic sending.
 class Message {
-  final String id; // temporary id when pending or real _id from server
+  final String id;
   final String text;
   final String senderName;
-  final String createdAt; // ISO String
+  final String createdAt;
   bool isPending;
 
   Message({
@@ -692,7 +756,6 @@ class Message {
     this.isPending = true,
   });
 
-  // Converts Message to Map to match server data format
   Map<String, dynamic> toMap() {
     return {
       '_id': id,
@@ -709,15 +772,12 @@ String formatTimestamp(String isoTime) {
   if (messageTime.year == now.year &&
       messageTime.month == now.month &&
       messageTime.day == now.day) {
-    // Today: show time only.
     return DateFormat('HH:mm').format(messageTime);
   } else if (messageTime.year == now.year &&
       messageTime.month == now.month &&
       messageTime.day == now.day - 1) {
-    // Yesterday.
     return 'Yesterday';
   } else {
-    // Else show date.
     return DateFormat('dd MMM yyyy').format(messageTime);
   }
 }
