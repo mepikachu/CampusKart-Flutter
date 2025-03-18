@@ -40,7 +40,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (authCookie != null && remember && storedRole != null && mounted) {
       if (storedRole == 'admin') {
         Navigator.pushReplacementNamed(context, '/admin_home');
-      } else if (storedRole == 'volunteer') {
+      } else if (storedRole == 'volunteer' || storedRole == 'volunteer_pending') {
         Navigator.pushReplacementNamed(context, '/volunteer_home');
       } else {
         Navigator.pushReplacementNamed(context, '/user_home');
@@ -87,7 +87,7 @@ class _LoginScreenState extends State<LoginScreen> {
         await prefs.setString('role', role);
         if (role == 'admin') {
           Navigator.pushReplacementNamed(context, '/admin_home');
-        } else if (role == 'volunteer') {
+        } else if (role == 'volunteer' || role == 'volunteer_pending') {
           Navigator.pushReplacementNamed(context, '/volunteer_home');
         } else {
           Navigator.pushReplacementNamed(context, '/user_home'); // changed from '/home'

@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'volunteer_donations_page.dart';
+import 'volunteer_profile_tab.dart';  // or volunteer_profile_page.dart if you prefer
 
 class VolunteerHomeScreen extends StatefulWidget {
   const VolunteerHomeScreen({super.key});
@@ -12,6 +14,13 @@ class VolunteerHomeScreen extends StatefulWidget {
 
 class _VolunteerHomeScreenState extends State<VolunteerHomeScreen> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  int _selectedIndex = 0;
+
+  // Two tabs: Donations and Profile
+  final List<Widget> _tabs = [
+    const VolunteerDonationsPage(),
+    const VolunteerProfileTab(),
+  ];
 
   @override
   void initState() {
@@ -32,7 +41,6 @@ class _VolunteerHomeScreenState extends State<VolunteerHomeScreen> {
         'auth-cookie': authCookie,
       },
     );
-
     if (response.statusCode != 200) {
       await _secureStorage.delete(key: 'authCookie');
       Navigator.pushReplacementNamed(context, '/login');
@@ -43,10 +51,22 @@ class _VolunteerHomeScreenState extends State<VolunteerHomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Volunteer Home"),
+        title: const Text("Olx-for-IITRPR"),
       ),
-      body: const Center(
-        child: Text("Welcome, Volunteer!"),
+      body: _tabs[_selectedIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: (index) => setState(() { _selectedIndex = index; }),
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.volunteer_activism),
+            label: "Donations",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person),
+            label: "Profile",
+          ),
+        ],
       ),
     );
   }
