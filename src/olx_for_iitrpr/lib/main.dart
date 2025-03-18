@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
+
 import 'login/login.dart';
-import 'user/home.dart';
 import 'login/sign_up.dart';
 import 'login/forgot_password.dart';
+
+import 'user/user_home.dart';
+import 'admin/admin_home.dart';
+import 'volunteer/volunteer_home.dart';
 
 void main() {
   runApp(const MyApp());
@@ -17,7 +21,9 @@ class MyApp extends StatelessWidget {
       title: 'Olx for IITRPR',
       debugShowCheckedModeBanner: false,
       routes: {
-        '/home': (context) => const HomeScreen(),
+        '/user_home': (context) => const UserHomeScreen(),
+        '/admin_home': (context) => const AdminHomeScreen(),
+        '/volunteer_home': (context) => const VolunteerHomeScreen(),
         '/signup': (context) => const SignUpScreen(),
         '/forgot-password': (context) => const ForgotPasswordScreen(),
       },

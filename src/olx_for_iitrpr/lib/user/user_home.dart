@@ -5,14 +5,14 @@ import 'sell_tab.dart';
 import 'donations_tab.dart';
 import 'profile_tab.dart';
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class UserHomeScreen extends StatefulWidget {
+  const UserHomeScreen({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<UserHomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<UserHomeScreen> {
   int _selectedIndex = 0;
 
   // List of four tabs displayed in the home screen.

@@ -1,6 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'my_listings_screen.dart';
 
@@ -14,12 +14,12 @@ class ProfileTab extends StatefulWidget {
 class _ProfileTabState extends State<ProfileTab> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   Map<String, dynamic>? userData;
-  bool isLoading = true;
   String errorMessage = '';
 
   @override
   void initState() {
     super.initState();
+    // Start with empty data; UI will display placeholders.
     fetchUserData();
   }
 
@@ -39,11 +39,9 @@ class _ProfileTabState extends State<ProfileTab> {
       );
 
       final responseBody = json.decode(response.body);
-
       if (response.statusCode == 200 && responseBody['success'] == true) {
         setState(() {
           userData = responseBody['user'];
-          isLoading = false;
         });
       } else {
         throw Exception(responseBody['error'] ?? 'Failed to fetch user data');
@@ -51,7 +49,6 @@ class _ProfileTabState extends State<ProfileTab> {
     } catch (e) {
       setState(() {
         errorMessage = e.toString();
-        isLoading = false;
       });
     }
   }
@@ -69,14 +66,9 @@ class _ProfileTabState extends State<ProfileTab> {
         );
       }
     } catch (e) {
-      // If logout from backend fails, log the error but proceed locally.
       print("Backend logout error: $e");
     }
-
-    // Clear the stored authCookie
     await _secureStorage.delete(key: 'authCookie');
-
-    // Navigate to login screen and clear the navigation stack
     Navigator.pushNamedAndRemoveUntil(
       context,
       '/',
@@ -86,8 +78,7 @@ class _ProfileTabState extends State<ProfileTab> {
 
   String _formatAddress(Map<String, dynamic>? address) {
     if (address == null) return 'No address';
-    return '${address['street']}, ${address['city']}, '
-           '${address['state']}, ${address['zipCode']}';
+    return '${address['street']}, ${address['city']}, ${address['state']}, ${address['zipCode']}';
   }
 
   String _formatDate(String? dateString) {
@@ -126,72 +117,71 @@ class _ProfileTabState extends State<ProfileTab> {
             ),
           );
         }
-        // Add other section navigations here
       },
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (errorMessage.isNotEmpty) {
-      return Center(child: Text('Error: $errorMessage'));
-    }
-
+    // Even if userData is null, we display the page with placeholders.
     return Scaffold(
       body: SingleChildScrollView(
         child: Column(
           children: [
             const SizedBox(height: 20),
-            const CircleAvatar(
+            CircleAvatar(
               radius: 50,
-              backgroundImage: NetworkImage('https://picsum.photos/200'),
+              // If userData has profilePicture, decode it; otherwise use a local asset.
+              backgroundImage: userData != null &&
+                      userData!['profilePicture'] != null &&
+                      userData!['profilePicture']['data'] != null
+                  ? MemoryImage(
+                      base64Decode(userData!['profilePicture']['data']),
+                    )
+                  : const AssetImage('assets/default_avatar.png') as ImageProvider,
             ),
             const SizedBox(height: 10),
             // Username (large text)
             Text(
-              userData?['userName'] ?? 'No Name',
+              userData?['userName'] ?? 'Loading...',
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
             // Email in light grey color
             Text(
-              userData?['email'] ?? 'No Email',
+              userData?['email'] ?? 'Loading...',
               style: TextStyle(
                 fontSize: 16,
-                color: Colors.grey.shade600, // A subtle grey
+                color: Colors.grey.shade600,
               ),
             ),
             const SizedBox(height: 20),
             _buildInfoCard('Phone', userData?['phone'] ?? 'Not provided'),
             _buildInfoCard('Address', _formatAddress(userData?['address'])),
-            _buildInfoCard(
-                'Member Since', _formatDate(userData?['registrationDate'])),
+            _buildInfoCard('Member Since', _formatDate(userData?['registrationDate'])),
             const SizedBox(height: 20),
-
-            // Edit Profile button removed
-
             _buildSection('My Listings', Icons.list),
             _buildSection('My Purchases', Icons.shopping_bag),
             _buildSection('My Donations', Icons.volunteer_activism),
             _buildSection('Settings', Icons.settings),
             const SizedBox(height: 20),
-
-            // Logout button: a TextButton with red text
             TextButton(
               onPressed: _logout,
               style: TextButton.styleFrom(
                 foregroundColor: Colors.red,
-                textStyle: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+                textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               child: const Text('Logout'),
             ),
             const SizedBox(height: 20),
+            // Optionally, display an error message if present.
+            if (errorMessage.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'Error: $errorMessage',
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ),
           ],
         ),
       ),

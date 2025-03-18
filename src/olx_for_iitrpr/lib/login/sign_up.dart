@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:image_picker/image_picker.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -31,19 +34,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool _obscureConfirmPassword = true;
   String? _errorMessage;
 
-  @override
-  void dispose() {
-    _userNameController.dispose();
-    _nameController.dispose();
-    _emailController.dispose();
-    _phoneController.dispose();
-    _passwordController.dispose();
-    _confirmPasswordController.dispose();
-    _streetController.dispose();
-    _cityController.dispose();
-    _stateController.dispose();
-    _zipCodeController.dispose();
-    super.dispose();
+  // New fields for profile picture and volunteer registration
+  File? _profilePicture;
+  bool _registerAsVolunteer = false;
+
+  Future<void> _pickProfilePicture() async {
+    final picker = ImagePicker();
+    final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      setState(() {
+        _profilePicture = File(pickedFile.path);
+      });
+    }
   }
 
   Map<String, dynamic> _getAddress() {
@@ -67,34 +69,47 @@ class _SignUpScreenState extends State<SignUpScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final response = await http
-          .post(
-            Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/register'),
-            headers: {'Content-Type': 'application/json'},
-            body: json.encode({
-              'userName': _userNameController.text,
-              'email': _emailController.text,
-              'phone': _phoneController.text,
-              'password': _passwordController.text,
-              'address': json.encode(_getAddress()),
-            }),
-          )
-          .timeout(const Duration(seconds: 15));
+      // Use a multipart request to send both fields and an image if provided.
+      final uri = Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/register');
+      final request = http.MultipartRequest('POST', uri);
 
-      final responseBody = json.decode(response.body);
+      request.fields['userName'] = _userNameController.text;
+      request.fields['email'] = _emailController.text;
+      request.fields['phone'] = _phoneController.text;
+      request.fields['password'] = _passwordController.text;
+      request.fields['address'] = json.encode(_getAddress());
+      // Set role: if volunteer was selected then role will be 'volunteer'
+      request.fields['role'] = _registerAsVolunteer ? 'volunteer' : 'user';
 
-      if (response.statusCode == 201 && responseBody['success'] == true) {
-        final authCookie = responseBody['authCookie'];
+      if (_profilePicture != null) {
+        final stream = http.ByteStream(_profilePicture!.openRead());
+        final length = await _profilePicture!.length();
+        final multipartFile = http.MultipartFile(
+          'profilePicture',
+          stream,
+          length,
+          filename: _profilePicture!.path.split('/').last,
+          contentType: MediaType('image', 'jpeg'), // adjust if needed
+        );
+        request.files.add(multipartFile);
+      }
+
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 15));
+      final responseBody = await streamedResponse.stream.bytesToString();
+      final responseData = json.decode(responseBody);
+      
+      if (streamedResponse.statusCode == 201 && responseData['success'] == true) {
+        final authCookie = responseData['authCookie'];
         await _secureStorage.write(key: 'authCookie', value: authCookie);
 
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('identifier', _emailController.text);
 
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/home');
-        }
+        // For simplicity, always navigate to user home.
+        // Volunteer registrations will require admin approval.
+        Navigator.pushReplacementNamed(context, '/user_home');
       } else {
-        _showErrorDialog(responseBody['error'] ?? 'Signup failed');
+        _showErrorDialog(responseData['error'] ?? 'Signup failed');
       }
     } on TimeoutException {
       _showErrorDialog("Connection timeout");
@@ -124,6 +139,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   @override
+  void dispose() {
+    _userNameController.dispose();
+    _nameController.dispose();
+    _emailController.dispose();
+    _phoneController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    _streetController.dispose();
+    _cityController.dispose();
+    _stateController.dispose();
+    _zipCodeController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white, // Plain white background
@@ -149,11 +179,38 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 _buildConfirmPasswordField(),
                 const SizedBox(height: 20),
                 _buildAddressSection(),
+                const SizedBox(height: 20),
+                // Add an option to pick a profile picture
+                Row(
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _pickProfilePicture,
+                      icon: const Icon(Icons.image),
+                      label: const Text("Pick Profile Picture"),
+                    ),
+                    const SizedBox(width: 16),
+                    _profilePicture != null
+                        ? const Text("Image Selected")
+                        : const Text("No image"),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                // Option to register as volunteer
+                Row(
+                  children: [
+                    Checkbox(
+                      value: _registerAsVolunteer,
+                      onChanged: (v) {
+                        setState(() {
+                          _registerAsVolunteer = v ?? false;
+                        });
+                      },
+                    ),
+                    const Text("Register as Volunteer"),
+                  ],
+                ),
                 const SizedBox(height: 30),
-
-                // Sign Up "button" as a text link, with a spinner if loading
                 _buildSignUpButton(),
-
                 const SizedBox(height: 16),
                 _buildLoginLink(),
               ],

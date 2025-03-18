@@ -72,8 +72,14 @@ class _LoginScreenState extends State<LoginScreen> {
           await prefs.remove('identifier');
         }
 
-        if (mounted) {
-          Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+        // Navigate based on role:
+        final role = responseBody['user']?['role'] ?? 'user';
+        if (role == 'admin') {
+          Navigator.pushReplacementNamed(context, '/admin_home');
+        } else if (role == 'volunteer') {
+          Navigator.pushReplacementNamed(context, '/volunteer_home');
+        } else {
+          Navigator.pushReplacementNamed(context, '/user_home'); // changed from '/home'
         }
       } else {
         setState(() {
