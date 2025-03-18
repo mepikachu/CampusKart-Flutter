@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
-import 'volunteer_donations_page.dart';
-import 'volunteer_profile_tab.dart';  // or volunteer_profile_page.dart if you prefer
+import 'tab_donations.dart';
+import 'tab_profile.dart';  // or volunteer_profile_page.dart if you prefer
 
 class VolunteerHomeScreen extends StatefulWidget {
   const VolunteerHomeScreen({super.key});

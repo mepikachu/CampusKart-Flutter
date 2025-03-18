@@ -5,8 +5,8 @@ import 'login/sign_up.dart';
 import 'login/forgot_password.dart';
 
 import 'user/user_home.dart';
-import 'admin/admin_home.dart';
-import 'volunteer/volunteer_home.dart';
+import 'admin/home.dart';
+import 'volunteer/home.dart';
 
 void main() {
   runApp(const MyApp());
