@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'product_details.dart';
+import 'edit_product_screen.dart'; // Import the new screen
 
 class SellerOfferManagementScreen extends StatefulWidget {
   final Map<String, dynamic> product;
@@ -88,8 +89,11 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
           IconButton(
             icon: const Icon(Icons.edit),
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Edit functionality in development')),
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => EditProductScreen(product: widget.product),
+                ),
               );
             },
           ),
