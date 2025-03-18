@@ -48,6 +48,75 @@ class _SignUpScreenState extends State<SignUpScreen> {
     }
   }
 
+  void _clearProfilePicture() {
+    setState(() {
+      _profilePicture = null;
+    });
+  }
+
+  void _showImageOptions() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.upload_file),
+              title: const Text('Upload New Image'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickProfilePicture();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.clear),
+              title: const Text('Clear Image'),
+              onTap: () {
+                Navigator.pop(context);
+                _clearProfilePicture();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileImageSelector() {
+    return Center(
+      child: Stack(
+        children: [
+          CircleAvatar(
+            radius: 60,
+            backgroundImage: _profilePicture != null
+                ? FileImage(_profilePicture!)
+                : const AssetImage('assets/default_avatar.png')
+                    as ImageProvider,
+          ),
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: InkWell(
+              onTap: _showImageOptions,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                ),
+                padding: const EdgeInsets.all(6),
+                child: const Icon(
+                  Icons.edit,
+                  size: 20,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Map<String, dynamic> _getAddress() {
     return {
       'street': _streetController.text,
@@ -105,9 +174,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('identifier', _emailController.text);
 
-        // For simplicity, always navigate to user home.
-        // Volunteer registrations will require admin approval.
-        Navigator.pushReplacementNamed(context, '/user_home');
+        // Navigate based on role:
+        final role = responseData['user']?['role'] ?? 'user';
+        await prefs.setString('role', role);
+        if (role == 'admin') {
+          Navigator.pushReplacementNamed(context, '/admin_home');
+        } else if (role == 'volunteer') {
+          Navigator.pushReplacementNamed(context, '/volunteer_home');
+        } else {
+          Navigator.pushReplacementNamed(context, '/user_home');
+        }
       } else {
         _showErrorDialog(responseData['error'] ?? 'Signup failed');
       }
@@ -166,6 +242,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
             key: _formKey,
             child: Column(
               children: [
+                _buildProfileImageSelector(),
+                const SizedBox(height: 20),
                 _buildUserNameField(),
                 const SizedBox(height: 20),
                 _buildNameField(),
@@ -179,21 +257,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 _buildConfirmPasswordField(),
                 const SizedBox(height: 20),
                 _buildAddressSection(),
-                const SizedBox(height: 20),
-                // Add an option to pick a profile picture
-                Row(
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: _pickProfilePicture,
-                      icon: const Icon(Icons.image),
-                      label: const Text("Pick Profile Picture"),
-                    ),
-                    const SizedBox(width: 16),
-                    _profilePicture != null
-                        ? const Text("Image Selected")
-                        : const Text("No image"),
-                  ],
-                ),
                 const SizedBox(height: 20),
                 // Option to register as volunteer
                 Row(

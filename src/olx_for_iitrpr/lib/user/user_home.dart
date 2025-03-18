@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'chats.dart';
 import 'products_tab.dart';
 import 'sell_tab.dart';
 import 'donations_tab.dart';
 import 'profile_tab.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class UserHomeScreen extends StatefulWidget {
   const UserHomeScreen({super.key});
@@ -11,9 +14,36 @@ class UserHomeScreen extends StatefulWidget {
   @override
   State<UserHomeScreen> createState() => _HomeScreenState();
 }
-
 class _HomeScreenState extends State<UserHomeScreen> {
+  final _secureStorage = const FlutterSecureStorage();
   int _selectedIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _verifyAuthCookie();
+  }
+
+  Future<void> _verifyAuthCookie() async {
+    final authCookie = await _secureStorage.read(key: 'authCookie');
+    if (authCookie == null) {
+      Navigator.pushReplacementNamed(context, '/login');
+      return;
+    }
+    // Call /api/me to verify the cookie:
+    final response = await http.get(
+      Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/me'),
+      headers: {
+        'Content-Type': 'application/json',
+        'auth-cookie': authCookie,
+      },
+    );
+    if (response.statusCode != 200) {
+      // Invalid cookie; clear it and redirect:
+      await _secureStorage.delete(key: 'authCookie');
+      Navigator.pushReplacementNamed(context, '/login');
+    }
+  }
 
   // List of four tabs displayed in the home screen.
   final List<Widget> _tabs = const [

@@ -19,7 +19,7 @@ class _ProfileTabState extends State<ProfileTab> {
   @override
   void initState() {
     super.initState();
-    // Build UI immediately with placeholders, then fetch the data.
+    // Display UI immediately with placeholders then update when data is fetched.
     fetchUserData();
   }
 
@@ -127,7 +127,7 @@ class _ProfileTabState extends State<ProfileTab> {
 
   @override
   Widget build(BuildContext context) {
-    // Build UI immediately (with placeholders) even if userData is still null.
+    // Build UI using the same default image if no profilePicture is returned.
     return Scaffold(
       body: SingleChildScrollView(
         child: Column(

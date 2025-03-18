@@ -34,8 +34,17 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _checkExistingSession() async {
     final authCookie = await _secureStorage.read(key: 'authCookie');
-    if (authCookie != null && mounted) {
-      Navigator.pushReplacementNamed(context, '/home');
+    final prefs = await SharedPreferences.getInstance();
+    final remember = prefs.getBool('rememberMe') ?? false;
+    final storedRole = prefs.getString('role'); // retrieve stored role
+    if (authCookie != null && remember && storedRole != null && mounted) {
+      if (storedRole == 'admin') {
+        Navigator.pushReplacementNamed(context, '/admin_home');
+      } else if (storedRole == 'volunteer') {
+        Navigator.pushReplacementNamed(context, '/volunteer_home');
+      } else {
+        Navigator.pushReplacementNamed(context, '/user_home');
+      }
     }
   }
 
@@ -74,6 +83,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
         // Navigate based on role:
         final role = responseBody['user']?['role'] ?? 'user';
+        // Store the role locally for session persistence:
+        await prefs.setString('role', role);
         if (role == 'admin') {
           Navigator.pushReplacementNamed(context, '/admin_home');
         } else if (role == 'volunteer') {
