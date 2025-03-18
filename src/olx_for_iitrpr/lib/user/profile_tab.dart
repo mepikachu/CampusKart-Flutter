@@ -19,7 +19,7 @@ class _ProfileTabState extends State<ProfileTab> {
   @override
   void initState() {
     super.initState();
-    // Start with empty data; UI will display placeholders.
+    // Build UI immediately with placeholders, then fetch the data.
     fetchUserData();
   }
 
@@ -83,8 +83,12 @@ class _ProfileTabState extends State<ProfileTab> {
 
   String _formatDate(String? dateString) {
     if (dateString == null) return 'Unknown';
-    final date = DateTime.parse(dateString);
-    return '${date.day}/${date.month}/${date.year}';
+    try {
+      final date = DateTime.parse(dateString);
+      return '${date.day}/${date.month}/${date.year}';
+    } catch (_) {
+      return 'Unknown';
+    }
   }
 
   Widget _buildInfoCard(String title, String value) {
@@ -123,7 +127,7 @@ class _ProfileTabState extends State<ProfileTab> {
 
   @override
   Widget build(BuildContext context) {
-    // Even if userData is null, we display the page with placeholders.
+    // Build UI immediately (with placeholders) even if userData is still null.
     return Scaffold(
       body: SingleChildScrollView(
         child: Column(
@@ -131,7 +135,6 @@ class _ProfileTabState extends State<ProfileTab> {
             const SizedBox(height: 20),
             CircleAvatar(
               radius: 50,
-              // If userData has profilePicture, decode it; otherwise use a local asset.
               backgroundImage: userData != null &&
                       userData!['profilePicture'] != null &&
                       userData!['profilePicture']['data'] != null
@@ -141,12 +144,10 @@ class _ProfileTabState extends State<ProfileTab> {
                   : const AssetImage('assets/default_avatar.png') as ImageProvider,
             ),
             const SizedBox(height: 10),
-            // Username (large text)
             Text(
               userData?['userName'] ?? 'Loading...',
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
-            // Email in light grey color
             Text(
               userData?['email'] ?? 'Loading...',
               style: TextStyle(
@@ -173,7 +174,6 @@ class _ProfileTabState extends State<ProfileTab> {
               child: const Text('Logout'),
             ),
             const SizedBox(height: 20),
-            // Optionally, display an error message if present.
             if (errorMessage.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.all(16),
