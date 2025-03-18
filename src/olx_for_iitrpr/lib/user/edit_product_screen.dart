@@ -57,18 +57,20 @@ class _EditProductScreenState extends State<EditProductScreen> {
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie,
-          'X-Requested-With': 'XMLHttpRequest',
         },
       );
 
+      if (!mounted) return;
+
       if (response.statusCode == 200) {
-        if (!mounted) return;
         Navigator.pop(context, {'deleted': true});
+        _showSuccessSnackbar('Product deleted successfully');
       } else {
-        _handleErrorResponse(response);
+        final errorData = json.decode(response.body);
+        _showErrorSnackbar(errorData['error'] ?? 'Failed to delete product');
       }
     } catch (e) {
-      _showSnackbar('Delete failed: ${e.toString()}');
+      _showErrorSnackbar('Delete failed: ${e.toString()}');
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
@@ -88,41 +90,44 @@ class _EditProductScreenState extends State<EditProductScreen> {
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie,
-          'X-Requested-With': 'XMLHttpRequest',
         },
         body: json.encode({
-          'name': _nameController.text,
-          'description': _descriptionController.text,
+          'name': _nameController.text.trim(),
+          'description': _descriptionController.text.trim(),
         }),
       );
 
+      if (!mounted) return;
+
       if (response.statusCode == 200) {
-        if (!mounted) return;
+        final responseData = json.decode(response.body);
         Navigator.pop(context, {
           'updated': true,
-          'name': _nameController.text,
-          'description': _descriptionController.text
+          'product': responseData['product'],
         });
+        _showSuccessSnackbar('Product updated successfully');
       } else {
-        _handleErrorResponse(response);
+        final errorData = json.decode(response.body);
+        _showErrorSnackbar(errorData['error'] ?? 'Failed to update product');
       }
     } catch (e) {
-      _showSnackbar('Update failed: ${e.toString()}');
+      _showErrorSnackbar('Update failed: ${e.toString()}');
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
   }
 
-  void _handleErrorResponse(http.Response response) {
-    try {
-      final errorData = jsonDecode(response.body);
-      _showSnackbar(errorData['error'] ?? 'Unknown error occurred');
-    } catch (_) {
-      _showSnackbar('Server responded with status ${response.statusCode}');
-    }
+  void _showSuccessSnackbar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
-  void _showSnackbar(String message) {
+  void _showErrorSnackbar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
