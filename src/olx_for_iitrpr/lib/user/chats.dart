@@ -367,8 +367,20 @@ class _ChatScreenState extends State<ChatScreen> {
       } else {
         // Existing conversation: fetch normally.
         fetchConversation();
+        // Start polling for new messages every 3 seconds
+        _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+          if (mounted) {
+            fetchConversation();
+          }
+        });
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _pollingTimer?.cancel(); // Cancel the timer when disposing
+    super.dispose();
   }
 
   Future<void> _loadCurrentUserName() async {
@@ -538,6 +550,25 @@ class _ChatScreenState extends State<ChatScreen> {
     // Create a pending message.
     final tempId = DateTime.now().millisecondsSinceEpoch.toString();
     final nowIso = DateTime.now().toIso8601String();
+    
+    // Create message list with product preview if it's first message
+    List<Map<String, dynamic>> messagesList = [];
+    
+    if (messages.isEmpty && widget.productPreview != null) {
+      // Add product preview message
+      messagesList.add({
+        '_id': '${tempId}_preview',
+        'type': 'product_reply',
+        'productId': widget.productPreview!['_id'],
+        'productName': widget.productPreview!['name'],
+        'price': widget.productPreview!['price'],
+        'image': widget.productPreview!['images']?[0]?['data'],
+        'createdAt': nowIso,
+        'sender': {'userName': currentUserName},
+      });
+    }
+
+    // Add the actual text message
     final optimisticMessage = Message(
       id: tempId,
       text: trimmedText,
@@ -547,7 +578,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
 
     setState(() {
-      messages = [...messages, optimisticMessage.toMap()];
+      messages = [...messages, ...messagesList, optimisticMessage.toMap()];
       pendingMessages.add(optimisticMessage);
       _messageController.clear();
     });
