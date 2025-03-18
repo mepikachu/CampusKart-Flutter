@@ -2,8 +2,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
-import 'admin_dashboard.dart'; // This is a placeholder dashboard screen
-import 'volunteer_requests.dart';
+import 'tab_dashboard.dart';
+import 'tab_volunteer_approval.dart';
+import 'tab_profile.dart';  // Add this import
 
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
@@ -16,10 +17,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   int _selectedIndex = 0;
 
-  // Two tabs: Dashboard and Volunteer Requests
+  // Three tabs: Dashboard, Volunteer Requests, and Profile
   final List<Widget> _tabs = const [
-    AdminDashboard(), // Your admin dashboard content
-    VolunteerRequestsScreen(), // Volunteer requests for pending volunteers
+    AdminDashboard(),
+    VolunteerRequestsScreen(),
+    AdminProfileTab(),  // Add the profile tab
   ];
 
   @override
@@ -51,7 +53,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Admin Home"),
+        title: const Text("Olx-for-IITRPR"),
       ),
       body: _tabs[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
@@ -64,7 +66,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.request_page),
-            label: "Volunteer Requests",
+            label: "Requests",
+          ),
+          BottomNavigationBarItem(  // Add profile tab item
+            icon: Icon(Icons.person),
+            label: "Profile",
           ),
         ],
       ),
