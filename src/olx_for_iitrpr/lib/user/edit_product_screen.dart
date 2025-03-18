@@ -63,7 +63,9 @@ class _EditProductScreenState extends State<EditProductScreen> {
       if (!mounted) return;
 
       if (response.statusCode == 200) {
-        Navigator.pop(context, {'deleted': true});
+        // Navigate back to my_listings with refresh flag
+        if (!mounted) return;
+        Navigator.of(context).pop({'refresh': true});
         _showSuccessSnackbar('Product deleted successfully');
       } else {
         final errorData = json.decode(response.body);
@@ -101,10 +103,9 @@ class _EditProductScreenState extends State<EditProductScreen> {
 
       if (response.statusCode == 200) {
         final responseData = json.decode(response.body);
-        Navigator.pop(context, {
-          'updated': true,
-          'product': responseData['product'],
-        });
+        // Navigate back to my_listings with refresh flag
+        if (!mounted) return;
+        Navigator.of(context).pop({'refresh': true});
         _showSuccessSnackbar('Product updated successfully');
       } else {
         final errorData = json.decode(response.body);
