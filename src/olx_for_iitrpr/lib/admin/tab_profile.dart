@@ -187,7 +187,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
           baseColor: Colors.grey[300]!,
           highlightColor: Colors.grey[100]!,
           child: Container(
-            width: 100,
+            width: 100,  // matches CircleAvatar diameter
             height: 100,
             decoration: const BoxDecoration(
               color: Colors.white,
@@ -200,7 +200,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
         _buildShimmerPlaceholder(
           height: 24,
           width: 150,
-          margin: const EdgeInsets.symmetric(vertical: 8),
+          margin: const EdgeInsets.symmetric(vertical: 4),
         ),
         // Email placeholder
         _buildShimmerPlaceholder(
@@ -210,8 +210,40 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
         ),
         const SizedBox(height: 20),
         // Info cards placeholders
-        for (int i = 0; i < 3; i++)
-          _buildShimmerPlaceholder(height: 60),
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: Shimmer.fromColors(
+            baseColor: Colors.grey[300]!,
+            highlightColor: Colors.grey[100]!,
+            child: Column(
+              children: [
+                Container(
+                  height: 50,  // matches actual card height
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -223,67 +255,74 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
         onRefresh: fetchUserData,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          child: isLoading
-              ? _buildLoadingProfile()
-              : Column(
-                  children: [
-                    const SizedBox(height: 20),
-                    CircleAvatar(
-                      radius: 50,
-                      backgroundImage: userData != null &&
-                              userData!['profilePicture'] != null &&
-                              userData!['profilePicture']['data'] != null
-                          ? MemoryImage(
-                              base64Decode(userData!['profilePicture']['data']),
-                            )
-                          : const AssetImage('assets/default_avatar.png')
-                              as ImageProvider,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      userData?['userName'] ?? '',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      userData?['email'] ?? '',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    _buildInfoCard('Phone', userData?['phone'] ?? 'Not provided'),
-                    _buildInfoCard(
-                        'Address', _formatAddress(userData?['address'])),
-                    _buildInfoCard('Member Since',
-                        _formatDate(userData?['registrationDate'])),
-                    const SizedBox(height: 20),
-                    _buildSection('Settings', Icons.settings),
-                    const SizedBox(height: 20),
-                    TextButton(
-                      onPressed: _logout,
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        textStyle: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+          child: Column(
+            children: [
+              // Loading profile or actual profile data
+              isLoading
+                  ? _buildLoadingProfile()
+                  : Column(
+                      children: [
+                        const SizedBox(height: 20),
+                        CircleAvatar(
+                          radius: 50,
+                          backgroundImage: userData != null &&
+                                  userData!['profilePicture'] != null &&
+                                  userData!['profilePicture']['data'] != null
+                              ? MemoryImage(
+                                  base64Decode(userData!['profilePicture']['data']),
+                                )
+                              : const AssetImage('assets/default_avatar.png')
+                                  as ImageProvider,
                         ),
-                      ),
-                      child: const Text('Logout'),
-                    ),
-                    if (errorMessage.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Text(
-                          'Error: $errorMessage',
-                          style: const TextStyle(color: Colors.red),
+                        const SizedBox(height: 16),
+                        Text(
+                          userData?['userName'] ?? '',
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                  ],
+                        Text(
+                          userData?['email'] ?? '',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        _buildInfoCard('Phone', userData?['phone'] ?? 'Not provided'),
+                        _buildInfoCard(
+                            'Address', _formatAddress(userData?['address'])),
+                        _buildInfoCard('Member Since',
+                            _formatDate(userData?['registrationDate'])),
+                      ],
+                    ),
+              
+              // Static sections that don't need loading state
+              const SizedBox(height: 20),
+              _buildSection('Settings', Icons.settings),
+              const SizedBox(height: 20),
+              TextButton(
+                onPressed: _logout,
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  textStyle: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
+                child: const Text('Logout'),
+              ),
+              if (errorMessage.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'Error: $errorMessage',
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

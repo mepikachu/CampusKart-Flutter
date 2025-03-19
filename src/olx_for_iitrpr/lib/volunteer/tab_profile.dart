@@ -188,12 +188,12 @@ class _VolunteerProfileTabState extends State<VolunteerProfileTab> {
         // Pending approval banner placeholder
         _buildShimmerPlaceholder(height: 36, margin: EdgeInsets.zero),
         const SizedBox(height: 20),
-        // Avatar placeholder
+        // Avatar placeholder - matches CircleAvatar size
         Shimmer.fromColors(
           baseColor: Colors.grey[300]!,
           highlightColor: Colors.grey[100]!,
           child: Container(
-            width: 100,
+            width: 100,  // matches CircleAvatar diameter
             height: 100,
             decoration: const BoxDecoration(
               color: Colors.white,
@@ -202,13 +202,13 @@ class _VolunteerProfileTabState extends State<VolunteerProfileTab> {
           ),
         ),
         const SizedBox(height: 16),
-        // Username placeholder
+        // Username placeholder - matches text size
         _buildShimmerPlaceholder(
           height: 24,
           width: 150,
-          margin: const EdgeInsets.symmetric(vertical: 8),
+          margin: const EdgeInsets.symmetric(vertical: 4),
         ),
-        // Email placeholder
+        // Email placeholder - matches text size
         _buildShimmerPlaceholder(
           height: 16,
           width: 200,
@@ -216,8 +216,40 @@ class _VolunteerProfileTabState extends State<VolunteerProfileTab> {
         ),
         const SizedBox(height: 20),
         // Info cards placeholders
-        for (int i = 0; i < 3; i++)
-          _buildShimmerPlaceholder(height: 60),
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: Shimmer.fromColors(
+            baseColor: Colors.grey[300]!,
+            highlightColor: Colors.grey[100]!,
+            child: Column(
+              children: [
+                Container(
+                  height: 50,  // matches actual card height
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -229,83 +261,90 @@ class _VolunteerProfileTabState extends State<VolunteerProfileTab> {
         onRefresh: fetchUserData,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          child: isLoading
-              ? _buildLoadingProfile()
-              : Column(
-                  children: [
-                    const SizedBox(height: 20),
-                    if (userData != null && userData!['role'] == 'volunteer_pending')
-                      Container(
-                        width: double.infinity,
-                        color: Colors.orange,
-                        padding: const EdgeInsets.all(8),
-                        child: const Text(
-                          'Your volunteer application is pending approval',
-                          style: TextStyle(
-                            color: Colors.white,
+          child: Column(
+            children: [
+              // Loading profile or actual profile data
+              isLoading
+                  ? _buildLoadingProfile()
+                  : Column(
+                      children: [
+                        const SizedBox(height: 20),
+                        if (userData != null && userData!['role'] == 'volunteer_pending')
+                          Container(
+                            width: double.infinity,
+                            color: Colors.orange,
+                            padding: const EdgeInsets.all(8),
+                            child: const Text(
+                              'Your volunteer application is pending approval',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        const SizedBox(height: 10),
+                        CircleAvatar(
+                          radius: 50,
+                          backgroundImage: userData != null &&
+                                  userData!['profilePicture'] != null &&
+                                  userData!['profilePicture']['data'] != null
+                              ? MemoryImage(
+                                  base64Decode(userData!['profilePicture']['data']),
+                                )
+                              : const AssetImage('assets/default_avatar.png')
+                                  as ImageProvider,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          userData?['userName'] ?? '',
+                          style: const TextStyle(
+                            fontSize: 24,
                             fontWeight: FontWeight.bold,
                           ),
-                          textAlign: TextAlign.center,
                         ),
-                      ),
-                    const SizedBox(height: 10),
-                    CircleAvatar(
-                      radius: 50,
-                      backgroundImage: userData != null &&
-                              userData!['profilePicture'] != null &&
-                              userData!['profilePicture']['data'] != null
-                          ? MemoryImage(
-                              base64Decode(userData!['profilePicture']['data']),
-                            )
-                          : const AssetImage('assets/default_avatar.png')
-                              as ImageProvider,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      userData?['userName'] ?? '',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      userData?['email'] ?? '',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    _buildInfoCard('Phone', userData?['phone'] ?? 'Not provided'),
-                    _buildInfoCard(
-                        'Address', _formatAddress(userData?['address'])),
-                    _buildInfoCard('Member Since',
-                        _formatDate(userData?['registrationDate'])),
-                    const SizedBox(height: 20),
-                    _buildSection('My Donation Collections', Icons.volunteer_activism),
-                    _buildSection('Settings', Icons.settings),
-                    const SizedBox(height: 20),
-                    TextButton(
-                      onPressed: _logout,
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        textStyle: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                        Text(
+                          userData?['email'] ?? '',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey.shade600,
+                          ),
                         ),
-                      ),
-                      child: const Text('Logout'),
+                        const SizedBox(height: 20),
+                        _buildInfoCard('Phone', userData?['phone'] ?? 'Not provided'),
+                        _buildInfoCard(
+                            'Address', _formatAddress(userData?['address'])),
+                        _buildInfoCard('Member Since',
+                            _formatDate(userData?['registrationDate'])),
+                      ],
                     ),
-                    if (errorMessage.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Text(
-                          'Error: $errorMessage',
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                      ),
-                  ],
+              
+              // Static sections that don't need loading state
+              const SizedBox(height: 20),
+              _buildSection('My Donation Collections', Icons.volunteer_activism),
+              _buildSection('Settings', Icons.settings),
+              const SizedBox(height: 20),
+              TextButton(
+                onPressed: _logout,
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  textStyle: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
+                child: const Text('Logout'),
+              ),
+              if (errorMessage.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    'Error: $errorMessage',
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

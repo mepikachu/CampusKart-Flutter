@@ -4,7 +4,9 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
-import 'my_listings_screen.dart';
+import 'my_listings.dart';
+import 'my_donations.dart';
+import 'my_purchases.dart';
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -162,10 +164,20 @@ class _ProfileTabState extends State<ProfileTab> {
         if (title == 'My Listings') {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => const MyListingsScreen(),
-            ),
+            MaterialPageRoute(builder: (context) => const MyListingsScreen()),
           );
+        } else if (title == 'My Purchases') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const MyPurchasesPage()),
+          );
+        } else if (title == 'My Donations') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const MyDonationsPage()),
+          );
+        } else if (title == 'Settings') {
+          Navigator.pushNamed(context, '/settings');
         }
       },
     );
@@ -214,19 +226,51 @@ class _ProfileTabState extends State<ProfileTab> {
         // Username placeholder
         _buildShimmerPlaceholder(
           height: 24,
-          width: 150,
-          margin: const EdgeInsets.symmetric(vertical: 8),
+          width: 120,
+          margin: const EdgeInsets.symmetric(vertical: 4),
         ),
         // Email placeholder
         _buildShimmerPlaceholder(
           height: 16,
-          width: 200,
+          width: 180,
           margin: const EdgeInsets.symmetric(vertical: 4),
         ),
         const SizedBox(height: 20),
         // Info cards placeholders
-        for (int i = 0; i < 3; i++)
-          _buildShimmerPlaceholder(height: 60),
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          child: Shimmer.fromColors(
+            baseColor: Colors.grey[300]!,
+            highlightColor: Colors.grey[100]!,
+            child: Column(
+              children: [
+                Container(
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         const SizedBox(height: 20),
         // Static sections without shimmer
         _buildSection('My Listings', Icons.list),
@@ -236,9 +280,9 @@ class _ProfileTabState extends State<ProfileTab> {
         const SizedBox(height: 20),
         // Static logout button without shimmer
         TextButton(
-          onPressed: null, // Disabled during loading
+          onPressed: _logout,
           style: TextButton.styleFrom(
-            foregroundColor: Colors.red.withOpacity(0.5), // Dimmed when loading
+            foregroundColor: Colors.red,
             textStyle: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -246,6 +290,7 @@ class _ProfileTabState extends State<ProfileTab> {
           ),
           child: const Text('Logout'),
         ),
+        const SizedBox(height: 20),
       ],
     );
   }

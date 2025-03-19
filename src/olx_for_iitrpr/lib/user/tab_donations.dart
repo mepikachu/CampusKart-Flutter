@@ -134,95 +134,76 @@ class _DonationsTabState extends State<DonationsTab> {
     }
   }
 
+  Widget _buildLeaderboardSection(String title, List<dynamic> leaderboard, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: textPrimaryColor,
+          ),
+        ),
+        const SizedBox(height: 16),
+        ...List.generate(5, (index) {
+          final bool hasData = index < leaderboard.length;
+          final user = hasData ? leaderboard[index] : null;
+          
+          return Card(
+            elevation: 2,
+            margin: const EdgeInsets.only(bottom: 8),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: ListTile(
+              leading: CircleAvatar(
+                backgroundColor: hasData ? color.withOpacity(0.2) : Colors.grey[200],
+                child: Text(
+                  '${index + 1}',
+                  style: TextStyle(
+                    color: hasData ? color : Colors.grey,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              title: Text(
+                hasData ? (user['userName'] ?? 'Unknown') : '--------------',
+                style: TextStyle(
+                  fontWeight: FontWeight.w500,
+                  color: hasData ? textPrimaryColor : Colors.grey,
+                ),
+              ),
+              trailing: hasData
+                  ? Text(
+                      '${user['totalDonations']} ${title == 'Top Donors' ? 'donations' : 'collected'}',
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  : Text(
+                      '0 ${title == 'Top Donors' ? 'donations' : 'collected'}',
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
   Widget _buildLeaderboard() {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // Top Donors Section
-        Text(
-          'Top Donors',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: textPrimaryColor,
-          ),
-        ),
-        const SizedBox(height: 16),
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: _donorsLeaderboard.length,
-          itemBuilder: (context, index) {
-            final donor = _donorsLeaderboard[index];
-            return Card(
-              elevation: 2,
-              margin: const EdgeInsets.only(bottom: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Colors.blue[100],
-                  child: Text('${index + 1}'),
-                ),
-                title: Text(
-                  donor['userName'] ?? 'Unknown',
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                ),
-                trailing: Text(
-                  '${donor['totalDonations']} donations',
-                  style: TextStyle(
-                    color: Colors.blue[700],
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
+        _buildLeaderboardSection('Top Donors', _donorsLeaderboard, Colors.blue[700]!),
         const SizedBox(height: 24),
-        // Top Volunteers Section
-        Text(
-          'Top Volunteers',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: textPrimaryColor,
-          ),
-        ),
-        const SizedBox(height: 16),
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: _volunteersLeaderboard.length,
-          itemBuilder: (context, index) {
-            final volunteer = _volunteersLeaderboard[index];
-            return Card(
-              elevation: 2,
-              margin: const EdgeInsets.only(bottom: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Colors.green[100],
-                  child: Text('${index + 1}'),
-                ),
-                title: Text(
-                  volunteer['userName'] ?? 'Unknown',
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                ),
-                trailing: Text(
-                  '${volunteer['totalDonations']} collected',
-                  style: TextStyle(
-                    color: Colors.green[700],
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
+        _buildLeaderboardSection('Top Volunteers', _volunteersLeaderboard, Colors.green[700]!),
       ],
     );
   }
