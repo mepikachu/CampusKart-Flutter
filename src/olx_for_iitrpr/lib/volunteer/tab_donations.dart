@@ -36,13 +36,16 @@ class _VolunteerDonationsPageState extends State<VolunteerDonationsPage> {
     try {
       setState(() => isLoading = true);
       final authCookie = await _secureStorage.read(key: 'authCookie');
+      
+      // Updated URL to fetch available donations
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/donations'),
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/donations?status=available'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
         },
       );
+
       final data = json.decode(response.body);
       if (response.statusCode == 200 && data['success'] == true) {
         setState(() {
@@ -195,6 +198,9 @@ class _VolunteerDonationsPageState extends State<VolunteerDonationsPage> {
   Widget _buildDonationCard(dynamic donation, int index) {
     Widget imageWidget;
     final List<dynamic> images = donation['images'] ?? [];
+    final donorName = donation['donatedBy']?['userName'] ?? 'Anonymous';
+    final donationDate = DateTime.parse(donation['donationDate'] ?? donation['createdAt']);
+    final formattedDate = "${donationDate.day}/${donationDate.month}/${donationDate.year}";
 
     if (images.isNotEmpty && images[0]['data'] != null) {
       try {
@@ -222,30 +228,81 @@ class _VolunteerDonationsPageState extends State<VolunteerDonationsPage> {
           Expanded(
             child: ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
-              child: imageWidget,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  imageWidget,
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [
+                            Colors.black.withOpacity(0.7),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                      padding: const EdgeInsets.all(8),
+                      child: Text(
+                        donation['name'] ?? 'Donation ${index + 1}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  donation['name'] ?? 'Donation ${index + 1}',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Donated by: $donorName',
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 12,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      formattedDate,
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  donation['status'] ?? 'Available',
-                  style: const TextStyle(color: Colors.green),
-                ),
-                ElevatedButton(
+                const SizedBox(height: 8),
+                ElevatedButton.icon(
                   onPressed: () => _collectDonation(donation['_id']),
-                  child: const Text('Collect'),
+                  icon: const Icon(Icons.volunteer_activism),
+                  label: const Text('Collect'),
                   style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 36),
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 40),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
               ],

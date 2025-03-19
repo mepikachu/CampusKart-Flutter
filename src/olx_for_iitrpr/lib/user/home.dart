@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'chats.dart';
-import 'products_tab.dart';
-import 'sell_tab.dart';
-import 'donations_tab.dart';
-import 'profile_tab.dart';
+import 'tab_products.dart';
+import 'tab_sell.dart';
+import 'tab_donations.dart';
+import 'tab_profile.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

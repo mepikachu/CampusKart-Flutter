@@ -4,22 +4,23 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
+import 'my_listings_screen.dart';
 
-class AdminProfileTab extends StatefulWidget {
-  const AdminProfileTab({super.key});
+class ProfileTab extends StatefulWidget {
+  const ProfileTab({super.key});
 
   @override
-  State<AdminProfileTab> createState() => _AdminProfileTabState();
+  State<ProfileTab> createState() => _ProfileTabState();
 }
 
-class _AdminProfileTabState extends State<AdminProfileTab> {
+class _ProfileTabState extends State<ProfileTab> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   Map<String, dynamic>? userData;
   String errorMessage = '';
   bool isLoading = true;
-  static const cacheDuration = Duration(minutes: 5);
-  static const String cacheKey = 'admin_profile_cache';
-  static const String cacheTimeKey = 'admin_profile_cache_time';
+  static const cacheDuration = Duration(minutes: 5); // Time to live for cached data
+  static const String cacheKey = 'user_profile_cache';
+  static const String cacheTimeKey = 'user_profile_cache_time';
 
   @override
   void initState() {
@@ -135,10 +136,17 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
       child: Padding(
         padding: const EdgeInsets.all(15),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-            const Spacer(),
-            Text(value),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                value,
+                textAlign: TextAlign.end,
+                style: const TextStyle(height: 1.5),
+              ),
+            ),
           ],
         ),
       ),
@@ -151,7 +159,14 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
       title: Text(title),
       trailing: const Icon(Icons.arrow_forward_ios),
       onTap: () {
-        // Navigation logic for the sections (if needed in the future)
+        if (title == 'My Listings') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const MyListingsScreen(),
+            ),
+          );
+        }
       },
     );
   }
@@ -212,6 +227,25 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
         // Info cards placeholders
         for (int i = 0; i < 3; i++)
           _buildShimmerPlaceholder(height: 60),
+        const SizedBox(height: 20),
+        // Static sections without shimmer
+        _buildSection('My Listings', Icons.list),
+        _buildSection('My Purchases', Icons.shopping_bag),
+        _buildSection('My Donations', Icons.volunteer_activism),
+        _buildSection('Settings', Icons.settings),
+        const SizedBox(height: 20),
+        // Static logout button without shimmer
+        TextButton(
+          onPressed: null, // Disabled during loading
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.red.withOpacity(0.5), // Dimmed when loading
+            textStyle: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          child: const Text('Logout'),
+        ),
       ],
     );
   }
@@ -228,6 +262,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
               : Column(
                   children: [
                     const SizedBox(height: 20),
+                    // Profile picture
                     CircleAvatar(
                       radius: 50,
                       backgroundImage: userData != null &&
@@ -240,6 +275,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                               as ImageProvider,
                     ),
                     const SizedBox(height: 16),
+                    // Username
                     Text(
                       userData?['userName'] ?? '',
                       style: const TextStyle(
@@ -247,6 +283,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
+                    // Email
                     Text(
                       userData?['email'] ?? '',
                       style: TextStyle(
@@ -255,14 +292,20 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                       ),
                     ),
                     const SizedBox(height: 20),
+                    // Info cards
                     _buildInfoCard('Phone', userData?['phone'] ?? 'Not provided'),
                     _buildInfoCard(
                         'Address', _formatAddress(userData?['address'])),
                     _buildInfoCard('Member Since',
                         _formatDate(userData?['registrationDate'])),
                     const SizedBox(height: 20),
+                    // Sections
+                    _buildSection('My Listings', Icons.list),
+                    _buildSection('My Purchases', Icons.shopping_bag),
+                    _buildSection('My Donations', Icons.volunteer_activism),
                     _buildSection('Settings', Icons.settings),
                     const SizedBox(height: 20),
+                    // Logout button
                     TextButton(
                       onPressed: _logout,
                       style: TextButton.styleFrom(
@@ -274,6 +317,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
                       ),
                       child: const Text('Logout'),
                     ),
+                    const SizedBox(height: 20),
                     if (errorMessage.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.all(16),

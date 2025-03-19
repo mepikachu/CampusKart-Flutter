@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart' show DateFormat; // explicit import of DateFormat
-import 'product_details.dart'; // Import ProductDetailsScreen
+import 'product_description.dart'; // Import ProductDetailsScreen
 
 // Chat List Screen: Fetch and display all conversations for the authenticated user.
 class ChatListScreen extends StatefulWidget {

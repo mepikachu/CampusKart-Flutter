@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'product_details.dart';
+import 'product_description.dart';
 import 'edit_product_screen.dart'; // Import the new screen
 
 class SellerOfferManagementScreen extends StatefulWidget {
