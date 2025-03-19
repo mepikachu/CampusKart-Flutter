@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'tab_donations.dart';
-import 'tab_profile.dart';  // or volunteer_profile_page.dart if you prefer
+import 'tab_leaderboard.dart';
+import 'tab_profile.dart';
 
 class VolunteerHomeScreen extends StatefulWidget {
   const VolunteerHomeScreen({super.key});
@@ -16,9 +17,10 @@ class _VolunteerHomeScreenState extends State<VolunteerHomeScreen> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   int _selectedIndex = 0;
 
-  // Two tabs: Donations and Profile
+  // Three tabs: Donations, Leaderboard, and Profile
   final List<Widget> _tabs = [
     const VolunteerDonationsPage(),
+    const VolunteerLeaderboardTab(),
     const VolunteerProfileTab(),
   ];
 
@@ -56,11 +58,18 @@ class _VolunteerHomeScreenState extends State<VolunteerHomeScreen> {
       body: _tabs[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
-        onTap: (index) => setState(() { _selectedIndex = index; }),
+        onTap: (index) => setState(() { 
+          _selectedIndex = index; 
+        }),
+        type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.volunteer_activism),
             label: "Donations",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.leaderboard),
+            label: "Leaderboard",
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person),
