@@ -82,6 +82,7 @@ class _DonationDescriptionScreenState extends State<DonationDescriptionScreen> {
             // Image carousel
             if (slides.isNotEmpty)
               Stack(
+                alignment: Alignment.center,
                 children: [
                   CarouselSlider(
                     carouselController: _carouselController,
@@ -97,26 +98,84 @@ class _DonationDescriptionScreenState extends State<DonationDescriptionScreen> {
                       },
                     ),
                   ),
-                  // Pagination dots
+                  // Left Arrow (show only if not first image)
+                  if (_currentImageIndex > 0)
+                    Positioned(
+                      left: 10,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.5),
+                            width: 1,
+                          ),
+                        ),
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.arrow_back_ios,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                          onPressed: () => _carouselController.previousPage(),
+                        ),
+                      ),
+                    ),
+                  // Right Arrow (show only if not last image)
+                  if (_currentImageIndex < slides.length - 1)
+                    Positioned(
+                      right: 10,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.5),
+                            width: 1,
+                          ),
+                        ),
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.arrow_forward_ios,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                          onPressed: () => _carouselController.nextPage(),
+                        ),
+                      ),
+                    ),
+                  // Pagination dots with background
                   Positioned(
                     bottom: 10,
-                    left: 0,
-                    right: 0,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: slides.asMap().entries.map((entry) {
-                        return Container(
-                          width: 8,
-                          height: 8,
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _currentImageIndex == entry.key
-                                ? Colors.white
-                                : Colors.white.withOpacity(0.5),
-                          ),
-                        );
-                      }).toList(),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.5),
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: slides.asMap().entries.map((entry) {
+                          return Container(
+                            width: 8,
+                            height: 8,
+                            margin: const EdgeInsets.symmetric(horizontal: 4),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _currentImageIndex == entry.key
+                                  ? Colors.white
+                                  : Colors.white.withOpacity(0.5),
+                            ),
+                          );
+                        }).toList(),
+                      ),
                     ),
                   ),
                 ],

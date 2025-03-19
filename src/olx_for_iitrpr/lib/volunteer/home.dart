@@ -53,7 +53,7 @@ class _VolunteerHomeScreenState extends State<VolunteerHomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Olx-for-IITRPR"),
+        title: const Text("OLX-IITRPR"),
       ),
       body: _tabs[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
