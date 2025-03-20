@@ -25,13 +25,15 @@ class _ChatScreenState extends State<ChatScreen> {
   final FocusNode _messageInputFocusNode = FocusNode();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final ScrollController _scrollController = ScrollController();
-  
+
   List<dynamic> messages = [];
   bool isLoading = true;
   String currentUserId = '';
   String currentUserName = '';
   Timer? _refreshTimer;
-  
+  String? _highlightedMessageId;
+  final Map<String, GlobalKey> _messageKeys = {};
+
   // For reply functionality
   Map<String, dynamic>? _replyingTo;
 
@@ -139,6 +141,62 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     } catch (e) {
       print('Error saving messages locally: $e');
+    }
+  }
+
+  // Add this method to get or create a key for each message
+  GlobalKey _getKeyForMessage(String messageId) {
+    if (!_messageKeys.containsKey(messageId)) {
+      _messageKeys[messageId] = GlobalKey();
+    }
+    return _messageKeys[messageId]!;
+  }
+
+  void _scrollToMessage(String messageId) {
+    try {
+      // Set the highlighted message
+      setState(() {
+        _highlightedMessageId = messageId;
+      });
+      
+      // Find the index of the message to scroll to
+      final messageIndex = messages.indexWhere((m) => 
+        m['_id'] != null && m['_id'].toString() == messageId);
+      
+      if (messageIndex != -1) {
+        // Calculate position in the reversed list
+        final scrollIndex = messages.length - 1 - messageIndex;
+        
+        // Scroll to the position
+        _scrollController.animateTo(
+          scrollIndex * 75.0, // Approximate height of each message item
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+        
+        // As backup, try to use ensureVisible after a short delay to ensure rendering
+        Future.delayed(const Duration(milliseconds: 200), () {
+          final key = _getKeyForMessage(messageId);
+          if (key.currentContext != null) {
+            Scrollable.ensureVisible(
+              key.currentContext!,
+              duration: const Duration(milliseconds: 300),
+              alignment: 0.5, // Center it in viewport
+            );
+          }
+        });
+      }
+      
+      // Remove highlight after a delay
+      Future.delayed(const Duration(milliseconds: 1500), () {
+        if (mounted) {
+          setState(() {
+            _highlightedMessageId = null;
+          });
+        }
+      });
+    } catch (e) {
+      print('Error scrolling to message: $e');
     }
   }
 
@@ -359,7 +417,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         }
                         
                         return GestureDetector(
-                          key: ValueKey((message['_id'] ?? 'msg-$index').toString()), // Convert to string to ensure consistency
+                          key: _getKeyForMessage(message['_id'].toString()),
                           onHorizontalDragEnd: (details) {
                             if (details.primaryVelocity! > 50) {
                               _handleReply(message);
@@ -437,6 +495,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  // Update _buildMessageItem to highlight messages
   Widget _buildMessageItem(dynamic message, bool isMe) {
     try {
       final messageTime = DateFormat('HH:mm').format(
@@ -444,6 +503,8 @@ class _ChatScreenState extends State<ChatScreen> {
       );
       
       final bool isPending = message['status'] == 'pending';
+      final bool isHighlighted = message['_id'] != null && 
+                                message['_id'].toString() == _highlightedMessageId;
       
       return Container(
         margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
@@ -454,7 +515,10 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: isMe ? Colors.blue[100] : Colors.grey[200],
+            // Change background color when highlighted
+            color: isHighlighted 
+                ? (isMe ? Colors.blue.shade300 : Colors.grey.shade400) 
+                : (isMe ? Colors.blue.shade100 : Colors.grey.shade200),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -493,6 +557,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  // Update your _buildReplyPreview method to make it tappable
   Widget _buildReplyPreview(dynamic message) {
     try {
       final replyIdString = message['replyToMessageId'].toString();
@@ -506,35 +571,44 @@ class _ChatScreenState extends State<ChatScreen> {
       final isOriginalSenderMe = originalMessage['sender'].toString() == currentUserId.toString();
       final isCurrentSenderMe = message['sender'].toString() == currentUserId.toString();
       
-      return Container(
-        margin: const EdgeInsets.only(bottom: 6),
-        padding: const EdgeInsets.all(6),
-        width: double.infinity, // Make it fill the entire width of parent
-        decoration: BoxDecoration(
-          color: isCurrentSenderMe ? Colors.blue[200] : Colors.grey[300],
-          borderRadius: BorderRadius.circular(8),
-          border: isCurrentSenderMe ? Border.all(color: Colors.blue[300]!, width: 1) : Border.all(color: Colors.grey[400]!, width: 1),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min, // Don't take more space than needed
-          children: [
-            Text(
-              isOriginalSenderMe ? 'You' : widget.partnerNames,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-                color: Colors.blue[700],
+      // Add GestureDetector to make it tappable
+      return GestureDetector(
+        onTap: () {
+          // Scroll to original message when tapped
+          _scrollToMessage(replyIdString);
+        },
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.all(6),
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: isCurrentSenderMe ? Colors.blue.shade200 : Colors.grey.shade300,
+            borderRadius: BorderRadius.circular(8),
+            border: isCurrentSenderMe 
+                ? Border.all(color: Colors.blue.shade300, width: 1) 
+                : Border.all(color: Colors.grey.shade400, width: 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                isOriginalSenderMe ? 'You' : widget.partnerNames,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  color: Colors.blue.shade700,
+                ),
               ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              messageText,
-              style: const TextStyle(fontSize: 12),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+              const SizedBox(height: 2),
+              Text(
+                messageText,
+                style: const TextStyle(fontSize: 12),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         ),
       );
     } catch (e) {
@@ -543,7 +617,7 @@ class _ChatScreenState extends State<ChatScreen> {
         padding: const EdgeInsets.all(6),
         width: double.infinity,
         decoration: BoxDecoration(
-          color: Colors.grey[300],
+          color: Colors.grey.shade300,
           borderRadius: BorderRadius.circular(8),
         ),
         child: const Text(
@@ -552,5 +626,5 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       );
     }
-}
+  }
 }
