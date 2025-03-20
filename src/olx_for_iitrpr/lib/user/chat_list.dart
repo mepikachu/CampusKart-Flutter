@@ -19,19 +19,19 @@ class _ChatListScreenState extends State<ChatListScreen> {
   bool isLoading = true;
   String errorMessage = '';
   String currentUserName = '';
+  String currentUserId = '';
   Timer? _pollingTimer;
 
   @override
   void initState() {
     super.initState();
-    _loadCurrentUserName().then((_) {
+    _loadCurrentUser().then((_) {
       _loadLocalConversations();
       fetchConversations();
     });
     
-    // Set up periodic refresh
     _pollingTimer = Timer.periodic(
-      const Duration(seconds: 30), // Increased interval to reduce API calls
+      const Duration(seconds: 30),
       (_) => fetchConversations(),
     );
   }
@@ -42,10 +42,42 @@ class _ChatListScreenState extends State<ChatListScreen> {
     super.dispose();
   }
 
-  Future<void> _loadCurrentUserName() async {
-    final name = await _secureStorage.read(key: 'userName');
-    if (name != null) {
-      setState(() => currentUserName = name);
+  Future<void> _loadCurrentUser() async {
+    try {
+      // Try to get from local storage first
+      final id = await _secureStorage.read(key: 'userId');
+      final name = await _secureStorage.read(key: 'userName');
+      
+      // If missing, fetch from server
+      if (id == null || name == null) {
+        final authCookie = await _secureStorage.read(key: 'authCookie');
+        final response = await http.get(
+          Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/me'),
+          headers: {
+            'Content-Type': 'application/json',
+            'auth-cookie': authCookie ?? '',
+          },
+        );
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['success'] && data['user'] != null) {
+            await _secureStorage.write(key: 'userId', value: data['user']['_id']);
+            await _secureStorage.write(key: 'userName', value: data['user']['userName']);
+            setState(() {
+              currentUserId = data['user']['_id'];
+              currentUserName = data['user']['userName'];
+            });
+          }
+        }
+      } else {
+        setState(() {
+          currentUserId = id;
+          currentUserName = name;
+        });
+      }
+    } catch (e) {
+      print('Error loading user: $e');
     }
   }
 
@@ -103,17 +135,12 @@ class _ChatListScreenState extends State<ChatListScreen> {
             });
             isLoading = false;
           });
-          
-          // Save updated conversations to local storage
           _saveConversationsLocally();
         }
       }
     } catch (e) {
       setState(() => errorMessage = e.toString());
-      // If network request fails, ensure we're showing local data
-      if (conversations.isEmpty) {
-        _loadLocalConversations();
-      }
+      if (conversations.isEmpty) _loadLocalConversations();
     }
     setState(() => isLoading = false);
   }
@@ -121,9 +148,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
   String getPartnerName(dynamic conversation) {
     if (conversation['participants']?.length == 2) {
       final participants = conversation['participants'];
-      return (participants[0]['userName'] == currentUserName)
-          ? participants[1]['userName']
-          : participants[0]['userName'];
+      // Compare by ID instead of username
+      final isFirstParticipantMe = participants[0]['_id'] == currentUserId;
+      return isFirstParticipantMe ? participants[1]['userName'] : participants[0]['userName'];
     }
     return "Chat";
   }

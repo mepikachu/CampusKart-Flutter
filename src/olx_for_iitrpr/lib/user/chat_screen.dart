@@ -20,7 +20,7 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final TextEditingController _messageController = TextEditingController();
   final FocusNode _messageInputFocusNode = FocusNode();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
@@ -33,6 +33,11 @@ class _ChatScreenState extends State<ChatScreen> {
   Timer? _refreshTimer;
   String? _highlightedMessageId;
   final Map<String, GlobalKey> _messageKeys = {};
+  String? _swipingMessageId;
+  double _messageSwipeOffset = 0.0;
+  final double _replyThreshold = 60.0; // Distance needed to trigger reply
+  AnimationController? _swipeController;
+  Animation<double>? _swipeAnimation;
 
   // For reply functionality
   Map<String, dynamic>? _replyingTo;
@@ -40,6 +45,11 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    // Initialize the animation controller
+    _swipeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
     _loadUserInfo().then((_) {
       _loadLocalMessages();
       _fetchMessages();
@@ -54,11 +64,23 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    _swipeController?.dispose();
     _messageController.dispose();
     _messageInputFocusNode.dispose();
     _scrollController.dispose();
     _refreshTimer?.cancel();
     super.dispose();
+  }
+
+  void _resetSwipe() {
+    if (_swipingMessageId != null) {
+      _swipeController?.reverse().then((_) {
+        setState(() {
+          _swipingMessageId = null;
+          _messageSwipeOffset = 0.0;
+        });
+      });
+    }
   }
 
   Future<void> _loadUserInfo() async {
@@ -402,6 +424,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           throw RangeError('Index out of range');
                         }
                         final message = messages[adjustedIndex];
+                        final messageId = message['_id'].toString();
                         
                         // Modified isMe check to handle both formats
                         bool isMe = false;
@@ -416,17 +439,73 @@ class _ChatScreenState extends State<ChatScreen> {
                           }
                         }
                         
+                        // Calculate offset for this specific message
+                        double offset = _swipingMessageId == messageId ? _messageSwipeOffset : 0.0;
+                        
                         return GestureDetector(
-                          key: _getKeyForMessage(message['_id'].toString()),
+                          key: _getKeyForMessage(messageId),
+                          onHorizontalDragStart: (details) {
+                            // Only allow right swipe (from left to right)
+                            if (details.localPosition.dx < MediaQuery.of(context).size.width / 2) {
+                              setState(() {
+                                _swipingMessageId = messageId;
+                                _messageSwipeOffset = 0.0;
+                              });
+                            }
+                          },
+                          onHorizontalDragUpdate: (details) {
+                            if (_swipingMessageId == messageId) {
+                              setState(() {
+                                // Allow both positive and negative movement
+                                _messageSwipeOffset = _messageSwipeOffset + details.delta.dx;
+                                
+                                // Prevent from going too far in either direction
+                                if (_messageSwipeOffset > 100) {
+                                  _messageSwipeOffset = 100;
+                                } else if (_messageSwipeOffset < 0) {
+                                  _messageSwipeOffset = 0; // Don't allow negative values
+                                }
+                              });
+                            }
+                          },
                           onHorizontalDragEnd: (details) {
-                            if (details.primaryVelocity! > 50) {
-                              _handleReply(message);
+                            if (_swipingMessageId == messageId) {
+                              if (_messageSwipeOffset >= _replyThreshold) {
+                                // Threshold reached, trigger reply
+                                _handleReply(message);
+                              }
+                              
+                              // Reset swipe state with animation
+                              _resetSwipe();
+                            }
+                          },
+                          onHorizontalDragCancel: () {
+                            if (_swipingMessageId == messageId) {
+                              _resetSwipe();
                             }
                           },
                           behavior: HitTestBehavior.translucent,
-                          child: Container(
-                            width: double.infinity,
-                            child: _buildMessageItem(message, isMe),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 50),
+                            transform: Matrix4.translationValues(offset, 0, 0),
+                            child: Row(
+                              children: [
+                                // Optional: Add reply icon that becomes visible during swipe
+                                if (offset > 0)
+                                  Container(
+                                    width: 20,
+                                    alignment: Alignment.center,
+                                    child: Icon(
+                                      Icons.reply,
+                                      size: 16,
+                                      color: Colors.blue,
+                                    ),
+                                  ),
+                                Expanded(
+                                  child: _buildMessageItem(message, isMe),
+                                ),
+                              ],
+                            ),
                           ),
                         );
                       } catch (e) {
@@ -494,6 +573,7 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
     );
   }
+
 
   // Update _buildMessageItem to highlight messages
   Widget _buildMessageItem(dynamic message, bool isMe) {
