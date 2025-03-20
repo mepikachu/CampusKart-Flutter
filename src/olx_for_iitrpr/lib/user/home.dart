@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'chats.dart';
+import 'chat_list.dart';
 import 'tab_products.dart';
 import 'tab_sell.dart';
 import 'tab_donations.dart';

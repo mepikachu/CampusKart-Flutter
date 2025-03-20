@@ -3,7 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:convert';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:http/http.dart' as http;
-import 'chats.dart';
+import 'chat_screen.dart';
 
 class ProductDetailsScreen extends StatefulWidget {
   final dynamic product;
@@ -84,17 +84,17 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           : null,
     };
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ChatScreen(
-          conversationId: '', // empty means new conversation
-          partnerNames: widget.product['seller']['userName'],
-          sellerId: widget.product['seller']['_id'],
-          productPreview: productPreview, // pass product preview data
-        ),
-      ),
-    );
+    // Navigator.push(
+    //   context,
+    //   MaterialPageRoute(
+    //     builder: (context) => ChatScreen(
+    //       conversationId: '', // empty means new conversation
+    //       partnerNames: widget.product['seller']['userName'],
+    //       sellerId: widget.product['seller']['_id'],
+    //       productPreview: productPreview, // pass product preview data
+    //     ),
+    //   ),
+    // );
   }
 
   List<Widget> _buildImageSlides() {
