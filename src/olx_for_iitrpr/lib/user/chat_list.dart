@@ -207,6 +207,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                           builder: (context) => ChatScreen(
                             conversationId: conversation['_id'],
                             partnerNames: title,
+                            partnerId: conversation['participants'].firstWhere((participant) => participant['_id'] != currentUserId)['_id'],  // Add this line with the appropriate variable
                           ),
                         ),
                       ).then((_) => fetchConversations()),
