@@ -384,13 +384,19 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   void _handleReply(dynamic message) {
+    String replySender = '';
+    if (message['sender'] is String) {
+      replySender = message['sender'];
+    } else if (message['sender'] is Map && message['sender']['_id'] != null) {
+      replySender = message['sender']['_id'];
+    }
     setState(() {
       _replyingTo = {
         'id': message['_id'],
         'text': message['text'],
+        'sender': replySender,
       };
     });
-    // Focus the text input
     FocusScope.of(context).requestFocus(_messageInputFocusNode);
   }
 
@@ -406,262 +412,227 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           ),
         ],
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : ListView.builder(
-                    controller: _scrollController,
-                    reverse: true,
-                    itemCount: messages.length,
-                    itemBuilder: (context, index) {
-                      try {
-                        // Ensure we're working with integers
-                        final int adjustedIndex = messages.length - 1 - index;
-                        // Boundary check
-                        if (adjustedIndex < 0 || adjustedIndex >= messages.length) {
-                          throw RangeError('Index out of range');
-                        }
-                        final message = messages[adjustedIndex];
-                        final messageId = message['_id'].toString();
-                        
-                        // Modified isMe check to handle both formats
-                        bool isMe = false;
-                        if (message['sender'] != null) {
-                          // Handle non-populated format (string)
-                          if (message['sender'] is String) {
-                            isMe = message['sender'].toString() == currentUserId.toString();
-                          } 
-                          // Handle populated format (object with _id)
-                          else if (message['sender'] is Map && message['sender']['_id'] != null) {
-                            isMe = message['sender']['_id'].toString() == currentUserId.toString();
-                          }
-                        }
-                        
-                        // Calculate offset for this specific message
-                        double offset = _swipingMessageId == messageId ? _messageSwipeOffset : 0.0;
-                        
-                        return GestureDetector(
-                          key: _getKeyForMessage(messageId),
-                          onHorizontalDragStart: (details) {
-                            // Only allow right swipe (from left to right)
-                            if (details.localPosition.dx < MediaQuery.of(context).size.width / 2) {
-                              setState(() {
-                                _swipingMessageId = messageId;
-                                _messageSwipeOffset = 0.0;
-                              });
+          // Main chat messages area
+          Column(
+            children: [
+              Expanded(
+                child: isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : ListView.builder(
+                        controller: _scrollController,
+                        reverse: true,
+                        itemCount: messages.length,
+                        itemBuilder: (context, index) {
+                          try {
+                            // Ensure we're working with integers
+                            final int adjustedIndex = messages.length - 1 - index;
+                            // Boundary check
+                            if (adjustedIndex < 0 || adjustedIndex >= messages.length) {
+                              throw RangeError('Index out of range');
                             }
-                          },
-                          onHorizontalDragUpdate: (details) {
-                            if (_swipingMessageId == messageId) {
-                              setState(() {
-                                // Allow both positive and negative movement
-                                _messageSwipeOffset = _messageSwipeOffset + details.delta.dx;
-                                
-                                // Prevent from going too far in either direction
-                                if (_messageSwipeOffset > 100) {
-                                  _messageSwipeOffset = 100;
-                                } else if (_messageSwipeOffset < 0) {
-                                  _messageSwipeOffset = 0; // Don't allow negative values
-                                }
-                              });
-                            }
-                          },
-                          onHorizontalDragEnd: (details) {
-                            if (_swipingMessageId == messageId) {
-                              if (_messageSwipeOffset >= _replyThreshold) {
-                                // Threshold reached, trigger reply
-                                _handleReply(message);
+                            final message = messages[adjustedIndex];
+                            final messageId = message['_id'].toString();
+                            
+                            // Modified isMe check to handle both formats
+                            bool isMe = false;
+                            if (message['sender'] != null) {
+                              // Handle non-populated format (string)
+                              if (message['sender'] is String) {
+                                isMe = message['sender'].toString() == currentUserId.toString();
+                              } 
+                              // Handle populated format (object with _id)
+                              else if (message['sender'] is Map && message['sender']['_id'] != null) {
+                                isMe = message['sender']['_id'].toString() == currentUserId.toString();
                               }
-                              
-                              // Reset swipe state with animation
-                              _resetSwipe();
                             }
-                          },
-                          onHorizontalDragCancel: () {
-                            if (_swipingMessageId == messageId) {
-                              _resetSwipe();
-                            }
-                          },
-                          behavior: HitTestBehavior.translucent,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 50),
-                            transform: Matrix4.translationValues(offset, 0, 0),
-                            child: Row(
-                              children: [
-                                // Optional: Add reply icon that becomes visible during swipe
-                                if (offset > 0)
-                                  Container(
-                                    width: 20,
-                                    alignment: Alignment.center,
-                                    child: Icon(
-                                      Icons.reply,
-                                      size: 16,
-                                      color: Colors.blue,
+                            
+                            // Calculate offset for this specific message
+                            double offset = _swipingMessageId == messageId ? _messageSwipeOffset : 0.0;
+                            
+                            return GestureDetector(
+                              key: _getKeyForMessage(messageId),
+                              onHorizontalDragStart: (details) {
+                                // Only allow right swipe (from left to right)
+                                if (details.localPosition.dx < MediaQuery.of(context).size.width / 2) {
+                                  setState(() {
+                                    _swipingMessageId = messageId;
+                                    _messageSwipeOffset = 0.0;
+                                  });
+                                }
+                              },
+                              onHorizontalDragUpdate: (details) {
+                                if (_swipingMessageId == messageId) {
+                                  setState(() {
+                                    // Allow both positive and negative movement
+                                    _messageSwipeOffset = _messageSwipeOffset + details.delta.dx;
+                                    
+                                    // Prevent from going too far in either direction
+                                    if (_messageSwipeOffset > 100) {
+                                      _messageSwipeOffset = 100;
+                                    } else if (_messageSwipeOffset < 0) {
+                                      _messageSwipeOffset = 0; // Don't allow negative values
+                                    }
+                                  });
+                                }
+                              },
+                              onHorizontalDragEnd: (details) {
+                                if (_swipingMessageId == messageId) {
+                                  if (_messageSwipeOffset >= _replyThreshold) {
+                                    // Threshold reached, trigger reply
+                                    _handleReply(message);
+                                  }
+                                  
+                                  // Reset swipe state with animation
+                                  _resetSwipe();
+                                }
+                              },
+                              onHorizontalDragCancel: () {
+                                if (_swipingMessageId == messageId) {
+                                  _resetSwipe();
+                                }
+                              },
+                              behavior: HitTestBehavior.translucent,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 50),
+                                transform: Matrix4.translationValues(offset, 0, 0),
+                                child: Row(
+                                  children: [
+                                    // Optional: Add reply icon that becomes visible during swipe
+                                    if (offset > 0)
+                                      Container(
+                                        width: 20,
+                                        alignment: Alignment.center,
+                                        child: Icon(
+                                          Icons.reply,
+                                          size: 16,
+                                          color: Colors.blue,
+                                        ),
+                                      ),
+                                    Expanded(
+                                      child: _buildMessageItem(message, isMe),
                                     ),
-                                  ),
-                                Expanded(
-                                  child: _buildMessageItem(message, isMe),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ),
-                        );
-                      } catch (e) {
-                        print('Error building message at index $index: $e');
-                        return Container(height: 0);
-                      }
-                    },
-                  ),
+                              ),
+                            );
+                          } catch (e) {
+                            print('Error building message at index $index: $e');
+                            return Container(height: 0);
+                          }
+                        },
+                      ),
+              ),
+              // Space at bottom to prevent content from being hidden behind input bar
+              SizedBox(height: 80),
+            ],
           ),
           
-          // Modified input container with white background everywhere
-          Container(
-            padding: const EdgeInsets.only(left: 8, right: 8, top: 0, bottom: 8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                // Message input with integrated reply
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(25.0),
-                      color: const Color.fromARGB(255, 255, 255, 255), // Main container background
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color.fromARGB(255, 255, 255, 255).withOpacity(0.2),
-                          spreadRadius: 1,
-                          blurRadius: 3,
-                          offset: Offset(0, 1),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Reply UI with properly colored sections
-                        if (_replyingTo != null)
-                          Container(
-                            width: double.infinity,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.only(
-                                topLeft: Radius.circular(25.0),
-                                topRight: Radius.circular(25.0),
-                              ),
-                              color: Colors.white, // White background for the entire container
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // Grey section containing username and reply text
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.only(left: 16, right: 4, top: 4, bottom: 0),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.only(
-                                      topLeft: Radius.circular(25.0),
-                                      topRight: Radius.circular(25.0),
+          // Floating message input at bottom
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              padding: EdgeInsets.fromLTRB(8, 8, 8, 8 + MediaQuery.of(context).viewInsets.bottom),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.grey.shade300, width: 1),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Reply preview inside the same container as the text field
+                          if (_replyingTo != null)
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.only(left: 16, right: 8, top: 8, bottom: 4),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.reply, size: 14, color: Colors.blue),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          "Replying to ${_replyingTo?['sender']?.toString() == currentUserId ? 'You' : widget.partnerNames}",
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                            color: Colors.blue.shade700,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 3,
-                                        height: 36,
-                                        decoration: BoxDecoration(
-                                          color: Colors.blue,
-
-                                          borderRadius: BorderRadius.circular(2),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              _getSenderNameForReply(),
-                                              style: TextStyle(
-                                                color: Colors.blue,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 13,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              _replyingTo!['text'],
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.black,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.close, size: 16),
-                                        onPressed: () {
-                                          setState(() {
-                                            _replyingTo = null;
-                                          });
-                                        },
-                                        padding: EdgeInsets.zero,
-                                        constraints: BoxConstraints(maxWidth: 24, maxHeight: 24),
-                                      ),
-                                    ],
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _replyingTo = null;
+                                      });
+                                    },
+                                    child: const Icon(Icons.close, size: 16),
                                   ),
-                                ),
-                                // Small white space to make the transition look better
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
-                        // Text input field with white background
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 0.0),
-                          child: TextField(
+                          if (_replyingTo != null)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 6),
+                              child: Text(
+                                _replyingTo!['text'],
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                              ),
+                            ),
+                          if (_replyingTo != null)
+                            Container(
+                              height: 1,
+                              margin: const EdgeInsets.symmetric(horizontal: 12),
+                              color: Colors.grey.shade300,
+                            ),
+                          // TextField within the same container
+                          TextField(
                             controller: _messageController,
                             focusNode: _messageInputFocusNode,
-                            decoration: InputDecoration(
-                              hintText: 'Type a message...',
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.only(left: 8, right: 8, top: 0, bottom: 0),
-                              filled: true,
-                              fillColor: Colors.white,  // Set background color to white
-                            ),
+                            textCapitalization: TextCapitalization.sentences,
+                            maxLines: 3,
+                            minLines: 1,
                             onSubmitted: (_) => _sendMessage(),
-                            maxLines: null, // Allow multiple lines
+                            decoration: const InputDecoration(
+                              hintText: 'Type a message...',
+                              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                // Separate send button with space between
-                SizedBox(width: 8),
-                Container(
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.blue[600],
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.white,
-                        spreadRadius: 1,
-                        blurRadius: 2,
-                        offset: Offset(0, 1),
-                      ),
-                    ],
+                  const SizedBox(width: 8),
+                  Container(
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.blue,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.send, color: Colors.white, size: 20),
+                      onPressed: _sendMessage,
+                    ),
                   ),
-                  child: IconButton(
-                    icon: const Icon(Icons.send, color: Colors.white),
-                    onPressed: _sendMessage,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -731,33 +702,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
-  // Helper method to determine sender name for reply
-  String _getSenderNameForReply() {
-    try {
-      // Find the original message
-      final replyIdString = _replyingTo!['id'].toString();
-      final originalMessage = messages.firstWhere(
-        (m) => m['_id'] != null && m['_id'].toString() == replyIdString,
-        orElse: () => {'sender': null},
-      );
-      
-      // Determine if the original sender was the current user
-      bool isOriginalSenderMe = false;
-      if (originalMessage['sender'] != null) {
-        if (originalMessage['sender'] is String) {
-          isOriginalSenderMe = originalMessage['sender'].toString() == currentUserId.toString();
-        } else if (originalMessage['sender'] is Map && originalMessage['sender']['_id'] != null) {
-          isOriginalSenderMe = originalMessage['sender']['_id'].toString() == currentUserId.toString();
-        }
-      }
-      
-      return isOriginalSenderMe ? 'You' : widget.partnerNames;
-    } catch (e) {
-      print('Error determining sender name: $e');
-      return 'Unknown';
-    }
-  }
-
+  // Update your _buildReplyPreview method to make it tappable
   Widget _buildReplyPreview(dynamic message) {
     try {
       final replyIdString = message['replyToMessageId'].toString();
@@ -768,17 +713,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       );
 
       final messageText = originalMessage['text'] ?? 'Message unavailable';
-      
-      // Determine if original sender was current user
-      bool isOriginalSenderMe = false;
-      if (originalMessage['sender'] != null) {
-        if (originalMessage['sender'] is String) {
-          isOriginalSenderMe = originalMessage['sender'].toString() == currentUserId.toString();
-        } else if (originalMessage['sender'] is Map && originalMessage['sender']['_id'] != null) {
-          isOriginalSenderMe = originalMessage['sender']['_id'].toString() == currentUserId.toString();
-        }
-      }
-      
+      final isOriginalSenderMe = originalMessage['sender'].toString() == currentUserId.toString();
       final isCurrentSenderMe = message['sender'].toString() == currentUserId.toString();
       
       // Add GestureDetector to make it tappable
@@ -794,12 +729,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           decoration: BoxDecoration(
             color: isCurrentSenderMe ? Colors.blue.shade200 : Colors.grey.shade300,
             borderRadius: BorderRadius.circular(8),
-            border: Border(
-              left: BorderSide(
-                color: Colors.blue.shade700,
-                width: 4,
-              ),
-            ),
+            border: isCurrentSenderMe 
+                ? Border.all(color: Colors.blue.shade300, width: 1) 
+                : Border.all(color: Colors.grey.shade400, width: 1),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
