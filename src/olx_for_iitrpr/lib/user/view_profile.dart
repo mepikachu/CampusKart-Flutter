@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
-import 'chat_screen.dart'; // Import for messaging
+
+import 'chat_screen.dart';
+import 'home.dart';
 
 class ViewProfileScreen extends StatefulWidget {
   final String userId;
@@ -32,7 +34,8 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
       if (currentUserId == widget.userId) {
         // Navigate to tab_profile and remove this screen from stack
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          Navigator.pushReplacementNamed(context, '/profile');
+          Navigator.pop(context);
+          UserHomeScreen.homeKey.currentState?.switchToTab(1);
         });
       } else {
         _fetchUserProfile();

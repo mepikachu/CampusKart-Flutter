@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
-import 'view_profile.dart';  // Import the user profile view
+import 'view_profile.dart';
 
 class ChatScreen extends StatefulWidget {
   final String conversationId;
@@ -37,7 +37,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   bool isBlocked = false;
   bool isCheckedBlocked = false;
   bool isSearching = false;
-  bool showScrollToBottom = false; // New state for scroll-to-bottom button
+  bool showScrollToBottom = false; // State for scroll-to-bottom button
+  bool _initialLoadComplete = false; // Track if initial load is complete
   String currentUserId = '';
   String currentUserName = '';
   Timer? _refreshTimer;
@@ -48,7 +49,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final double _replyThreshold = 60.0;
   AnimationController? _swipeController;
   Animation<double>? _swipeAnimation;
-  Uint8List? partnerProfilePicture;  // Added for profile picture
+  Uint8List? partnerProfilePicture;
 
   // For reply functionality
   Map<String, dynamic>? _replyingTo;
@@ -64,15 +65,16 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _loadUserInfo();
     _loadLocalBlockStatus();
     _loadLocalMessages();
-    _fetchMessages();
     _checkIfBlocked();
-    _loadPartnerProfilePicture();  // Add this line to load partner's profile picture
+    _loadPartnerProfilePicture();
     
     // Set up periodic refresh
     _refreshTimer = Timer.periodic(
-      const Duration(seconds: 10),
+      const Duration(seconds: 1),
       (_) {
-        _fetchMessages();
+        if (_initialLoadComplete) {
+          _fetchNewMessages();
+        }
         _checkIfBlocked();
       },
     );
@@ -90,6 +92,24 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _scrollController.dispose();
     _refreshTimer?.cancel();
     super.dispose();
+  }
+
+  // Get the latest message ID for incremental loading
+  String? _getLatestMessageId() {
+    if (messages.isEmpty) return null;
+    
+    DateTime latestTime = DateTime.parse(messages[0]['createdAt']);
+    String latestId = messages[0]['_id'].toString();
+    
+    for (var message in messages) {
+      final messageTime = DateTime.parse(message['createdAt']);
+      if (messageTime.isAfter(latestTime)) {
+        latestTime = messageTime;
+        latestId = message['_id'].toString();
+      }
+    }
+    
+    return latestId;
   }
 
   // Load partner's profile picture
@@ -149,7 +169,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   // Scroll listener for showing scroll-to-bottom button
   void _handleScroll() {
-    // Show scroll button when scrolled up 300 pixels or more
     if (_scrollController.hasClients) {
       setState(() {
         showScrollToBottom = _scrollController.position.pixels > 300;
@@ -320,15 +339,30 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     try {
       final messagesJson = await _secureStorage.read(key: 'messages_${widget.conversationId}');
       if (messagesJson != null) {
+        final loadedMessages = json.decode(messagesJson);
+        
+        // Initialize the set of processed message IDs
+        Set<String> localProcessedIds = {};
+        for (var msg in loadedMessages) {
+          if (msg['_id'] != null) {
+            localProcessedIds.add(msg['_id'].toString());
+          }
+        }
+        
         setState(() {
-          messages = json.decode(messagesJson);
-          filteredMessages = messages; // Initialize filtered messages
+          messages = loadedMessages;
+          filteredMessages = messages;
+          processedMessageIds = localProcessedIds; // This initialization is crucial for deduplication
           if (isLoading && messages.isNotEmpty) {
             isLoading = false;
           }
         });
         
+        // After loading local messages, fetch from server to get latest
         WidgetsBinding.instance.addPostFrameCallback((_) {
+          _fetchMessages();
+          _initialLoadComplete = true;
+          
           if (_scrollController.hasClients) {
             _scrollController.animateTo(
               0,
@@ -337,9 +371,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             );
           }
         });
+      } else {
+        _fetchMessages();
+        _initialLoadComplete = true;
       }
     } catch (e) {
       print('Error loading local messages: $e');
+      _fetchMessages();
+      _initialLoadComplete = true;
     }
   }
 
@@ -403,7 +442,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
-  // Fixed to prevent duplicate messages
+  // Full fetch for initial load
   Future<void> _fetchMessages() async {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
@@ -417,58 +456,38 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['success']) {
-          // Get server messages
-          final serverMessages = data['conversation']['messages'];
+        if (data['success'] && data['conversation'] != null) {
+          final serverMessages = data['conversation']['messages'] ?? [];
           
-          // Create a set of message IDs that are already processed
-          final Set<String> serverMessageIds = serverMessages
-              .where((m) => m['_id'] != null)
-              .map<String>((m) => m['_id'].toString())
-              .toSet();
+          // Create a map to efficiently track what we already have
+          Map<String, dynamic> messageMap = {};
           
-          // Identify messages to preserve:
-          final pendingMessages = messages.where((m) => 
-            m['status'] == 'pending'
-          ).toList();
+          // First, add existing local messages to the map
+          for (var msg in messages) {
+            if (msg['_id'] != null) {
+              String id = msg['_id'].toString();
+              messageMap[id] = msg;
+              processedMessageIds.add(id);
+            }
+          }
           
-          final failedMessages = messages.where((m) => 
-            m['status'] == 'failed'
-          ).toList();
-          
-          // Keep track of processed message IDs
-          final Set<String> processedIds = {};
-          
-          // Combine all messages to process
-          final List<dynamic> combinedMessages = [];
-          
-          // First add server messages that haven't been processed yet
+          // Then add server messages, replacing duplicates
           for (var serverMsg in serverMessages) {
-            final serverId = serverMsg['_id'].toString();
-            if (!processedIds.contains(serverId)) {
-              combinedMessages.add(serverMsg);
-              processedIds.add(serverId);
+            if (serverMsg['_id'] != null) {
+              String serverId = serverMsg['_id'].toString();
+              
+              // If this message exists locally and has a status, preserve the status
+              if (messageMap.containsKey(serverId) && messageMap[serverId]['status'] != null) {
+                serverMsg['status'] = messageMap[serverId]['status'];
+              }
+              
+              messageMap[serverId] = serverMsg;
+              processedMessageIds.add(serverId);
             }
           }
           
-          // Add pending and failed messages
-          for (var pendingMsg in pendingMessages) {
-            final pendingId = pendingMsg['_id'].toString();
-            if (!processedIds.contains(pendingId)) {
-              combinedMessages.add(pendingMsg);
-              processedIds.add(pendingId);
-            }
-          }
-          
-          for (var failedMsg in failedMessages) {
-            final failedId = failedMsg['_id'].toString();
-            if (!processedIds.contains(failedId)) {
-              combinedMessages.add(failedMsg);
-              processedIds.add(failedId);
-            }
-          }
-          
-          // Sort by creation time
+          // Convert map back to list and sort
+          List<dynamic> combinedMessages = messageMap.values.toList();
           combinedMessages.sort((a, b) {
             final aTime = DateTime.parse(a['createdAt']);
             final bTime = DateTime.parse(b['createdAt']);
@@ -499,6 +518,76 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
     if (mounted) {
       setState(() => isLoading = false);
+    }
+  }
+
+  // Incremental fetch for periodic updates
+  Future<void> _fetchNewMessages() async {
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      String url = 'https://olx-for-iitrpr-backend.onrender.com/api/conversations/${widget.conversationId}/messages';
+      
+      // Add since parameter for incremental loading
+      final latestMessageId = _getLatestMessageId();
+      if (latestMessageId != null) {
+        url += '?since=${latestMessageId}';
+      }
+      
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          // For incremental updates, we only get new messages
+          final newMessages = data['messages'] ?? [];
+          
+          if (newMessages.isNotEmpty) {
+            // Process new messages
+            List<dynamic> messagesToAdd = [];
+            
+            // Only add new messages that haven't been processed yet
+            for (var newMsg in newMessages) {
+              if (newMsg['_id'] != null) {
+                final msgId = newMsg['_id'].toString();
+                if (!processedMessageIds.contains(msgId)) {
+                  messagesToAdd.add(newMsg);
+                  processedMessageIds.add(msgId);
+                }
+              }
+            }
+            
+            if (messagesToAdd.isNotEmpty) {
+              setState(() {
+                messages = [...messages, ...messagesToAdd];
+                
+                // Sort messages by creation time
+                messages.sort((a, b) {
+                  final aTime = DateTime.parse(a['createdAt']);
+                  final bTime = DateTime.parse(b['createdAt']);
+                  return aTime.compareTo(bTime);
+                });
+                
+                if (!isSearching) {
+                  filteredMessages = messages;
+                } else {
+                  _filterMessages(_searchController.text);
+                }
+              });
+              
+              // Save the updated message list
+              await _saveMessagesLocally();
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error fetching new messages: $e');
     }
   }
 
@@ -542,70 +631,46 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         }),
       );
       
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        if (mounted) {
-          setState(() {
-            final index = messages.indexWhere((m) => 
-              m['_id'].toString() == failedMessageId);
-            if (index != -1) {
-              messages[index]['status'] = 'sent';
-              
-              // Also update in filtered messages if present
-              final filteredIndex = filteredMessages.indexWhere((m) => 
-                m['_id'].toString() == failedMessageId);
-              if (filteredIndex != -1) {
-                filteredMessages[filteredIndex]['status'] = 'sent';
-              }
-            }
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            final index = messages.indexWhere((m) => 
-              m['_id'].toString() == failedMessageId);
-            if (index != -1) {
-              messages[index]['status'] = 'failed';
-              
-              // Also update in filtered messages if present
-              final filteredIndex = filteredMessages.indexWhere((m) => 
-                m['_id'].toString() == failedMessageId);
-              if (filteredIndex != -1) {
-                filteredMessages[filteredIndex]['status'] = 'failed';
-              }
-            }
-          });
-        }
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to send message. Please try again.')),
-        );
-      }
-    } catch (e) {
+      // Always mark as "sent" to hide if user is blocked
       if (mounted) {
         setState(() {
           final index = messages.indexWhere((m) => 
             m['_id'].toString() == failedMessageId);
           if (index != -1) {
-            messages[index]['status'] = 'failed';
+            messages[index]['status'] = 'sent';
             
             // Also update in filtered messages if present
             final filteredIndex = filteredMessages.indexWhere((m) => 
               m['_id'].toString() == failedMessageId);
             if (filteredIndex != -1) {
-              filteredMessages[filteredIndex]['status'] = 'failed';
+              filteredMessages[filteredIndex]['status'] = 'sent';
+            }
+          }
+        });
+        
+        _saveMessagesLocally();
+      }
+    } catch (e) {
+      // Even for errors, mark as sent to hide blocking
+      if (mounted) {
+        setState(() {
+          final index = messages.indexWhere((m) => 
+            m['_id'].toString() == failedMessageId);
+          if (index != -1) {
+            messages[index]['status'] = 'sent';
+            
+            // Also update in filtered messages if present
+            final filteredIndex = filteredMessages.indexWhere((m) => 
+              m['_id'].toString() == failedMessageId);
+            if (filteredIndex != -1) {
+              filteredMessages[filteredIndex]['status'] = 'sent';
             }
           }
         });
       }
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      _saveMessagesLocally();
     }
-    
-    // Save the final state
-    _saveMessagesLocally();
   }
 
   Future<void> _sendMessage() async {
@@ -624,6 +689,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       'replyToMessageId': _replyingTo?['id'],
       'status': 'pending'
     };
+    
+    // Add to processedMessageIds to prevent duplicates
+    processedMessageIds.add(tempId);
     
     final _oldreplyingTo = _replyingTo;
     setState(() {
@@ -646,6 +714,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       }
     });
     
+    // Save to local storage immediately (even if blocked)
     await _saveMessagesLocally();
     
     try {
@@ -663,27 +732,26 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         }),
       );
       
-      if (response.statusCode == 200 || response.statusCode == 201) {
+      if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['success'] == true) {
+        if (data['success']) {
+          // If server returned a message ID, add it to processed IDs to prevent duplication
+          if (data['serverMessage'] != null && data['serverMessage']['_id'] != null) {
+            processedMessageIds.add(data['serverMessage']['_id'].toString());
+          }
+          
           if (mounted) {
             setState(() {
               final index = messages.indexWhere((m) => 
-                m['_id'].toString() == tempId.toString());
+                m['_id'].toString() == tempId);
               if (index != -1) {
-                // Always mark as sent whether actually saved on server or not
                 messages[index]['status'] = 'sent';
                 
                 // Update in filtered messages if present
                 final filteredIndex = filteredMessages.indexWhere((m) => 
-                  m['_id'].toString() == tempId.toString());
+                  m['_id'].toString() == tempId);
                 if (filteredIndex != -1) {
                   filteredMessages[filteredIndex]['status'] = 'sent';
-                }
-                
-                // Add server ID to processed IDs to prevent duplication
-                if (data['serverMessage'] != null && data['serverMessage']['_id'] != null) {
-                  processedMessageIds.add(data['serverMessage']['_id'].toString());
                 }
               }
             });
@@ -692,41 +760,40 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           _saveMessagesLocally();
         }
       } else {
+        // Mark as sent anyway (to handle blocked scenario)
         if (mounted) {
           setState(() {
             final index = messages.indexWhere((m) => 
-              m['_id'] != null && m['_id'].toString() == tempId.toString());
+              m['_id'].toString() == tempId);
             if (index != -1) {
-              messages[index]['status'] = 'failed';
+              messages[index]['status'] = 'sent';
               
               // Update in filtered messages if present
               final filteredIndex = filteredMessages.indexWhere((m) => 
-                m['_id'].toString() == tempId.toString());
+                m['_id'].toString() == tempId);
               if (filteredIndex != -1) {
-                filteredMessages[filteredIndex]['status'] = 'failed';
+                filteredMessages[filteredIndex]['status'] = 'sent';
               }
             }
           });
         }
         
         _saveMessagesLocally();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to send message. Please try again.')),
-        );
       }
     } catch (e) {
+      // Mark as sent even on error (to hide blocking)
       if (mounted) {
         setState(() {
           final index = messages.indexWhere((m) => 
-            m['_id'] != null && m['_id'].toString() == tempId.toString());
+            m['_id'].toString() == tempId);
           if (index != -1) {
-            messages[index]['status'] = 'failed';
+            messages[index]['status'] = 'sent';
             
             // Update in filtered messages if present
             final filteredIndex = filteredMessages.indexWhere((m) => 
-              m['_id'].toString() == tempId.toString());
+              m['_id'].toString() == tempId);
             if (filteredIndex != -1) {
-              filteredMessages[filteredIndex]['status'] = 'failed';
+              filteredMessages[filteredIndex]['status'] = 'sent';
             }
           }
         });
@@ -734,9 +801,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       
       _saveMessagesLocally();
       print('Error sending message: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to send message: $e')),
-      );
     }
   }
 
@@ -897,9 +961,20 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
+  // Enhanced reporting function matching the server schema
   void _reportUser() {
+    String reason = 'other'; // Default reason
+    String details = '';
     bool includeChat = false;
-    String reason = '';
+    
+    // Define reason options based on the server schema
+    final List<Map<String, String>> reasonOptions = [
+      {'value': 'spam', 'label': 'Spam'},
+      {'value': 'harassment', 'label': 'Harassment'},
+      {'value': 'inappropriate_content', 'label': 'Inappropriate Content'},
+      {'value': 'fake_account', 'label': 'Fake Account'},
+      {'value': 'other', 'label': 'Other'}
+    ];
     
     showDialog(
       context: context,
@@ -908,35 +983,66 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           builder: (context, setState) {
             return AlertDialog(
               title: Text('Report User'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    onChanged: (value) {
-                      reason = value;
-                    },
-                    decoration: InputDecoration(
-                      hintText: "Enter reason for reporting"
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Reason for reporting:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    maxLines: 3,
-                  ),
-                  SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Checkbox(
-                        value: includeChat,
-                        onChanged: (value) {
-                          setState(() {
-                            includeChat = value ?? false;
-                          });
-                        },
+                    const SizedBox(height: 8),
+                    // Reason selection
+                    Column(
+                      children: reasonOptions.map((option) => 
+                        RadioListTile<String>(
+                          title: Text(option['label']!),
+                          value: option['value']!,
+                          groupValue: reason,
+                          onChanged: (value) {
+                            setState(() {
+                              reason = value!;
+                            });
+                          },
+                        )
+                      ).toList(),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Additional details:',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      onChanged: (value) {
+                        details = value;
+                      },
+                      decoration: InputDecoration(
+                        hintText: "Please provide more information",
+                        border: OutlineInputBorder(),
                       ),
-                      Expanded(
-                        child: Text('Share chat history with admin'),
-                      ),
-                    ],
-                  ),
-                ],
+                      maxLines: 4,
+                      maxLength: 500, // Match schema maxlength
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: includeChat,
+                          onChanged: (value) {
+                            setState(() {
+                              includeChat = value ?? false;
+                            });
+                          },
+                        ),
+                        Expanded(
+                          child: Text('Share chat history with admin (helps with investigation)'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
               actions: <Widget>[
                 TextButton(
@@ -946,10 +1052,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   },
                 ),
                 TextButton(
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.red,
+                  ),
                   child: Text('Report'),
                   onPressed: () {
                     Navigator.of(context).pop();
-                    _submitReport(reason, includeChat);
+                    _submitReport(reason, details, includeChat);
                   },
                 ),
               ],
@@ -960,10 +1070,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     );
   }
 
-  Future<void> _submitReport(String reason, bool includeChat) async {
-    if (reason.trim().isEmpty) {
+  Future<void> _submitReport(String reason, String details, bool includeChat) async {
+    if (details.trim().isEmpty && reason == 'other') {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please provide a reason for reporting')),
+        SnackBar(content: Text('Please provide details for your report')),
       );
       return;
     }
@@ -979,6 +1089,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         body: json.encode({
           'reportedUserId': widget.partnerId,
           'reason': reason,
+          'details': details,
           'includeChat': includeChat,
           'conversationId': includeChat ? widget.conversationId : null,
         }),
@@ -986,16 +1097,25 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
       if (response.statusCode == 201) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('User reported successfully')),
+          SnackBar(
+            content: Text('User reported successfully. Our team will review your report.'),
+            backgroundColor: Colors.green,
+          ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to report user')),
+          SnackBar(
+            content: Text('Failed to report user. Please try again later.'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -1044,56 +1164,46 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             )
           : AppBar(
               automaticallyImplyLeading: false, // Hide default back button
-              title: Row(
-                children: [
-                  // Make this section clickable for profile view
-                  Expanded(
-                    child: InkWell(
-                      onTap: _navigateToUserProfile,
-                      child: Row(
-                        children: [
-                          // Back button
-                          IconButton(
-                            icon: Icon(Icons.arrow_back),
-                            onPressed: () => Navigator.of(context).pop(),
-                            padding: EdgeInsets.zero,
-                            constraints: BoxConstraints(),
-                          ),
-                          const SizedBox(width: 8),
-                          // Profile picture
-                          CircleAvatar(
-                            radius: 20,
-                            backgroundColor: Colors.grey.shade200,
-                            backgroundImage: partnerProfilePicture != null
-                                ? MemoryImage(partnerProfilePicture!)
-                                : null,
-                            child: partnerProfilePicture == null
-                                ? Text(
-                                    widget.partnerNames.isNotEmpty
-                                        ? widget.partnerNames[0].toUpperCase()
-                                        : '?',
-                                    style: TextStyle(color: Colors.grey.shade600),
-                                  )
-                                : null,
-                          ),
-                          const SizedBox(width: 12),
-                          // User name
-                          Expanded(
-                            child: Text(
-                              widget.partnerNames,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
+              leadingWidth: 40, // Reduced width for back button
+              leading: IconButton( // Separated back button
+                icon: Icon(Icons.arrow_back),
+                padding: EdgeInsets.only(left: 8), // Reduce left padding
+                constraints: BoxConstraints(),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+              title: InkWell( // Separated profile section
+                onTap: _navigateToUserProfile,
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 18,
+                      backgroundColor: Colors.grey.shade200,
+                      backgroundImage: partnerProfilePicture != null
+                          ? MemoryImage(partnerProfilePicture!)
+                          : null,
+                      child: partnerProfilePicture == null
+                          ? Text(
+                              widget.partnerNames.isNotEmpty
+                                  ? widget.partnerNames[0].toUpperCase()
+                                  : '?',
+                              style: TextStyle(color: Colors.grey.shade600),
+                            )
+                          : null,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        widget.partnerNames,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               actions: [
                 IconButton(
@@ -1571,7 +1681,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               ),
             ),
             
-            // Add retry button for failed messages
+            // Only show retry button if message failed
             if (isFailed && isMe)
               TextButton.icon(
                 onPressed: () => _retryFailedMessage(message),

@@ -11,6 +11,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 class UserHomeScreen extends StatefulWidget {
   const UserHomeScreen({super.key});
 
+  static final GlobalKey<_HomeScreenState> homeKey = GlobalKey<_HomeScreenState>();
+
   @override
   State<UserHomeScreen> createState() => _HomeScreenState();
 }
@@ -22,6 +24,14 @@ class _HomeScreenState extends State<UserHomeScreen> {
   void initState() {
     super.initState();
     _verifyAuthCookie();
+  }
+
+  void switchToTab(int index) {
+    if (mounted) {
+      setState(() {
+        _selectedIndex = index;
+      });
+    }
   }
 
   Future<void> _verifyAuthCookie() async {
