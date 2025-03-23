@@ -307,17 +307,21 @@ class _ProfileTabState extends State<ProfileTab> {
               : Column(
                   children: [
                     const SizedBox(height: 20),
-                    // Profile picture
+                    // Profile picture - Modified to match view_profile.dart
                     CircleAvatar(
                       radius: 50,
+                      backgroundColor: Colors.grey.shade200,
                       backgroundImage: userData != null &&
                               userData!['profilePicture'] != null &&
                               userData!['profilePicture']['data'] != null
                           ? MemoryImage(
                               base64Decode(userData!['profilePicture']['data']),
                             )
-                          : const AssetImage('assets/default_avatar.png')
-                              as ImageProvider,
+                          : null,
+                      child: (userData == null || userData!['profilePicture'] == null || 
+                              userData!['profilePicture']['data'] == null)
+                          ? const Icon(Icons.person, size: 50, color: Colors.grey)
+                          : null,
                     ),
                     const SizedBox(height: 16),
                     // Username

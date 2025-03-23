@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'view_profile.dart';
 
 class DonationsTab extends StatefulWidget {
   const DonationsTab({super.key});
@@ -158,6 +159,15 @@ class _DonationsTabState extends State<DonationsTab> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: ListTile(
+              onTap: hasData ? () {
+                // Navigate to profile view when user is clicked
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ViewProfileScreen(userId: user['_id']),
+                  ),
+                );
+              } : null,
               leading: CircleAvatar(
                 backgroundColor: hasData ? color.withOpacity(0.2) : Colors.grey[200],
                 child: Text(
