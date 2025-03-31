@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'tab_donations.dart';
 import 'tab_leaderboard.dart';
 import 'tab_profile.dart';
+import 'chat_list.dart';
 
 class VolunteerHomeScreen extends StatefulWidget {
   const VolunteerHomeScreen({super.key});
@@ -53,7 +54,27 @@ class _VolunteerHomeScreenState extends State<VolunteerHomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("OLX-IITRPR"),
+        title: const Text(
+          "OLX-IITRPR",
+          style: TextStyle(color: Colors.black87),
+        ),
+        centerTitle: false, // This aligns the title to the left
+        actions: [
+          IconButton(
+            icon: const Icon(
+              Icons.chat_bubble,
+              color: Colors.black87,
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ChatListScreen(),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: _tabs[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(

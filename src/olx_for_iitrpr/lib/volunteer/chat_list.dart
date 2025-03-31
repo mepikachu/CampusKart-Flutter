@@ -47,13 +47,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
     super.dispose();
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Sync with chat_screen when returning to this screen
-    _syncConversationsWithMessages();
-  }
-
   Future<void> _loadCurrentUser() async {
     try {
       // Try to get from local storage first
@@ -117,54 +110,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }
   }
 
-  // Sync with messages stored by chat_screen.dart
-  Future<void> _syncConversationsWithMessages() async {
-    try {
-      for (var conversation in conversations) {
-        final conversationId = conversation['_id'];
-        
-        // Get the messages saved by chat_screen.dart
-        final messagesJson = await _secureStorage.read(key: 'messages_$conversationId');
-        if (messagesJson != null) {
-          final chatScreenMessages = json.decode(messagesJson);
-          
-          // Update the conversation's messages with the most recent version
-          conversation['messages'] = chatScreenMessages;
-          
-          // Update unread counts based on the latest message set
-          _updateUnreadCounts();
-        }
-      }
-      
-      // Re-sort conversations based on latest message times
-      conversations.sort((a, b) {
-        final aTime = a['messages']?.isNotEmpty == true
-            ? DateTime.parse(a['messages'].last['createdAt'])
-            : DateTime.fromMillisecondsSinceEpoch(0);
-        final bTime = b['messages']?.isNotEmpty == true
-            ? DateTime.parse(b['messages'].last['createdAt'])
-            : DateTime.fromMillisecondsSinceEpoch(0);
-        return bTime.compareTo(aTime);
-      });
-      
-      // Save the updated conversations
-      await _saveConversationsLocally();
-      
-      if (mounted) {
-        setState(() {});
-      }
-    } catch (e) {
-      print('Error syncing conversations with messages: $e');
-    }
-  }
-
   Future<void> _loadLocalConversations() async {
     try {
       final conversationsJson = await _secureStorage.read(key: 'conversations');
       if (conversationsJson != null) {
         List<dynamic> localConversations = json.decode(conversationsJson);
         
-        // Load local messages for each conversation
+        // Load local pending messages for each conversation
         for (var conversation in localConversations) {
           String conversationId = conversation['_id'];
           await _mergeLocalMessages(conversation);
@@ -188,9 +140,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
             isLoading = false;
           }
         });
-        
-        // NEW: Also sync with messages from chat_screen
-        await _syncConversationsWithMessages();
         
         // Load profile pictures
         for (var conversation in conversations) {
@@ -351,9 +300,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
             });
           }
           
-          // NEW: Sync with messages from chat_screen
-          await _syncConversationsWithMessages();
-          
           // Load profile pictures
           for (var conversation in conversations) {
             _loadProfilePicture(conversation);
@@ -366,8 +312,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
       if (mounted) {
         setState(() => errorMessage = e.toString());
       }
-      // Still try to sync with local messages even if server fetch fails
-      await _syncConversationsWithMessages();
       if (conversations.isEmpty) _loadLocalConversations();
     }
     if (mounted) {
@@ -604,11 +548,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                               partnerId: partnerId,
                             ),
                           ),
-                        ).then((_) {
-                          // When returning from chat screen, sync messages and fetch updates
-                          _syncConversationsWithMessages();
-                          fetchConversations();
-                        });
+                        ).then((_) => fetchConversations());
                       },
                     );
                   },

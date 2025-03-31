@@ -7,7 +7,6 @@ import 'chat_screen.dart';
 
 class ProductDetailsScreen extends StatefulWidget {
   final dynamic product;
-  
   const ProductDetailsScreen({super.key, required this.product});
 
   @override
@@ -17,6 +16,7 @@ class ProductDetailsScreen extends StatefulWidget {
 class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   String currentUserName = '';
+  String currentUserId = '';
   int _currentImageIndex = 0;
   final CarouselSliderController _carouselController = CarouselSliderController();
   bool hasOffer = false;
@@ -26,15 +26,18 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   @override
   void initState() {
     super.initState();
-    _loadCurrentUserName();
+    _loadCurrentUser();
     _checkExistingOffer();
   }
 
-  Future<void> _loadCurrentUserName() async {
+  Future<void> _loadCurrentUser() async {
     String? name = await _secureStorage.read(key: 'userName');
+    String? id = await _secureStorage.read(key: 'userId');
+    
     if (mounted) {
       setState(() {
         currentUserName = name ?? '';
+        currentUserId = id ?? '';
       });
     }
   }
@@ -49,7 +52,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           'auth-cookie': authCookie ?? '',
         },
       );
-
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (mounted) {
@@ -72,33 +75,59 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
   void _startChat() async {
     if (widget.product['seller']?['_id'] == null) return;
-
-    final productPreview = {
-      'type': 'product_reply', // marker to render this as a product reply message
-      'productId': widget.product['_id'],
-      'productName': widget.product['name'],
-      'price': widget.product['price'],
-      'image': (widget.product['images'] != null &&
-              widget.product['images'].isNotEmpty)
-          ? widget.product['images'][0]['data']
-          : null,
-    };
-
-    // Navigator.push(
-    //   context,
-    //   MaterialPageRoute(
-    //     builder: (context) => ChatScreen(
-    //       conversationId: '', // empty means new conversation
-    //       partnerNames: widget.product['seller']['userName'],
-    //       sellerId: widget.product['seller']['_id'],
-    //       productPreview: productPreview, // pass product preview data
-    //     ),
-    //   ),
-    // );
+    
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      
+      // First, get or create the conversation
+      final conversationResponse = await http.post(
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+        body: json.encode({
+          'participantId': widget.product['seller']['_id'],
+        }),
+      );
+      
+      if (conversationResponse.statusCode == 200) {
+        final conversationData = json.decode(conversationResponse.body);
+        final conversationId = conversationData['conversation']['_id'];
+        
+        // Create the product data to initialize the reply
+        final initialProduct = {
+          'productId': widget.product['_id'],
+          'name': widget.product['name'],
+          'price': widget.product['price'],
+          'image': (widget.product['images'] != null && widget.product['images'].isNotEmpty) 
+              ? widget.product['images'][0]['data'] 
+              : null,
+        };
+        
+        // Navigate to the chat screen with the product data
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ChatScreen(
+              conversationId: conversationId,
+              partnerNames: widget.product['seller']['userName'],
+              partnerId: widget.product['seller']['_id'],
+              initialProduct: initialProduct, // Pass the product data
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error starting chat: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error starting chat. Please try again.')),
+      );
+    }
   }
 
   List<Widget> _buildImageSlides() {
-    final List<dynamic> images = widget.product['images'] ?? [];
+    final List images = widget.product['images'] ?? [];
     return images.map<Widget>((image) {
       if (image != null && image['data'] != null) {
         try {
@@ -118,6 +147,13 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     }).toList();
   }
 
+  Future<dynamic> _showOfferDialog({double? initialValue}) async {
+    return showDialog(
+      context: context,
+      builder: (BuildContext context) => OfferDialog(initialValue: initialValue),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final images = _buildImageSlides();
@@ -128,7 +164,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
       ),
-      // Add bottom padding to account for the fixed buttons
       body: Column(
         children: [
           Expanded(
@@ -173,7 +208,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                   color: Colors.white,
                                   size: 24,
                                 ),
-                                onPressed: () => _carouselController.previousPage(),
+                                onPressed: () {
+                                  _carouselController.previousPage();
+                                },
                               ),
                             ),
                           ),
@@ -196,7 +233,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                   color: Colors.white,
                                   size: 24,
                                 ),
-                                onPressed: () => _carouselController.nextPage(),
+                                onPressed: () {
+                                  _carouselController.nextPage();
+                                },
                               ),
                             ),
                           ),
@@ -251,7 +290,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        
                         // Price
                         Text(
                           '₹${widget.product['price']?.toString() ?? '0'}',
@@ -262,7 +300,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        
                         // Seller Info
                         Text(
                           'Seller: ${widget.product['seller']?['userName'] ?? 'Unknown'}',
@@ -272,7 +309,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        
                         // Description
                         const Text(
                           'Description:',
@@ -295,7 +331,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             ),
           ),
           // Fixed buttons at bottom
-          if (widget.product['seller']['userName'] == currentUserName)
+          if (widget.product['seller']?['_id'] == currentUserId)
             _buildSellerActions()
           else
             _buildBottomActions(),
@@ -312,21 +348,21 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           Expanded(
             child: ElevatedButton(
               onPressed: () {
-                // Add seller-specific actions here
+                // Navigate to edit product or manage offers screen
+                // This would be implemented based on your app's requirements
               },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
-              child: const Text('Manage Listing'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              child: const Text(
+                'Manage Listing',
+                style: TextStyle(fontSize: 16, color: Colors.white),
+              ),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  Future<double?> _showOfferDialog({double? initialValue}) async {
-    return showDialog<double>(
-      context: context,
-      builder: (BuildContext context) => OfferDialog(initialValue: initialValue),
     );
   }
 
@@ -341,6 +377,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 final offerPrice = await _showOfferDialog(
                   initialValue: currentOfferAmount,
                 );
+                
                 if (offerPrice != null) {
                   final authCookie = await _secureStorage.read(key: 'authCookie');
                   final response = await http.post(
@@ -354,7 +391,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       'offerPrice': offerPrice,
                     }),
                   );
-
+                  
                   if (response.statusCode == 200) {
                     final data = json.decode(response.body);
                     setState(() {
@@ -364,6 +401,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(hasOffer ? 'Offer updated successfully' : 'Offer sent successfully'),
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Failed to send offer'),
                       ),
                     );
                   }
@@ -399,6 +442,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   }
 }
 
+// Dialog for making offers
 class OfferDialog extends StatefulWidget {
   final double? initialValue;
   const OfferDialog({Key? key, this.initialValue}) : super(key: key);

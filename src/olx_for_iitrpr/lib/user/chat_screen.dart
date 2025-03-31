@@ -6,17 +6,21 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
 import 'view_profile.dart';
+import 'product_description.dart';
+import 'product_management.dart';
 
 class ChatScreen extends StatefulWidget {
   final String conversationId;
   final String partnerNames;
   final String partnerId;
+  final Map<String, dynamic>? initialProduct; // For "Chat with Seller"
 
   const ChatScreen({
     Key? key,
     required this.conversationId,
     required this.partnerNames,
     required this.partnerId,
+    this.initialProduct,
   }) : super(key: key);
 
   @override
@@ -33,24 +37,35 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   List<dynamic> messages = [];
   List<dynamic> filteredMessages = []; // For search results
   Set<String> processedMessageIds = {}; // Track processed message IDs to prevent duplicates
+  
   bool isLoading = true;
   bool isBlocked = false;
   bool isCheckedBlocked = false;
   bool isSearching = false;
   bool showScrollToBottom = false; // State for scroll-to-bottom button
   bool _initialLoadComplete = false; // Track if initial load is complete
+  bool _isInSelectionMode = false; // Track if user is selecting messages
+  
   String currentUserId = '';
   String currentUserName = '';
+  String? _lastFetchedMessageId; // Track last fetched message ID
+  
   Timer? _refreshTimer;
   String? _highlightedMessageId;
   final Map<String, GlobalKey> _messageKeys = {};
+  
   String? _swipingMessageId;
   double _messageSwipeOffset = 0.0;
   final double _replyThreshold = 60.0;
+  
   AnimationController? _swipeController;
   Animation<double>? _swipeAnimation;
+  
   Uint8List? partnerProfilePicture;
-
+  
+  // For message selection and deletion
+  List<String> _selectedMessageIds = [];
+  
   // For reply functionality
   Map<String, dynamic>? _replyingTo;
 
@@ -64,18 +79,35 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     
     _loadUserInfo();
     _loadLocalBlockStatus();
+    _loadLastMessageId();
     _loadLocalMessages();
     _checkIfBlocked();
     _loadPartnerProfilePicture();
     
+    // Handle initial product from "Chat with Seller"
+    if (widget.initialProduct != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Instead of sending a product message, set it as replyingTo
+        setState(() {
+          _replyingTo = {
+            'id': widget.initialProduct!['productId'],
+            'type': 'product',
+            'text': widget.initialProduct!['name'] ?? 'Product',
+          };
+        });
+        // Focus the text field for typing
+        FocusScope.of(context).requestFocus(_messageInputFocusNode);
+      });
+    }
+    
     // Set up periodic refresh
     _refreshTimer = Timer.periodic(
-      const Duration(seconds: 1),
+      const Duration(seconds: 10),
       (_) {
         if (_initialLoadComplete) {
           _fetchNewMessages();
+          _checkIfBlocked();
         }
-        _checkIfBlocked();
       },
     );
     
@@ -94,22 +126,26 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  // Get the latest message ID for incremental loading
-  String? _getLatestMessageId() {
-    if (messages.isEmpty) return null;
-    
-    DateTime latestTime = DateTime.parse(messages[0]['createdAt']);
-    String latestId = messages[0]['_id'].toString();
-    
-    for (var message in messages) {
-      final messageTime = DateTime.parse(message['createdAt']);
-      if (messageTime.isAfter(latestTime)) {
-        latestTime = messageTime;
-        latestId = message['_id'].toString();
+  // Load last message ID from storage
+  Future<void> _loadLastMessageId() async {
+    try {
+      final lastId = await _secureStorage.read(key: 'last_message_id_${widget.conversationId}');
+      if (lastId != null) {
+        _lastFetchedMessageId = lastId;
       }
+    } catch (e) {
+      print('Error loading last message ID: $e');
     }
-    
-    return latestId;
+  }
+
+  // Save last message ID to storage
+  Future<void> _saveLastMessageId(String messageId) async {
+    try {
+      await _secureStorage.write(key: 'last_message_id_${widget.conversationId}', value: messageId);
+      _lastFetchedMessageId = messageId;
+    } catch (e) {
+      print('Error saving last message ID: $e');
+    }
   }
 
   // Load partner's profile picture
@@ -125,7 +161,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         }
         return;
       }
-      
+
       // If not in cache, fetch from server
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
@@ -143,7 +179,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             setState(() {
               partnerProfilePicture = response.bodyBytes;
             });
-            
             // Cache the profile picture
             await _secureStorage.write(
               key: 'profile_pic_${widget.partnerId}',
@@ -156,7 +191,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       print('Error loading partner profile picture: $e');
     }
   }
-  
+
   // Navigate to view user profile
   void _navigateToUserProfile() {
     Navigator.push(
@@ -187,7 +222,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
-  // Format date for header display (Today, Yesterday, day of week, or date)
+  // Format date for header display
   String _formatDateForHeader(DateTime date) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -226,7 +261,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   Future<void> _saveBlockStatus(bool blocked) async {
     try {
       await _secureStorage.write(
-        key: 'blocked_${widget.partnerId}', 
+        key: 'blocked_${widget.partnerId}',
         value: blocked ? 'true' : 'false'
       );
     } catch (e) {
@@ -259,7 +294,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             'auth-cookie': authCookie ?? '',
           },
         );
-
+        
         if (response.statusCode == 200) {
           final data = json.decode(response.body);
           if (data['success'] && data['user'] != null) {
@@ -268,7 +303,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           }
         }
       }
-
+      
       if (mounted) {
         setState(() {
           if (id != null) currentUserId = id;
@@ -295,12 +330,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           'auth-cookie': authCookie ?? '',
         },
       );
-
+      
       if (response.statusCode == 200) {
-        final List<dynamic> blockedUsers = json.decode(response.body);
+        final List blockedUsers = json.decode(response.body);
         final bool wasBlocked = isBlocked;
-        
         bool serverBlocked = false;
+        
         for (var user in blockedUsers) {
           if (user['blocked'] != null) {
             String blockedId = '';
@@ -322,9 +357,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             isBlocked = serverBlocked;
             isCheckedBlocked = true;
           });
-          
           _saveBlockStatus(serverBlocked);
-          
           if (wasBlocked != serverBlocked) {
             _fetchMessages();
           }
@@ -335,34 +368,57 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
+  // Toggle message selection for deletion
+  void _toggleMessageSelection(String messageId) {
+    setState(() {
+      if (_selectedMessageIds.contains(messageId)) {
+        _selectedMessageIds.remove(messageId);
+        if (_selectedMessageIds.isEmpty) {
+          _isInSelectionMode = false;
+        }
+      } else {
+        _selectedMessageIds.add(messageId);
+        _isInSelectionMode = true;
+      }
+    });
+  }
+
+  // Cancel selection mode
+  void _cancelSelection() {
+    setState(() {
+      _selectedMessageIds.clear();
+      _isInSelectionMode = false;
+    });
+  }
+
   Future<void> _loadLocalMessages() async {
     try {
       final messagesJson = await _secureStorage.read(key: 'messages_${widget.conversationId}');
       if (messagesJson != null) {
         final loadedMessages = json.decode(messagesJson);
-        
         // Initialize the set of processed message IDs
         Set<String> localProcessedIds = {};
         for (var msg in loadedMessages) {
-          if (msg['_id'] != null) {
-            localProcessedIds.add(msg['_id'].toString());
+          if (msg['messageId'] != null) {
+            localProcessedIds.add(msg['messageId'].toString());
           }
         }
         
-        setState(() {
-          messages = loadedMessages;
-          filteredMessages = messages;
-          processedMessageIds = localProcessedIds; // This initialization is crucial for deduplication
-          if (isLoading && messages.isNotEmpty) {
-            isLoading = false;
-          }
-        });
+        if (mounted) {
+          setState(() {
+            messages = loadedMessages;
+            filteredMessages = messages;
+            processedMessageIds = localProcessedIds;
+            if (isLoading && messages.isNotEmpty) {
+              isLoading = false;
+            }
+          });
+        }
         
         // After loading local messages, fetch from server to get latest
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _fetchMessages();
           _initialLoadComplete = true;
-          
           if (_scrollController.hasClients) {
             _scrollController.animateTo(
               0,
@@ -393,6 +449,88 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
+  // Delete selected messages (locally only)
+  Future<void> _deleteSelectedMessages() async {
+    try {
+      // Remove deleted messages from the local list
+      setState(() {
+        messages = messages.where((msg) => 
+          !_selectedMessageIds.contains(msg['messageId'].toString())
+        ).toList();
+        
+        if (!isSearching) {
+          filteredMessages = messages;
+        } else {
+          _filterMessages(_searchController.text);
+        }
+        
+        _isInSelectionMode = false;
+        _selectedMessageIds.clear();
+      });
+      
+      // Save updated messages locally
+      await _saveMessagesLocally();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Messages deleted successfully')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error deleting messages: $e')),
+      );
+    }
+  }
+
+  // Clear all messages in the chat (locally only)
+  Future<void> _clearChat() async {
+    try {
+      // Confirm with the user
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Clear Chat'),
+          content: const Text('Are you sure you want to clear all messages in this chat?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Clear'),
+            ),
+          ],
+        ),
+      ) ?? false;
+      
+      if (!confirmed) return;
+      
+      setState(() {
+        // Only remove messages sent by the current user
+        messages = messages.where((msg) => 
+          msg['sender'] != currentUserId
+        ).toList();
+        
+        if (!isSearching) {
+          filteredMessages = messages;
+        } else {
+          _filterMessages(_searchController.text);
+        }
+      });
+      
+      await _saveMessagesLocally();
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chat cleared successfully')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error clearing chat: $e')),
+      );
+    }
+  }
+
   GlobalKey _getKeyForMessage(String messageId) {
     if (!_messageKeys.containsKey(messageId)) {
       _messageKeys[messageId] = GlobalKey();
@@ -406,12 +544,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         _highlightedMessageId = messageId;
       });
       
-      final messageIndex = messages.indexWhere((m) => 
-        m['_id'] != null && m['_id'].toString() == messageId);
+      final messageIndex = messages.indexWhere((m) =>
+        m['messageId'] != null && m['messageId'].toString() == messageId);
       
       if (messageIndex != -1) {
         final scrollIndex = messages.length - 1 - messageIndex;
-        
         _scrollController.animateTo(
           scrollIndex * 75.0,
           duration: const Duration(milliseconds: 300),
@@ -428,109 +565,89 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             );
           }
         });
+
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (mounted) {
+            setState(() {
+              _highlightedMessageId = null;
+            });
+          }
+        });
       }
-      
-      Future.delayed(const Duration(milliseconds: 1500), () {
-        if (mounted) {
-          setState(() {
-            _highlightedMessageId = null;
-          });
-        }
-      });
     } catch (e) {
       print('Error scrolling to message: $e');
     }
   }
 
-  // Full fetch for initial load
-  Future<void> _fetchMessages() async {
+  // Navigate to product when clicking on product in messages
+  void _navigateToProduct(String productId) async {
     try {
+      // First, get the product details
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations/${widget.conversationId}'),
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/$productId'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
         },
       );
-
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        if (data['success'] && data['conversation'] != null) {
-          final serverMessages = data['conversation']['messages'] ?? [];
-          
-          // Create a map to efficiently track what we already have
-          Map<String, dynamic> messageMap = {};
-          
-          // First, add existing local messages to the map
-          for (var msg in messages) {
-            if (msg['_id'] != null) {
-              String id = msg['_id'].toString();
-              messageMap[id] = msg;
-              processedMessageIds.add(id);
-            }
+        if (data['success'] && data['product'] != null) {
+          final product = data['product'];
+          final sellerId = product['seller'] is String ? 
+                           product['seller'] : 
+                           product['seller']['_id'];
+                           
+          if (sellerId == currentUserId) {
+            // Navigate to seller management if current user is the seller
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => SellerOfferManagementScreen(
+                  product: product,
+                ),
+              ),
+            );
+          } else {
+            // Navigate to product details if someone else is the seller
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ProductDetailsScreen(
+                  product: product,
+                ),
+              ),
+            );
           }
-          
-          // Then add server messages, replacing duplicates
-          for (var serverMsg in serverMessages) {
-            if (serverMsg['_id'] != null) {
-              String serverId = serverMsg['_id'].toString();
-              
-              // If this message exists locally and has a status, preserve the status
-              if (messageMap.containsKey(serverId) && messageMap[serverId]['status'] != null) {
-                serverMsg['status'] = messageMap[serverId]['status'];
-              }
-              
-              messageMap[serverId] = serverMsg;
-              processedMessageIds.add(serverId);
-            }
-          }
-          
-          // Convert map back to list and sort
-          List<dynamic> combinedMessages = messageMap.values.toList();
-          combinedMessages.sort((a, b) {
-            final aTime = DateTime.parse(a['createdAt']);
-            final bTime = DateTime.parse(b['createdAt']);
-            return aTime.compareTo(bTime);
-          });
-          
-          if (mounted) {
-            setState(() {
-              messages = combinedMessages;
-              if (!isSearching) {
-                filteredMessages = combinedMessages;
-              } else {
-                _filterMessages(_searchController.text);
-              }
-              isLoading = false;
-            });
-          }
-          
-          // Save the updated message list to local storage
-          _saveMessagesLocally();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Product details could not be loaded')),
+          );
         }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Product not available')),
+        );
       }
     } catch (e) {
-      print('Error fetching messages: $e');
-      if (messages.isEmpty) {
-        _loadLocalMessages();
-      }
-    }
-    if (mounted) {
-      setState(() => isLoading = false);
+      print('Error navigating to product: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not load product details')),
+      );
     }
   }
 
-  // Incremental fetch for periodic updates
-  Future<void> _fetchNewMessages() async {
+  // Fetch messages from server with message ID tracking
+  Future<void> _fetchMessages() async {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       String url = 'https://olx-for-iitrpr-backend.onrender.com/api/conversations/${widget.conversationId}/messages';
       
-      // Add since parameter for incremental loading
-      final latestMessageId = _getLatestMessageId();
-      if (latestMessageId != null) {
-        url += '?since=${latestMessageId}';
+      // Use last message ID for efficient fetching
+      if (_lastFetchedMessageId != null) {
+        url += '?lastId=$_lastFetchedMessageId';
       }
       
       final response = await http.get(
@@ -540,24 +657,28 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           'auth-cookie': authCookie ?? '',
         },
       );
-
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        
         if (data['success']) {
-          // For incremental updates, we only get new messages
-          final newMessages = data['messages'] ?? [];
+          final List newMessages = data['messages'] ?? [];
           
           if (newMessages.isNotEmpty) {
-            // Process new messages
-            List<dynamic> messagesToAdd = [];
+            // Find highest message ID
+            int highestId = 0;
+            List messagesToAdd = [];
             
-            // Only add new messages that haven't been processed yet
             for (var newMsg in newMessages) {
-              if (newMsg['_id'] != null) {
-                final msgId = newMsg['_id'].toString();
-                if (!processedMessageIds.contains(msgId)) {
+              if (newMsg['messageId'] != null) {
+                final msgId = newMsg['messageId'];
+                if (!processedMessageIds.contains(msgId.toString())) {
                   messagesToAdd.add(newMsg);
-                  processedMessageIds.add(msgId);
+                  processedMessageIds.add(msgId.toString());
+                  
+                  if (msgId > highestId) {
+                    highestId = msgId;
+                  }
                 }
               }
             }
@@ -565,7 +686,83 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             if (messagesToAdd.isNotEmpty) {
               setState(() {
                 messages = [...messages, ...messagesToAdd];
+                // Sort messages by creation time
+                messages.sort((a, b) {
+                  final aTime = DateTime.parse(a['createdAt']);
+                  final bTime = DateTime.parse(b['createdAt']);
+                  return aTime.compareTo(bTime);
+                });
                 
+                if (!isSearching) {
+                  filteredMessages = messages;
+                } else {
+                  _filterMessages(_searchController.text);
+                }
+                
+                isLoading = false;
+              });
+              
+              if (highestId > 0) {
+                await _saveLastMessageId(highestId.toString());
+              }
+              
+              await _saveMessagesLocally();
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error fetching messages: $e');
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
+  }
+
+  // Fetch only new messages incrementally
+  Future<void> _fetchNewMessages() async {
+    try {
+      if (_lastFetchedMessageId == null) return;
+      
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      String url = 'https://olx-for-iitrpr-backend.onrender.com/api/conversations/${widget.conversationId}/messages?lastId=$_lastFetchedMessageId';
+      
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        
+        if (data['success']) {
+          final List newMessages = data['messages'] ?? [];
+          
+          if (newMessages.isNotEmpty) {
+            // Find highest message ID
+            int highestId = 0;
+            List messagesToAdd = [];
+            
+            for (var newMsg in newMessages) {
+              if (newMsg['messageId'] != null) {
+                final msgId = newMsg['messageId'];
+                if (!processedMessageIds.contains(msgId.toString())) {
+                  messagesToAdd.add(newMsg);
+                  processedMessageIds.add(msgId.toString());
+                  
+                  if (msgId > highestId) {
+                    highestId = msgId;
+                  }
+                }
+              }
+            }
+            
+            if (messagesToAdd.isNotEmpty && mounted) {
+              setState(() {
+                messages = [...messages, ...messagesToAdd];
                 // Sort messages by creation time
                 messages.sort((a, b) {
                   final aTime = DateTime.parse(a['createdAt']);
@@ -580,7 +777,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 }
               });
               
-              // Save the updated message list
+              if (highestId > 0) {
+                await _saveLastMessageId(highestId.toString());
+              }
+              
               await _saveMessagesLocally();
             }
           }
@@ -590,22 +790,164 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       print('Error fetching new messages: $e');
     }
   }
-
+  
+  // Send a message 
+  Future<void> _sendMessage() async {
+    final messageText = _messageController.text.trim();
+    if (messageText.isEmpty) return;
+    
+    _messageController.clear();
+    
+    // Create a temporary message with a temporary ID
+    final tempId = DateTime.now().millisecondsSinceEpoch.toString();
+    
+    Map<String, dynamic> tempMessage = {
+      'messageId': tempId,
+      'sender': currentUserId,
+      'text': messageText,
+      'createdAt': DateTime.now().toIso8601String(),
+      'status': 'pending'
+    };
+    
+    // Add replyTo information if replying to something
+    if (_replyingTo != null) {
+      tempMessage['replyTo'] = {
+        'id': _replyingTo!['id'],
+        'type': _replyingTo!['type']
+      };
+    }
+    
+    // Store replyTo data for the API call
+    final replyToData = _replyingTo;
+    
+    setState(() {
+      messages = [...messages, tempMessage];
+      processedMessageIds.add(tempId);
+      
+      if (!isSearching) {
+        filteredMessages = messages;
+      } else {
+        _filterMessages(_searchController.text);
+      }
+      
+      _replyingTo = null;
+    });
+    
+    // Scroll to bottom to show the new message
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom();
+    });
+    
+    // Save to local storage with pending status
+    await _saveMessagesLocally();
+    
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      
+      // Prepare API call parameters
+      final Map<String, dynamic> requestBody = {
+        'text': messageText,
+        'tempId': tempId,
+      };
+      
+      // Add reply data if it exists
+      if (replyToData != null) {
+        requestBody['replyTo'] = replyToData['id'];
+        requestBody['replyType'] = replyToData['type'];
+      }
+      
+      final response = await http.post(
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations/${widget.conversationId}/messages'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+        body: json.encode(requestBody),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          // Update the temporary message with the server's message ID
+          final serverMessageId = data['messageId'];
+          
+          if (mounted) {
+            setState(() {
+              final index = messages.indexWhere((m) => 
+                m['messageId'] == tempId
+              );
+              
+              if (index != -1) {
+                messages[index]['status'] = 'sent';
+                messages[index]['messageId'] = serverMessageId;
+                
+                // Also update in filtered messages if present
+                final filteredIndex = filteredMessages.indexWhere((m) => 
+                  m['messageId'] == tempId
+                );
+                
+                if (filteredIndex != -1) {
+                  filteredMessages[filteredIndex]['status'] = 'sent';
+                  filteredMessages[filteredIndex]['messageId'] = serverMessageId;
+                }
+              }
+            });
+            
+            // Update processed message IDs
+            processedMessageIds.remove(tempId);
+            processedMessageIds.add(serverMessageId.toString());
+            
+            // Save the last message ID
+            await _saveLastMessageId(serverMessageId.toString());
+            
+            // Save updated messages
+            await _saveMessagesLocally();
+          }
+        } else {
+          _markMessageAsFailed(tempId);
+        }
+      } else {
+        _markMessageAsFailed(tempId);
+      }
+    } catch (e) {
+      print('Error sending message: $e');
+      _markMessageAsFailed(tempId);
+    }
+  }
+  
+  // Mark a message as failed
+  void _markMessageAsFailed(String tempId) {
+    if (mounted) {
+      setState(() {
+        final index = messages.indexWhere((m) => m['messageId'] == tempId);
+        if (index != -1) {
+          messages[index]['status'] = 'failed';
+          
+          // Also update in filtered messages if present
+          final filteredIndex = filteredMessages.indexWhere((m) => m['messageId'] == tempId);
+          if (filteredIndex != -1) {
+            filteredMessages[filteredIndex]['status'] = 'failed';
+          }
+        }
+      });
+      _saveMessagesLocally();
+    }
+  }
+  
+  // Retry sending a failed message
   Future<void> _retryFailedMessage(dynamic failedMessage) async {
-    final failedMessageId = failedMessage['_id'].toString();
+    final failedMessageId = failedMessage['messageId'];
     final messageText = failedMessage['text'];
-    final replyToMessageId = failedMessage['replyToMessageId'];
+    final replyTo = failedMessage['replyTo'];
     
     // Update status to pending
     setState(() {
-      final index = messages.indexWhere((m) => 
-        m['_id'].toString() == failedMessageId);
+      final index = messages.indexWhere((m) => m['messageId'] == failedMessageId);
       if (index != -1) {
         messages[index]['status'] = 'pending';
         
         // Also update in filtered messages if present
-        final filteredIndex = filteredMessages.indexWhere((m) => 
-          m['_id'].toString() == failedMessageId);
+        final filteredIndex = filteredMessages.indexWhere((m) => m['messageId'] == failedMessageId);
         if (filteredIndex != -1) {
           filteredMessages[filteredIndex]['status'] = 'pending';
         }
@@ -618,203 +960,85 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     // Try sending again
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
+      
+      // Prepare request body
+      final Map<String, dynamic> requestBody = {
+        'text': messageText,
+        'tempId': failedMessageId,
+      };
+      
+      // Add reply data if it exists
+      if (replyTo != null) {
+        requestBody['replyTo'] = replyTo['id'];
+        requestBody['replyType'] = replyTo['type'];
+      }
+      
       final response = await http.post(
         Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations/${widget.conversationId}/messages'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
         },
-        body: json.encode({
-          'text': messageText,
-          'replyToMessageId': replyToMessageId,
-          'tempId': failedMessageId,
-        }),
-      );
-      
-      // Always mark as "sent" to hide if user is blocked
-      if (mounted) {
-        setState(() {
-          final index = messages.indexWhere((m) => 
-            m['_id'].toString() == failedMessageId);
-          if (index != -1) {
-            messages[index]['status'] = 'sent';
-            
-            // Also update in filtered messages if present
-            final filteredIndex = filteredMessages.indexWhere((m) => 
-              m['_id'].toString() == failedMessageId);
-            if (filteredIndex != -1) {
-              filteredMessages[filteredIndex]['status'] = 'sent';
-            }
-          }
-        });
-        
-        _saveMessagesLocally();
-      }
-    } catch (e) {
-      // Even for errors, mark as sent to hide blocking
-      if (mounted) {
-        setState(() {
-          final index = messages.indexWhere((m) => 
-            m['_id'].toString() == failedMessageId);
-          if (index != -1) {
-            messages[index]['status'] = 'sent';
-            
-            // Also update in filtered messages if present
-            final filteredIndex = filteredMessages.indexWhere((m) => 
-              m['_id'].toString() == failedMessageId);
-            if (filteredIndex != -1) {
-              filteredMessages[filteredIndex]['status'] = 'sent';
-            }
-          }
-        });
-      }
-      
-      _saveMessagesLocally();
-    }
-  }
-
-  Future<void> _sendMessage() async {
-    final messageText = _messageController.text.trim();
-    if (messageText.isEmpty) return;
-    
-    _messageController.clear();
-    
-    final tempId = DateTime.now().millisecondsSinceEpoch.toString();
-    
-    final pendingMessage = {
-      '_id': tempId,
-      'sender': currentUserId,
-      'text': messageText,
-      'createdAt': DateTime.now().toIso8601String(),
-      'replyToMessageId': _replyingTo?['id'],
-      'status': 'pending'
-    };
-    
-    // Add to processedMessageIds to prevent duplicates
-    processedMessageIds.add(tempId);
-    
-    final _oldreplyingTo = _replyingTo;
-    setState(() {
-      messages = [...messages, pendingMessage];
-      if (!isSearching) {
-        filteredMessages = messages;
-      } else {
-        _filterMessages(_searchController.text);
-      }
-      _replyingTo = null;
-    });
-    
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          0,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
-    
-    // Save to local storage immediately (even if blocked)
-    await _saveMessagesLocally();
-    
-    try {
-      final authCookie = await _secureStorage.read(key: 'authCookie');
-      final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations/${widget.conversationId}/messages'),
-        headers: {
-          'Content-Type': 'application/json',
-          'auth-cookie': authCookie ?? '',
-        },
-        body: json.encode({
-          'text': messageText,
-          'replyToMessageId': _oldreplyingTo?['id'],
-          'tempId': tempId,
-        }),
+        body: json.encode(requestBody),
       );
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success']) {
-          // If server returned a message ID, add it to processed IDs to prevent duplication
-          if (data['serverMessage'] != null && data['serverMessage']['_id'] != null) {
-            processedMessageIds.add(data['serverMessage']['_id'].toString());
-          }
+          // Update the message with the server's message ID
+          final serverMessageId = data['messageId'];
           
           if (mounted) {
             setState(() {
-              final index = messages.indexWhere((m) => 
-                m['_id'].toString() == tempId);
+              final index = messages.indexWhere((m) => m['messageId'] == failedMessageId);
               if (index != -1) {
                 messages[index]['status'] = 'sent';
+                messages[index]['messageId'] = serverMessageId;
                 
-                // Update in filtered messages if present
-                final filteredIndex = filteredMessages.indexWhere((m) => 
-                  m['_id'].toString() == tempId);
+                // Also update in filtered messages if present
+                final filteredIndex = filteredMessages.indexWhere((m) => m['messageId'] == failedMessageId);
                 if (filteredIndex != -1) {
                   filteredMessages[filteredIndex]['status'] = 'sent';
+                  filteredMessages[filteredIndex]['messageId'] = serverMessageId;
                 }
               }
             });
+            
+            // Update processed message IDs
+            processedMessageIds.remove(failedMessageId);
+            processedMessageIds.add(serverMessageId.toString());
+            
+            // Save the last message ID
+            await _saveLastMessageId(serverMessageId.toString());
+            
+            // Save updated messages
+            await _saveMessagesLocally();
           }
-          
-          _saveMessagesLocally();
+        } else {
+          _markMessageAsFailed(failedMessageId);
         }
       } else {
-        // Mark as sent anyway (to handle blocked scenario)
-        if (mounted) {
-          setState(() {
-            final index = messages.indexWhere((m) => 
-              m['_id'].toString() == tempId);
-            if (index != -1) {
-              messages[index]['status'] = 'sent';
-              
-              // Update in filtered messages if present
-              final filteredIndex = filteredMessages.indexWhere((m) => 
-                m['_id'].toString() == tempId);
-              if (filteredIndex != -1) {
-                filteredMessages[filteredIndex]['status'] = 'sent';
-              }
-            }
-          });
-        }
-        
-        _saveMessagesLocally();
+        _markMessageAsFailed(failedMessageId);
       }
     } catch (e) {
-      // Mark as sent even on error (to hide blocking)
-      if (mounted) {
-        setState(() {
-          final index = messages.indexWhere((m) => 
-            m['_id'].toString() == tempId);
-          if (index != -1) {
-            messages[index]['status'] = 'sent';
-            
-            // Update in filtered messages if present
-            final filteredIndex = filteredMessages.indexWhere((m) => 
-              m['_id'].toString() == tempId);
-            if (filteredIndex != -1) {
-              filteredMessages[filteredIndex]['status'] = 'sent';
-            }
-          }
-        });
-      }
-      
-      _saveMessagesLocally();
-      print('Error sending message: $e');
+      print('Error retrying message: $e');
+      _markMessageAsFailed(failedMessageId);
     }
   }
-
+  
+  // Handle reply to a message
   void _handleReply(dynamic message) {
     setState(() {
       _replyingTo = {
-        'id': message['_id'],
+        'id': message['messageId'],
+        'type': 'message',
         'text': message['text'],
       };
     });
     FocusScope.of(context).requestFocus(_messageInputFocusNode);
   }
-
-  // New method for filtering messages
+  
+  // Filter messages for search
   void _filterMessages(String query) {
     if (query.isEmpty) {
       setState(() {
@@ -831,7 +1055,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       }).toList();
     });
   }
-
+  
   // Toggle search mode
   void _toggleSearchMode() {
     setState(() {
@@ -842,15 +1066,16 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       }
     });
   }
-
+  
+  // Block user
   Future<void> _blockUser() async {
-    bool confirmed = await showDialog(
+    bool confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
           title: Text('Block User'),
           content: Text('Are you sure you want to block ${widget.partnerNames}?'),
-          actions: <Widget>[
+          actions: [
             TextButton(
               child: Text('Cancel'),
               onPressed: () {
@@ -879,14 +1104,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           'auth-cookie': authCookie ?? '',
         },
       );
-
+      
       if (response.statusCode == 200) {
         setState(() {
           isBlocked = true;
         });
-        
         await _saveBlockStatus(true);
-        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('User blocked successfully')),
         );
@@ -901,15 +1124,16 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       );
     }
   }
-
+  
+  // Unblock user
   Future<void> _unblockUser() async {
-    bool confirmed = await showDialog(
+    bool confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
           title: Text('Unblock User'),
           content: Text('Are you sure you want to unblock ${widget.partnerNames}?'),
-          actions: <Widget>[
+          actions: [
             TextButton(
               child: Text('Cancel'),
               onPressed: () {
@@ -938,14 +1162,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           'auth-cookie': authCookie ?? '',
         },
       );
-
+      
       if (response.statusCode == 200) {
         setState(() {
           isBlocked = false;
         });
-        
         await _saveBlockStatus(false);
-        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('User unblocked successfully')),
         );
@@ -960,312 +1182,84 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       );
     }
   }
+  
+  String _getSenderNameForReply() {
+    try {
+      if (_replyingTo != null && _replyingTo!['type'] == 'product') {
+        return 'Product';
+      }
+      
+      final replyIdString = _replyingTo!['id'].toString();
+      final originalMessage = messages.firstWhere(
+        (m) => m['messageId'] != null && m['messageId'].toString() == replyIdString,
+        orElse: () => {'sender': null},
+      );
+      
+      bool isOriginalSenderMe = false;
+      if (originalMessage['sender'] != null) {
+        if (originalMessage['sender'] is String) {
+          isOriginalSenderMe = originalMessage['sender'].toString() == currentUserId.toString();
+        } else if (originalMessage['sender'] is Map && originalMessage['sender']['_id'] != null) {
+          isOriginalSenderMe = originalMessage['sender']['_id'].toString() == currentUserId.toString();
+        }
+      }
+      
+      return isOriginalSenderMe ? 'You' : widget.partnerNames;
+    } catch (e) {
+      print('Error determining sender name: $e');
+      return 'Unknown';
+    }
+  }
 
-  // Enhanced reporting function matching the server schema
-  void _reportUser() {
-    String reason = 'other'; // Default reason
-    String details = '';
-    bool includeChat = false;
+  // Helper function to fetch product details
+  Future<Map<String, dynamic>> _fetchProductDetails(String productId) async {
+    // Check if we have cached product details
+    final cachedData = await _secureStorage.read(key: 'product_${productId}');
+    if (cachedData != null) {
+      return json.decode(cachedData);
+    }
     
-    // Define reason options based on the server schema
-    final List<Map<String, String>> reasonOptions = [
-      {'value': 'spam', 'label': 'Spam'},
-      {'value': 'harassment', 'label': 'Harassment'},
-      {'value': 'inappropriate_content', 'label': 'Inappropriate Content'},
-      {'value': 'fake_account', 'label': 'Fake Account'},
-      {'value': 'other', 'label': 'Other'}
-    ];
-    
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: Text('Report User'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Reason for reporting:',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    // Reason selection
-                    Column(
-                      children: reasonOptions.map((option) => 
-                        RadioListTile<String>(
-                          title: Text(option['label']!),
-                          value: option['value']!,
-                          groupValue: reason,
-                          onChanged: (value) {
-                            setState(() {
-                              reason = value!;
-                            });
-                          },
-                        )
-                      ).toList(),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'Additional details:',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      onChanged: (value) {
-                        details = value;
-                      },
-                      decoration: InputDecoration(
-                        hintText: "Please provide more information",
-                        border: OutlineInputBorder(),
-                      ),
-                      maxLines: 4,
-                      maxLength: 500, // Match schema maxlength
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: includeChat,
-                          onChanged: (value) {
-                            setState(() {
-                              includeChat = value ?? false;
-                            });
-                          },
-                        ),
-                        Expanded(
-                          child: Text('Share chat history with admin (helps with investigation)'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              actions: <Widget>[
-                TextButton(
-                  child: Text('Cancel'),
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
-                ),
-                TextButton(
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    backgroundColor: Colors.red,
-                  ),
-                  child: Text('Report'),
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    _submitReport(reason, details, includeChat);
-                  },
-                ),
-              ],
-            );
-          }
-        );
+    // Fetch from server
+    final authCookie = await _secureStorage.read(key: 'authCookie');
+    final response = await http.get(
+      Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/$productId'),
+      headers: {
+        'Content-Type': 'application/json',
+        'auth-cookie': authCookie ?? '',
       },
     );
-  }
-
-  Future<void> _submitReport(String reason, String details, bool includeChat) async {
-    if (details.trim().isEmpty && reason == 'other') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please provide details for your report')),
-      );
-      return;
+    
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      if (data['success'] && data['product'] != null) {
+        // Extract essential details
+        final product = {
+          'name': data['product']['name'],
+          'price': data['product']['price'],
+          'seller': data['product']['seller'],
+          'imageUrl': data['product']['images']?.isNotEmpty == true
+              ? data['product']['images'][0]['data']
+              : null,
+        };
+        
+        // Cache the product details
+        await _secureStorage.write(key: 'product_${productId}', value: json.encode(product));
+        
+        return product;
+      }
     }
     
-    try {
-      final authCookie = await _secureStorage.read(key: 'authCookie');
-      final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/report-user'),
-        headers: {
-          'Content-Type': 'application/json',
-          'auth-cookie': authCookie ?? '',
-        },
-        body: json.encode({
-          'reportedUserId': widget.partnerId,
-          'reason': reason,
-          'details': details,
-          'includeChat': includeChat,
-          'conversationId': includeChat ? widget.conversationId : null,
-        }),
-      );
-
-      if (response.statusCode == 201) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('User reported successfully. Our team will review your report.'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to report user. Please try again later.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+    throw Exception('Failed to load product details');
   }
-
+  
   @override
   Widget build(BuildContext context) {
-    if (!isCheckedBlocked && isLoading) {
-      return Scaffold(
-        appBar: AppBar(
-          title: Text(widget.partnerNames),
-        ),
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-    
     return Scaffold(
-      appBar: isSearching
-          ? AppBar(
-              backgroundColor: Colors.white,
-              elevation: 1,
-              leading: IconButton(
-                icon: Icon(Icons.arrow_back, color: Colors.blue),
-                onPressed: _toggleSearchMode,
-              ),
-              title: Container(
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                padding: EdgeInsets.symmetric(horizontal: 12),
-                child: TextField(
-                  controller: _searchController,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    hintText: 'Search messages...',
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-                    isDense: true,
-                    filled: true,
-                    fillColor: Colors.grey.shade200,
-                  ),
-                  onChanged: _filterMessages,
-                ),
-              ),
-            )
-          : AppBar(
-              automaticallyImplyLeading: false, // Hide default back button
-              leadingWidth: 40, // Reduced width for back button
-              leading: IconButton( // Separated back button
-                icon: Icon(Icons.arrow_back),
-                padding: EdgeInsets.only(left: 8), // Reduce left padding
-                constraints: BoxConstraints(),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-              title: InkWell( // Separated profile section
-                onTap: _navigateToUserProfile,
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 18,
-                      backgroundColor: Colors.grey.shade200,
-                      backgroundImage: partnerProfilePicture != null
-                          ? MemoryImage(partnerProfilePicture!)
-                          : null,
-                      child: partnerProfilePicture == null
-                          ? Text(
-                              widget.partnerNames.isNotEmpty
-                                  ? widget.partnerNames[0].toUpperCase()
-                                  : '?',
-                              style: TextStyle(color: Colors.grey.shade600),
-                            )
-                          : null,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        widget.partnerNames,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                IconButton(
-                  icon: Icon(Icons.search),
-                  onPressed: _toggleSearchMode,
-                ),
-                PopupMenuButton<String>(
-                  onSelected: (value) {
-                    switch (value) {
-                      case 'block':
-                        if (isBlocked) {
-                          _unblockUser();
-                        } else {
-                          _blockUser();
-                        }
-                        break;
-                      case 'report':
-                        _reportUser();
-                        break;
-                      case 'view_profile':
-                        _navigateToUserProfile();
-                        break;
-                    }
-                  },
-                  itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-                    const PopupMenuItem<String>(
-                      value: 'view_profile',
-                      child: Row(
-                        children: [
-                          Icon(Icons.person, size: 18),
-                          SizedBox(width: 8),
-                          Text('View Profile'),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem<String>(
-                      value: 'block',
-                      child: Row(
-                        children: [
-                          Icon(
-                            isBlocked ? Icons.lock_open : Icons.block, 
-                            size: 18
-                          ),
-                          SizedBox(width: 8),
-                          Text(isBlocked ? 'Unblock User' : 'Block User'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem<String>(
-                      value: 'report',
-                      child: Row(
-                        children: [
-                          Icon(Icons.flag, size: 18),
-                          SizedBox(width: 8),
-                          Text('Report User'),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+      appBar: _isInSelectionMode
+          ? _buildSelectionAppBar()
+          : isSearching
+              ? _buildSearchAppBar()
+              : _buildRegularAppBar(),
       body: Stack(
         children: [
           Column(
@@ -1277,138 +1271,142 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                         controller: _scrollController,
                         reverse: true,
                         itemCount: filteredMessages.length,
+                        // Add findChildIndexCallback for better performance with reversed list
+                        findChildIndexCallback: (key) {
+                          final ValueKey valueKey = key as ValueKey;
+                          final String messageId = valueKey.value;
+                          return filteredMessages.indexWhere((msg) => 
+                            msg['messageId'].toString() == messageId
+                          );
+                        },
                         itemBuilder: (context, index) {
                           try {
                             final int adjustedIndex = filteredMessages.length - 1 - index;
                             if (adjustedIndex < 0 || adjustedIndex >= filteredMessages.length) {
-                              throw RangeError('Index out of range');
+                              return SizedBox.shrink();
                             }
                             
                             final message = filteredMessages[adjustedIndex];
-                            final messageId = message['_id'].toString();
+                            final messageId = message['messageId'].toString();
+                            final bool isMe = message['sender'] == currentUserId;
+                            final double offset = _swipingMessageId == messageId ? _messageSwipeOffset : 0.0;
                             
-                            // Check if we need to show a date header
-                            bool showDateHeader = false;
-                            String dateHeaderText = '';
-                            
-                            if (adjustedIndex == 0) {
-                              // Always show date header for the first message
-                              showDateHeader = true;
-                              final messageDate = DateTime.parse(message['createdAt']);
-                              dateHeaderText = _formatDateForHeader(messageDate);
-                            } else if (adjustedIndex > 0) {
-                              // Compare with previous message date
-                              final currentDate = DateTime.parse(message['createdAt']);
-                              final prevMessage = filteredMessages[adjustedIndex - 1];
-                              final prevDate = DateTime.parse(prevMessage['createdAt']);
-                              
-                              // If dates are different, show header
-                              if (currentDate.year != prevDate.year ||
-                                  currentDate.month != prevDate.month ||
-                                  currentDate.day != prevDate.day) {
-                                showDateHeader = true;
-                                dateHeaderText = _formatDateForHeader(currentDate);
-                              }
-                            }
-                            
-                            bool isMe = false;
-                            if (message['sender'] != null) {
-                              if (message['sender'] is String) {
-                                isMe = message['sender'].toString() == currentUserId.toString();
-                              } 
-                              else if (message['sender'] is Map && message['sender']['_id'] != null) {
-                                isMe = message['sender']['_id'].toString() == currentUserId.toString();
-                              }
-                            }
-                            
-                            double offset = _swipingMessageId == messageId ? _messageSwipeOffset : 0.0;
+                            // Show date header if needed
+                            final bool showDateHeader = _shouldShowDateHeader(adjustedIndex);
+                            final String dateHeaderText = showDateHeader 
+                                ? _formatDateForHeader(DateTime.parse(message['createdAt']))
+                                : '';
                             
                             return Column(
                               children: [
                                 if (showDateHeader)
-                                  Container(
-                                    margin: EdgeInsets.symmetric(vertical: 12),
-                                    child: Center(
-                                      child: Container(
-                                        padding: EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-                                        decoration: BoxDecoration(
-                                          color: Colors.blue.shade100,
-                                          borderRadius: BorderRadius.circular(16),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black.withOpacity(0.05),
-                                              blurRadius: 2,
-                                              offset: Offset(0, 1),
+                                  _buildDateHeader(dateHeaderText),
+                                
+                                // Use a key for each message to maintain identity during rebuilds
+                                Container(
+                                  key: ValueKey(messageId),
+                                  width: double.infinity, // Full width container
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.translucent, // Important for full width detection
+                                    onLongPress: () => _toggleMessageSelection(messageId),
+                                    onTap: () {
+                                      if (_isInSelectionMode) {
+                                        _toggleMessageSelection(messageId);
+                                      }
+                                    },
+                                    onHorizontalDragStart: (details) {
+                                      if (!_isInSelectionMode && isMe) {
+                                        setState(() {
+                                          _swipingMessageId = messageId;
+                                          _messageSwipeOffset = 0.0;
+                                        });
+                                      }
+                                    },
+                                    onHorizontalDragUpdate: (details) {
+                                      if (_swipingMessageId == messageId) {
+                                        setState(() {
+                                          _messageSwipeOffset += details.delta.dx;
+                                          if (_messageSwipeOffset > 100) {
+                                            _messageSwipeOffset = 100;
+                                          } else if (_messageSwipeOffset < 0) {
+                                            _messageSwipeOffset = 0;
+                                          }
+                                        });
+                                      }
+                                    },
+                                    onHorizontalDragEnd: (details) {
+                                      if (_swipingMessageId == messageId) {
+                                        if (_messageSwipeOffset >= _replyThreshold) {
+                                          _handleReply(message);
+                                        }
+                                        _resetSwipe();
+                                      }
+                                    },
+                                    onHorizontalDragCancel: () {
+                                      if (_swipingMessageId == messageId) {
+                                        _resetSwipe();
+                                      }
+                                    },
+                                    child: Stack(
+                                      children: [
+                                        // Message alignment
+                                        Row(
+                                          mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+                                          children: [
+                                            AnimatedContainer(
+                                              duration: const Duration(milliseconds: 50),
+                                              transform: Matrix4.translationValues(offset, 0, 0),
+                                              child: _buildMessageItem(message, isMe),
                                             ),
                                           ],
                                         ),
-                                        child: Text(
-                                          dateHeaderText,
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            color: Colors.blue.shade800,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                GestureDetector(
-                                  key: _getKeyForMessage(messageId),
-                                  onHorizontalDragStart: (details) {
-                                    if (details.localPosition.dx < MediaQuery.of(context).size.width / 2) {
-                                      setState(() {
-                                        _swipingMessageId = messageId;
-                                        _messageSwipeOffset = 0.0;
-                                      });
-                                    }
-                                  },
-                                  onHorizontalDragUpdate: (details) {
-                                    if (_swipingMessageId == messageId) {
-                                      setState(() {
-                                        _messageSwipeOffset = _messageSwipeOffset + details.delta.dx;
                                         
-                                        if (_messageSwipeOffset > 100) {
-                                          _messageSwipeOffset = 100;
-                                        } else if (_messageSwipeOffset < 0) {
-                                          _messageSwipeOffset = 0;
-                                        }
-                                      });
-                                    }
-                                  },
-                                  onHorizontalDragEnd: (details) {
-                                    if (_swipingMessageId == messageId) {
-                                      if (_messageSwipeOffset >= _replyThreshold) {
-                                        _handleReply(message);
-                                      }
-                                      
-                                      _resetSwipe();
-                                    }
-                                  },
-                                  onHorizontalDragCancel: () {
-                                    if (_swipingMessageId == messageId) {
-                                      _resetSwipe();
-                                    }
-                                  },
-                                  behavior: HitTestBehavior.translucent,
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 50),
-                                    transform: Matrix4.translationValues(offset, 0, 0),
-                                    child: Row(
-                                      children: [
-                                        if (offset > 0)
-                                          Container(
-                                            width: 20,
-                                            alignment: Alignment.center,
-                                            child: Icon(
-                                              Icons.reply,
-                                              size: 16,
-                                              color: Colors.blue,
+                                        // Swipe arrow indicator
+                                        if (_swipingMessageId == messageId && offset > 0)
+                                          Positioned(
+                                            left: 10,
+                                            top: 0,
+                                            bottom: 0,
+                                            child: Center(
+                                              child: Container(
+                                                padding: EdgeInsets.all(8),
+                                                decoration: BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  color: Colors.blue.withOpacity(0.2),
+                                                ),
+                                                child: const Icon(
+                                                  Icons.reply,
+                                                  color: Colors.blue,
+                                                  size: 20,
+                                                ),
+                                              ),
                                             ),
                                           ),
-                                        Expanded(
-                                          child: _buildMessageItem(message, isMe),
-                                        ),
+                                        
+                                        // Selection indicator
+                                        if (_isInSelectionMode)
+                                          Positioned(
+                                            top: 0,
+                                            left: isMe ? null : 0,
+                                            right: isMe ? 0 : null,
+                                            child: Container(
+                                              padding: EdgeInsets.all(2),
+                                              decoration: BoxDecoration(
+                                                color: _selectedMessageIds.contains(messageId)
+                                                    ? Colors.blue
+                                                    : Colors.white,
+                                                shape: BoxShape.circle,
+                                                border: Border.all(color: Colors.blue),
+                                              ),
+                                              child: Icon(
+                                                Icons.check,
+                                                size: 16,
+                                                color: _selectedMessageIds.contains(messageId)
+                                                    ? Colors.white
+                                                    : Colors.transparent,
+                                              ),
+                                            ),
+                                          ),
                                       ],
                                     ),
                                   ),
@@ -1422,7 +1420,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                         },
                       ),
               ),
-              
               if (isBlocked)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -1487,7 +1484,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                                               width: 3,
                                               height: 36,
                                               decoration: BoxDecoration(
-                                                color: Colors.blue,
+                                                color: _replyingTo!['type'] == 'product' ? Colors.green : Colors.blue,
                                                 borderRadius: BorderRadius.circular(2),
                                               ),
                                             ),
@@ -1497,24 +1494,55 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                                                 crossAxisAlignment: CrossAxisAlignment.start,
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
+                                                  // Show "Product" instead of sender name for product replies
                                                   Text(
-                                                    _getSenderNameForReply(),
+                                                    _replyingTo!['type'] == 'product' ? 'Product' : _getSenderNameForReply(),
                                                     style: TextStyle(
-                                                      color: Colors.blue,
+                                                      color: _replyingTo!['type'] == 'product' ? Colors.green : Colors.blue,
                                                       fontWeight: FontWeight.bold,
                                                       fontSize: 13,
                                                     ),
                                                   ),
                                                   const SizedBox(height: 2),
-                                                  Text(
-                                                    _replyingTo!['text'],
-                                                    maxLines: 1,
-                                                    overflow: TextOverflow.ellipsis,
-                                                    style: TextStyle(
-                                                      fontSize: 12,
-                                                      color: Colors.black,
+                                                  // For product replies, display the product details
+                                                  if (_replyingTo!['type'] == 'product')
+                                                    FutureBuilder<Map<String, dynamic>>(
+                                                      future: _fetchProductDetails(_replyingTo!['id']),
+                                                      builder: (context, snapshot) {
+                                                        if (snapshot.connectionState == ConnectionState.waiting) {
+                                                          return Text(
+                                                            "Loading product...",
+                                                            maxLines: 1,
+                                                            overflow: TextOverflow.ellipsis,
+                                                            style: TextStyle(fontSize: 12),
+                                                          );
+                                                        }
+                                                        if (snapshot.hasData) {
+                                                          return Text(
+                                                            snapshot.data!['name'] ?? "Product",
+                                                            maxLines: 1,
+                                                            overflow: TextOverflow.ellipsis,
+                                                            style: TextStyle(fontSize: 12),
+                                                          );
+                                                        }
+                                                        return Text(
+                                                          _replyingTo!['text'] ?? "Product",
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow.ellipsis,
+                                                          style: TextStyle(fontSize: 12),
+                                                        );
+                                                      },
+                                                    )
+                                                  else
+                                                    Text(
+                                                      _replyingTo!['text'] ?? "",
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors.black,
+                                                      ),
                                                     ),
-                                                  ),
                                                 ],
                                               ),
                                             ),
@@ -1597,31 +1625,166 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       ),
     );
   }
-
-  String _getSenderNameForReply() {
-    try {
-      final replyIdString = _replyingTo!['id'].toString();
-      final originalMessage = messages.firstWhere(
-        (m) => m['_id'] != null && m['_id'].toString() == replyIdString,
-        orElse: () => {'sender': null},
-      );
-      
-      bool isOriginalSenderMe = false;
-      if (originalMessage['sender'] != null) {
-        if (originalMessage['sender'] is String) {
-          isOriginalSenderMe = originalMessage['sender'].toString() == currentUserId.toString();
-        } else if (originalMessage['sender'] is Map && originalMessage['sender']['_id'] != null) {
-          isOriginalSenderMe = originalMessage['sender']['_id'].toString() == currentUserId.toString();
-        }
-      }
-      
-      return isOriginalSenderMe ? 'You' : widget.partnerNames;
-    } catch (e) {
-      print('Error determining sender name: $e');
-      return 'Unknown';
-    }
+  
+  // Build the regular app bar
+  PreferredSizeWidget _buildRegularAppBar() {
+    return AppBar(
+      automaticallyImplyLeading: false, // Hide default back button
+      leadingWidth: 40, // Reduced width for back button
+      leading: IconButton( // Separated back button
+        icon: Icon(Icons.arrow_back),
+        padding: EdgeInsets.only(left: 8), // Reduce left padding
+        constraints: BoxConstraints(),
+        onPressed: () => Navigator.of(context).pop(),
+      ),
+      title: InkWell( // Separated profile section
+        onTap: _navigateToUserProfile,
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: Colors.grey.shade200,
+              backgroundImage: partnerProfilePicture != null
+                  ? MemoryImage(partnerProfilePicture!)
+                  : null,
+              child: partnerProfilePicture == null
+                  ? Text(
+                      widget.partnerNames.isNotEmpty
+                          ? widget.partnerNames[0].toUpperCase()
+                          : '?',
+                      style: TextStyle(color: Colors.grey.shade600),
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                widget.partnerNames,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        IconButton(
+          icon: Icon(Icons.search),
+          onPressed: _toggleSearchMode,
+        ),
+        PopupMenuButton<String>(
+          onSelected: (value) {
+            switch (value) {
+              case 'block':
+                if (isBlocked) {
+                  _unblockUser();
+                } else {
+                  _blockUser();
+                }
+                break;
+              case 'clear_chat':
+                _clearChat();
+                break;
+              case 'view_profile':
+                _navigateToUserProfile();
+                break;
+            }
+          },
+          itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+            const PopupMenuItem<String>(
+              value: 'view_profile',
+              child: Row(
+                children: [
+                  Icon(Icons.person, size: 18),
+                  SizedBox(width: 8),
+                  Text('View Profile'),
+                ],
+              ),
+            ),
+            PopupMenuItem<String>(
+              value: 'block',
+              child: Row(
+                children: [
+                  Icon(
+                    isBlocked ? Icons.lock_open : Icons.block, 
+                    size: 18
+                  ),
+                  SizedBox(width: 8),
+                  Text(isBlocked ? 'Unblock User' : 'Block User'),
+                ],
+              ),
+            ),
+            const PopupMenuItem<String>(
+              value: 'clear_chat',
+              child: Row(
+                children: [
+                  Icon(Icons.delete_sweep, size: 18),
+                  SizedBox(width: 8),
+                  Text('Clear Chat'),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
   }
-
+  
+  // Build the search app bar
+  PreferredSizeWidget _buildSearchAppBar() {
+    return AppBar(
+      backgroundColor: Colors.white,
+      elevation: 1,
+      leading: IconButton(
+        icon: Icon(Icons.arrow_back, color: Colors.blue),
+        onPressed: _toggleSearchMode,
+      ),
+      title: Container(
+        height: 40,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        padding: EdgeInsets.symmetric(horizontal: 12),
+        child: TextField(
+          controller: _searchController,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: 'Search messages...',
+            border: InputBorder.none,
+            contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+            isDense: true,
+            filled: true,
+            fillColor: Colors.grey.shade200,
+          ),
+          onChanged: _filterMessages,
+        ),
+      ),
+    );
+  }
+  
+  // Build the selection app bar (shown when selecting messages)
+  PreferredSizeWidget _buildSelectionAppBar() {
+    return AppBar(
+      leading: IconButton(
+        icon: Icon(Icons.close),
+        onPressed: _cancelSelection,
+      ),
+      title: Text('${_selectedMessageIds.length} selected'),
+      actions: [
+        IconButton(
+          icon: Icon(Icons.delete),
+          onPressed: _selectedMessageIds.isNotEmpty ? _deleteSelectedMessages : null,
+        ),
+      ],
+    );
+  }
+  
+  // Build a message item
   Widget _buildMessageItem(dynamic message, bool isMe) {
     try {
       final messageTime = DateFormat('HH:mm').format(
@@ -1630,8 +1793,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       
       final bool isPending = message['status'] == 'pending';
       final bool isFailed = message['status'] == 'failed';
-      final bool isHighlighted = message['_id'] != null && 
-                                message['_id'].toString() == _highlightedMessageId;
+      final bool isHighlighted = message['messageId'] != null && 
+                              message['messageId'].toString() == _highlightedMessageId;
+      
+      // Check if this message is replying to a product
+      final bool replyingToProduct = message['replyTo'] != null && 
+                                message['replyTo']['type'] == 'product';
       
       return Container(
         margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
@@ -1639,45 +1806,58 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         child: Column(
           crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
-            Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.7,
-              ),
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: isHighlighted 
-                    ? (isMe ? Colors.blue.shade300 : Colors.grey.shade400) 
-                    : (isMe ? Colors.blue.shade100 : Colors.grey.shade200),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (message['replyToMessageId'] != null)
-                    _buildReplyPreview(message),
-                  Text(message['text'] ?? ''),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        messageTime,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey[600],
+            GestureDetector(
+              onTap: () {
+                // Handle click on product reply
+                if (replyingToProduct) {
+                  final productId = message['replyTo']['id'];
+                  _navigateToProduct(productId);
+                }
+              },
+              child: Container(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.7,
+                ),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isHighlighted 
+                      ? (isMe ? Colors.blue.shade300 : Colors.grey.shade400) 
+                      : (isMe ? Colors.blue.shade100 : Colors.grey.shade200),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Message replies
+                    if (message['replyTo'] != null)
+                      _buildReplyPreview(message),
+                    
+                    // Message text
+                    Text(message['text'] ?? ''),
+                    
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          messageTime,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey[600],
+                          ),
                         ),
-                      ),
-                      if (isPending) ...[
-                        const SizedBox(width: 4),
-                        Icon(Icons.access_time, size: 12, color: Colors.grey[600]),
+                        if (isPending) ...[
+                          const SizedBox(width: 4),
+                          Icon(Icons.access_time, size: 12, color: Colors.grey[600]),
+                        ],
+                        if (isFailed) ...[
+                          const SizedBox(width: 4),
+                          Icon(Icons.error_outline, size: 12, color: Colors.red),
+                        ],
                       ],
-                      if (isFailed) ...[
-                        const SizedBox(width: 4),
-                        Icon(Icons.error_outline, size: 12, color: Colors.red),
-                      ],
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
             ),
             
@@ -1703,16 +1883,114 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       );
     }
   }
-
+  
+  // Build reply preview inside a message
   Widget _buildReplyPreview(dynamic message) {
     try {
-      final replyIdString = message['replyToMessageId'].toString();
+      final replyTo = message['replyTo'];
+      if (replyTo == null) return SizedBox.shrink();
       
+      // Handle product replies
+      if (replyTo['type'] == 'product') {
+        final productId = replyTo['id'];
+        
+        return FutureBuilder<Map<String, dynamic>>(
+          future: _fetchProductDetails(productId),
+          builder: (context, snapshot) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.all(6),
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border(
+                  left: BorderSide(
+                    color: Colors.green.shade700,
+                    width: 4,
+                  ),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.shopping_bag, size: 12, color: Colors.green.shade700),
+                      SizedBox(width: 4),
+                      Text(
+                        'Product',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  if (snapshot.connectionState == ConnectionState.waiting)
+                    Text(
+                      'Loading product...',
+                      style: const TextStyle(fontSize: 12),
+                    )
+                  else if (snapshot.hasData)
+                    Row(
+                      children: [
+                        if (snapshot.data!['imageUrl'] != null)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: Image.memory(
+                              base64Decode(snapshot.data!['imageUrl']),
+                              width: 30,
+                              height: 30,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        SizedBox(width: 4),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                snapshot.data!['name'] ?? 'Product',
+                                style: const TextStyle(fontSize: 12),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                '₹${snapshot.data!['price'] ?? ''}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.green.shade800,
+                                  fontWeight: FontWeight.bold
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    Text(
+                      'Product unavailable',
+                      style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                    ),
+                ],
+              ),
+            );
+          },
+        );
+      }
+      
+      // Handle message replies
+      final replyToId = replyTo['id'];
       final originalMessage = messages.firstWhere(
-        (m) => m['_id'] != null && m['_id'].toString() == replyIdString,
+        (m) => m['messageId'] != null && m['messageId'].toString() == replyToId.toString(),
         orElse: () => {'text': 'Original message not found', 'sender': currentUserId},
       );
-
+      
       final messageText = originalMessage['text'] ?? 'Message unavailable';
       
       bool isOriginalSenderMe = false;
@@ -1724,18 +2002,16 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         }
       }
       
-      final isCurrentSenderMe = message['sender'].toString() == currentUserId.toString();
-      
       return GestureDetector(
         onTap: () {
-          _scrollToMessage(replyIdString);
+          _scrollToMessage(replyToId.toString());
         },
         child: Container(
           margin: const EdgeInsets.only(bottom: 6),
           padding: const EdgeInsets.all(6),
           width: double.infinity,
           decoration: BoxDecoration(
-            color: isCurrentSenderMe ? Colors.blue.shade200 : Colors.grey.shade300,
+            color: Colors.black.withOpacity(0.05),
             borderRadius: BorderRadius.circular(8),
             border: Border(
               left: BorderSide(
@@ -1782,5 +2058,42 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         ),
       );
     }
+  }
+  
+  Widget _buildDateHeader(String text) {
+    return Container(
+      margin: EdgeInsets.symmetric(vertical: 12),
+      child: Center(
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade50,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.blue.shade800,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  bool _shouldShowDateHeader(int adjustedIndex) {
+    if (adjustedIndex == 0) return true;
+    
+    if (adjustedIndex > 0 && adjustedIndex < filteredMessages.length) {
+      final currentDate = DateTime.parse(filteredMessages[adjustedIndex]['createdAt']);
+      final prevDate = DateTime.parse(filteredMessages[adjustedIndex - 1]['createdAt']);
+      
+      return currentDate.year != prevDate.year ||
+             currentDate.month != prevDate.month ||
+             currentDate.day != prevDate.day;
+    }
+    
+    return false;
   }
 }
