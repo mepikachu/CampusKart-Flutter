@@ -49,6 +49,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   String currentUserId = '';
   String currentUserName = '';
   String? _lastFetchedMessageId; // Track last fetched message ID
+  String? _lastReadMessageId; // Track last read message ID
+  
+  int _newMessagesCount = 0; // Count of new unread messages
   
   Timer? _refreshTimer;
   String? _highlightedMessageId;
@@ -80,6 +83,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _loadUserInfo();
     _loadLocalBlockStatus();
     _loadLastMessageId();
+    _loadLastReadMessageId();
     _loadLocalMessages();
     _checkIfBlocked();
     _loadPartnerProfilePicture();
@@ -102,7 +106,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     
     // Set up periodic refresh
     _refreshTimer = Timer.periodic(
-      const Duration(seconds: 10),
+      const Duration(seconds: 2),
       (_) {
         if (_initialLoadComplete) {
           _fetchNewMessages();
@@ -111,7 +115,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       },
     );
     
-    // Add scroll listener for showing scroll-to-bottom button
+    // Add scroll listener for showing scroll-to-bottom button and tracking read messages
     _scrollController.addListener(_handleScroll);
   }
 
@@ -124,6 +128,58 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _scrollController.dispose();
     _refreshTimer?.cancel();
     super.dispose();
+  }
+  
+  // Load last read message ID from storage
+  Future<void> _loadLastReadMessageId() async {
+    try {
+      final lastReadId = await _secureStorage.read(key: 'last_read_${widget.conversationId}');
+      if (lastReadId != null) {
+        _lastReadMessageId = lastReadId;
+      }
+    } catch (e) {
+      print('Error loading last read message ID: $e');
+    }
+  }
+  
+  // Save last read message ID to storage
+  Future<void> _saveLastReadMessageId(String messageId) async {
+    try {
+      await _secureStorage.write(key: 'last_read_${widget.conversationId}', value: messageId);
+      _lastReadMessageId = messageId;
+      
+      // Also save to the format used by chat_list.dart
+      await _secureStorage.write(key: 'lastReadMessageIds', 
+        value: json.encode({widget.conversationId: messageId}));
+    } catch (e) {
+      print('Error saving last read message ID: $e');
+    }
+  }
+  
+  // Mark messages as read up to a specific message
+  void _markMessagesAsRead() {
+    if (messages.isEmpty) return;
+    
+    try {
+      // Find the newest visible message
+      if (_scrollController.hasClients && 
+          _scrollController.position.pixels <= _scrollController.position.minScrollExtent + 100) {
+        // We're at or near the bottom, mark latest message as read
+        final latestMessage = messages.last;
+        final latestMessageId = latestMessage['messageId'].toString();
+        
+        if (_lastReadMessageId != latestMessageId) {
+          _saveLastReadMessageId(latestMessageId);
+          
+          // Reset new messages count if at bottom
+          setState(() {
+            _newMessagesCount = 0;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error marking messages as read: $e');
+    }
   }
 
   // Load last message ID from storage
@@ -202,12 +258,22 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     );
   }
 
-  // Scroll listener for showing scroll-to-bottom button
+  // Scroll listener for showing scroll-to-bottom button and tracking read messages
   void _handleScroll() {
     if (_scrollController.hasClients) {
+      final bool wasAtBottom = !showScrollToBottom;
+      
       setState(() {
         showScrollToBottom = _scrollController.position.pixels > 300;
       });
+      
+      // If we've scrolled to the bottom, mark messages as read
+      if (wasAtBottom && !showScrollToBottom) {
+        _markMessagesAsRead();
+        setState(() {
+          _newMessagesCount = 0;
+        });
+      }
     }
   }
 
@@ -219,6 +285,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeOut,
       );
+      
+      // After scrolling to bottom, mark messages as read and reset counter
+      setState(() {
+        _newMessagesCount = 0;
+      });
+      
+      _markMessagesAsRead();
     }
   }
 
@@ -409,9 +482,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             messages = loadedMessages;
             filteredMessages = messages;
             processedMessageIds = localProcessedIds;
-            if (isLoading && messages.isNotEmpty) {
-              isLoading = false;
-            }
+            // Set loading to false regardless of whether messages are empty or not
+            isLoading = false;
           });
         }
         
@@ -419,12 +491,15 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _fetchMessages();
           _initialLoadComplete = true;
-          if (_scrollController.hasClients) {
+          if (_scrollController.hasClients && messages.isNotEmpty) {
             _scrollController.animateTo(
               0,
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeOut,
             );
+            
+            // Mark messages as read when loaded and scrolled to bottom
+            _markMessagesAsRead();
           }
         });
       } else {
@@ -661,6 +736,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         
+        // Set loading to false regardless of whether there are messages
+        if (mounted) {
+          setState(() {
+            isLoading = false;
+          });
+        }
+        
         if (data['success']) {
           final List newMessages = data['messages'] ?? [];
           
@@ -683,7 +765,15 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               }
             }
             
-            if (messagesToAdd.isNotEmpty) {
+            if (messagesToAdd.isNotEmpty && mounted) {
+              // Check if user is at bottom before adding messages
+              bool isAtBottom = false;
+              if (_scrollController.hasClients) {
+                isAtBottom = _scrollController.position.pixels <= 10;
+              } else {
+                isAtBottom = true; // If no scroll position yet, assume at bottom
+              }
+              
               setState(() {
                 messages = [...messages, ...messagesToAdd];
                 // Sort messages by creation time
@@ -699,22 +789,41 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   _filterMessages(_searchController.text);
                 }
                 
-                isLoading = false;
+                // If not at bottom, increment new messages count
+                if (!isAtBottom) {
+                  _newMessagesCount += messagesToAdd.length;
+                }
               });
               
               if (highestId > 0) {
                 await _saveLastMessageId(highestId.toString());
               }
               
+              // If at bottom, mark messages as read
+              if (isAtBottom && messages.isNotEmpty) {
+                final latestMessageId = messages.last['messageId'].toString();
+                await _saveLastReadMessageId(latestMessageId);
+              }
+              
               await _saveMessagesLocally();
             }
           }
         }
+      } else {
+        // Set loading to false on error
+        if (mounted) {
+          setState(() {
+            isLoading = false;
+          });
+        }
       }
     } catch (e) {
       print('Error fetching messages: $e');
+      // Set loading to false on error
       if (mounted) {
-        setState(() => isLoading = false);
+        setState(() {
+          isLoading = false;
+        });
       }
     }
   }
@@ -761,6 +870,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             }
             
             if (messagesToAdd.isNotEmpty && mounted) {
+              // Check if user is at bottom before adding new messages
+              bool isAtBottom = false;
+              if (_scrollController.hasClients) {
+                isAtBottom = _scrollController.position.pixels <= 10;
+              }
+              
               setState(() {
                 messages = [...messages, ...messagesToAdd];
                 // Sort messages by creation time
@@ -775,10 +890,21 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 } else {
                   _filterMessages(_searchController.text);
                 }
+                
+                // If not at bottom, increment new messages count
+                if (!isAtBottom) {
+                  _newMessagesCount += messagesToAdd.length;
+                }
               });
               
               if (highestId > 0) {
                 await _saveLastMessageId(highestId.toString());
+              }
+              
+              // If at bottom, mark messages as read
+              if (isAtBottom && messages.isNotEmpty) {
+                final latestMessageId = messages.last['messageId'].toString();
+                await _saveLastReadMessageId(latestMessageId);
               }
               
               await _saveMessagesLocally();
@@ -821,6 +947,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     final replyToData = _replyingTo;
     
     setState(() {
+      // Set isLoading to false if this is the first message
+      if (isLoading) {
+        isLoading = false;
+      }
+      
       messages = [...messages, tempMessage];
       processedMessageIds.add(tempId);
       
@@ -899,6 +1030,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             
             // Save the last message ID
             await _saveLastMessageId(serverMessageId.toString());
+            
+            // Also mark as read since user is sending it
+            await _saveLastReadMessageId(serverMessageId.toString());
             
             // Save updated messages
             await _saveMessagesLocally();
@@ -1267,158 +1401,188 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               Expanded(
                 child: isLoading
                     ? const Center(child: CircularProgressIndicator())
-                    : ListView.builder(
-                        controller: _scrollController,
-                        reverse: true,
-                        itemCount: filteredMessages.length,
-                        // Add findChildIndexCallback for better performance with reversed list
-                        findChildIndexCallback: (key) {
-                          final ValueKey valueKey = key as ValueKey;
-                          final String messageId = valueKey.value;
-                          return filteredMessages.indexWhere((msg) => 
-                            msg['messageId'].toString() == messageId
-                          );
-                        },
-                        itemBuilder: (context, index) {
-                          try {
-                            final int adjustedIndex = filteredMessages.length - 1 - index;
-                            if (adjustedIndex < 0 || adjustedIndex >= filteredMessages.length) {
-                              return SizedBox.shrink();
-                            }
-                            
-                            final message = filteredMessages[adjustedIndex];
-                            final messageId = message['messageId'].toString();
-                            final bool isMe = message['sender'] == currentUserId;
-                            final double offset = _swipingMessageId == messageId ? _messageSwipeOffset : 0.0;
-                            
-                            // Show date header if needed
-                            final bool showDateHeader = _shouldShowDateHeader(adjustedIndex);
-                            final String dateHeaderText = showDateHeader 
-                                ? _formatDateForHeader(DateTime.parse(message['createdAt']))
-                                : '';
-                            
-                            return Column(
+                    : messages.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                if (showDateHeader)
-                                  _buildDateHeader(dateHeaderText),
-                                
-                                // Use a key for each message to maintain identity during rebuilds
-                                Container(
-                                  key: ValueKey(messageId),
-                                  width: double.infinity, // Full width container
-                                  child: GestureDetector(
-                                    behavior: HitTestBehavior.translucent, // Important for full width detection
-                                    onLongPress: () => _toggleMessageSelection(messageId),
-                                    onTap: () {
-                                      if (_isInSelectionMode) {
-                                        _toggleMessageSelection(messageId);
-                                      }
-                                    },
-                                    onHorizontalDragStart: (details) {
-                                      if (!_isInSelectionMode && isMe) {
-                                        setState(() {
-                                          _swipingMessageId = messageId;
-                                          _messageSwipeOffset = 0.0;
-                                        });
-                                      }
-                                    },
-                                    onHorizontalDragUpdate: (details) {
-                                      if (_swipingMessageId == messageId) {
-                                        setState(() {
-                                          _messageSwipeOffset += details.delta.dx;
-                                          if (_messageSwipeOffset > 100) {
-                                            _messageSwipeOffset = 100;
-                                          } else if (_messageSwipeOffset < 0) {
-                                            _messageSwipeOffset = 0;
-                                          }
-                                        });
-                                      }
-                                    },
-                                    onHorizontalDragEnd: (details) {
-                                      if (_swipingMessageId == messageId) {
-                                        if (_messageSwipeOffset >= _replyThreshold) {
-                                          _handleReply(message);
-                                        }
-                                        _resetSwipe();
-                                      }
-                                    },
-                                    onHorizontalDragCancel: () {
-                                      if (_swipingMessageId == messageId) {
-                                        _resetSwipe();
-                                      }
-                                    },
-                                    child: Stack(
-                                      children: [
-                                        // Message alignment
-                                        Row(
-                                          mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-                                          children: [
-                                            AnimatedContainer(
-                                              duration: const Duration(milliseconds: 50),
-                                              transform: Matrix4.translationValues(offset, 0, 0),
-                                              child: _buildMessageItem(message, isMe),
-                                            ),
-                                          ],
-                                        ),
-                                        
-                                        // Swipe arrow indicator
-                                        if (_swipingMessageId == messageId && offset > 0)
-                                          Positioned(
-                                            left: 10,
-                                            top: 0,
-                                            bottom: 0,
-                                            child: Center(
-                                              child: Container(
-                                                padding: EdgeInsets.all(8),
-                                                decoration: BoxDecoration(
-                                                  shape: BoxShape.circle,
-                                                  color: Colors.blue.withOpacity(0.2),
-                                                ),
-                                                child: const Icon(
-                                                  Icons.reply,
-                                                  color: Colors.blue,
-                                                  size: 20,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        
-                                        // Selection indicator
-                                        if (_isInSelectionMode)
-                                          Positioned(
-                                            top: 0,
-                                            left: isMe ? null : 0,
-                                            right: isMe ? 0 : null,
-                                            child: Container(
-                                              padding: EdgeInsets.all(2),
-                                              decoration: BoxDecoration(
-                                                color: _selectedMessageIds.contains(messageId)
-                                                    ? Colors.blue
-                                                    : Colors.white,
-                                                shape: BoxShape.circle,
-                                                border: Border.all(color: Colors.blue),
-                                              ),
-                                              child: Icon(
-                                                Icons.check,
-                                                size: 16,
-                                                color: _selectedMessageIds.contains(messageId)
-                                                    ? Colors.white
-                                                    : Colors.transparent,
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
+                                Icon(
+                                  Icons.chat_bubble_outline,
+                                  size: 80,
+                                  color: Colors.grey.shade400,
+                                ),
+                                SizedBox(height: 16),
+                                Text(
+                                  'No messages yet',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                                SizedBox(height: 8),
+                                Text(
+                                  'Start the conversation!',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey.shade500,
                                   ),
                                 ),
                               ],
-                            );
-                          } catch (e) {
-                            print('Error building message at index $index: $e');
-                            return Container(height: 0);
-                          }
-                        },
-                      ),
+                            ),
+                          )
+                        : ListView.builder(
+                            controller: _scrollController,
+                            reverse: true,
+                            itemCount: filteredMessages.length,
+                            // Add findChildIndexCallback for better performance with reversed list
+                            findChildIndexCallback: (key) {
+                              final ValueKey valueKey = key as ValueKey;
+                              final String messageId = valueKey.value;
+                              return filteredMessages.indexWhere((msg) => 
+                                msg['messageId'].toString() == messageId
+                              );
+                            },
+                            itemBuilder: (context, index) {
+                              try {
+                                final int adjustedIndex = filteredMessages.length - 1 - index;
+                                if (adjustedIndex < 0 || adjustedIndex >= filteredMessages.length) {
+                                  return SizedBox.shrink();
+                                }
+                                
+                                final message = filteredMessages[adjustedIndex];
+                                final messageId = message['messageId'].toString();
+                                final bool isMe = message['sender'] == currentUserId;
+                                final double offset = _swipingMessageId == messageId ? _messageSwipeOffset : 0.0;
+                                
+                                // Show date header if needed
+                                final bool showDateHeader = _shouldShowDateHeader(adjustedIndex);
+                                final String dateHeaderText = showDateHeader 
+                                    ? _formatDateForHeader(DateTime.parse(message['createdAt']))
+                                    : '';
+                                
+                                return Column(
+                                  children: [
+                                    if (showDateHeader)
+                                      _buildDateHeader(dateHeaderText),
+                                    
+                                    // Use a key for each message to maintain identity during rebuilds
+                                    Container(
+                                      key: ValueKey(messageId),
+                                      width: double.infinity, // Full width container
+                                      child: GestureDetector(
+                                        behavior: HitTestBehavior.translucent, // Important for full width detection
+                                        onLongPress: () => _toggleMessageSelection(messageId),
+                                        onTap: () {
+                                          if (_isInSelectionMode) {
+                                            _toggleMessageSelection(messageId);
+                                          }
+                                        },
+                                        onHorizontalDragStart: (details) {
+                                          // Allow swiping for all messages in non-selection mode
+                                          if (!_isInSelectionMode) {
+                                            setState(() {
+                                              _swipingMessageId = messageId;
+                                              _messageSwipeOffset = 0.0;
+                                            });
+                                          }
+                                        },
+                                        onHorizontalDragUpdate: (details) {
+                                          if (_swipingMessageId == messageId) {
+                                            setState(() {
+                                              _messageSwipeOffset += details.delta.dx;
+                                              if (_messageSwipeOffset > 100) {
+                                                _messageSwipeOffset = 100;
+                                              } else if (_messageSwipeOffset < 0) {
+                                                _messageSwipeOffset = 0;
+                                              }
+                                            });
+                                          }
+                                        },
+                                        onHorizontalDragEnd: (details) {
+                                          if (_swipingMessageId == messageId) {
+                                            if (_messageSwipeOffset >= _replyThreshold) {
+                                              _handleReply(message);
+                                            }
+                                            _resetSwipe();
+                                          }
+                                        },
+                                        onHorizontalDragCancel: () {
+                                          if (_swipingMessageId == messageId) {
+                                            _resetSwipe();
+                                          }
+                                        },
+                                        child: Stack(
+                                          children: [
+                                            // Message alignment
+                                            Row(
+                                              mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+                                              children: [
+                                                AnimatedContainer(
+                                                  duration: const Duration(milliseconds: 50),
+                                                  transform: Matrix4.translationValues(offset, 0, 0),
+                                                  child: _buildMessageItem(message, isMe),
+                                                ),
+                                              ],
+                                            ),
+                                            
+                                            // Swipe arrow indicator
+                                            if (_swipingMessageId == messageId && offset > 0)
+                                              Positioned(
+                                                left: 10,
+                                                top: 0,
+                                                bottom: 0,
+                                                child: Center(
+                                                  child: Container(
+                                                    padding: EdgeInsets.all(8),
+                                                    decoration: BoxDecoration(
+                                                      shape: BoxShape.circle,
+                                                      color: Colors.blue.withOpacity(0.2),
+                                                    ),
+                                                    child: const Icon(
+                                                      Icons.reply,
+                                                      color: Colors.blue,
+                                                      size: 20,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            
+                                            // Selection indicator
+                                            if (_isInSelectionMode)
+                                              Positioned(
+                                                top: 0,
+                                                left: isMe ? null : 0,
+                                                right: isMe ? 0 : null,
+                                                child: Container(
+                                                  padding: EdgeInsets.all(2),
+                                                  decoration: BoxDecoration(
+                                                    color: _selectedMessageIds.contains(messageId)
+                                                        ? Colors.blue
+                                                        : Colors.white,
+                                                    shape: BoxShape.circle,
+                                                    border: Border.all(color: Colors.blue),
+                                                  ),
+                                                  child: Icon(
+                                                    Icons.check,
+                                                    size: 16,
+                                                    color: _selectedMessageIds.contains(messageId)
+                                                        ? Colors.white
+                                                        : Colors.transparent,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              } catch (e) {
+                                print('Error building message at index $index: $e');
+                                return Container(height: 0);
+                              }
+                            },
+                          ),
               ),
               if (isBlocked)
                 Container(
@@ -1606,19 +1770,48 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 ),
             ],
           ),
-          // Scroll to bottom button
+          // Scroll to bottom button with unread count
           if (showScrollToBottom)
             Positioned(
               right: 16,
               bottom: 80,
-              child: FloatingActionButton(
-                mini: true,
-                backgroundColor: Colors.blue.shade100,
-                child: Icon(
-                  Icons.arrow_downward,
-                  color: Colors.blue.shade800,
-                ),
-                onPressed: _scrollToBottom,
+              child: Stack(
+                children: [
+                  FloatingActionButton(
+                    mini: true,
+                    backgroundColor: Colors.blue.shade100,
+                    child: Icon(
+                      Icons.arrow_downward,
+                      color: Colors.blue.shade800,
+                    ),
+                    onPressed: _scrollToBottom,
+                  ),
+                  if (_newMessagesCount > 0)
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      child: Container(
+                        padding: EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: BoxConstraints(
+                          minWidth: 20,
+                          minHeight: 20,
+                        ),
+                        child: Text(
+                          _newMessagesCount.toString(),
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
         ],
