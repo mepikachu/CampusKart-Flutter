@@ -365,6 +365,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
               children: [
                 _buildImagePreviews(),
                 const SizedBox(height: 24),
+                // Read-only product name
                 TextFormField(
                   controller: _nameController,
                   decoration: InputDecoration(
@@ -373,10 +374,10 @@ class _EditProductScreenState extends State<EditProductScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  validator: (value) => 
-                      (value?.isEmpty ?? true) ? "Enter product name" : null,
+                  enabled: false, // Make it read-only
                 ),
                 const SizedBox(height: 16),
+                // Editable description
                 TextFormField(
                   controller: _descriptionController,
                   decoration: InputDecoration(
@@ -391,6 +392,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
                       (value?.isEmpty ?? true) ? "Enter description" : null,
                 ),
                 const SizedBox(height: 16),
+                // Editable price and read-only category
                 Row(
                   children: [
                     Expanded(
@@ -412,27 +414,15 @@ class _EditProductScreenState extends State<EditProductScreen> {
                     const SizedBox(width: 16),
                     Expanded(
                       flex: 3,
-                      child: DropdownButtonFormField<String>(
-                        value: _selectedCategory,
+                      child: TextFormField(
+                        initialValue: _selectedCategory[0].toUpperCase() + _selectedCategory.substring(1),
                         decoration: InputDecoration(
                           labelText: "Category",
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        items: _categories.map((cat) {
-                          return DropdownMenuItem(
-                            value: cat,
-                            child: Text(
-                              cat[0].toUpperCase() + cat.substring(1),
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => _selectedCategory = value);
-                          }
-                        },
+                        enabled: false, // Make it read-only
                       ),
                     ),
                   ],
@@ -443,7 +433,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
                   height: 54,
                   margin: const EdgeInsets.only(bottom: 16),
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _updateProduct,
+                    onPressed: _isLoading || _existingImages.isEmpty ? null : _updateProduct,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       shape: RoundedRectangleBorder(
@@ -452,9 +442,11 @@ class _EditProductScreenState extends State<EditProductScreen> {
                     ),
                     child: _isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
-                        : const Text(
-                            'Save Changes',
-                            style: TextStyle(
+                        : Text(
+                            _existingImages.isEmpty 
+                                ? 'At least one image required'
+                                : 'Save Changes',
+                            style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                             ),
