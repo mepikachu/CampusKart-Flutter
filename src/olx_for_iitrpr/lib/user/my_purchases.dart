@@ -29,9 +29,8 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       if (authCookie == null) throw Exception('Not authenticated');
 
-      // Assuming /api/me returns the user's info including purchasedProducts.
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/me'),
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/my-purchases'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie,
@@ -40,7 +39,7 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
       final responseData = json.decode(response.body);
       if (response.statusCode == 200 && responseData['success'] == true) {
         setState(() {
-          purchases = responseData['user']['purchasedProducts'] ?? [];
+          purchases = responseData['products'] ?? [];
           errorMessage = '';
         });
       } else {
@@ -108,7 +107,7 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
                 const SizedBox(height: 8),
                 // Price display
                 Text(
-                  '₹${product['price']?.toString() ?? '0'}',
+                  'Purchased for: ₹${product['transactionPrice']?.toString() ?? product['price']?.toString() ?? '0'}',
                   style: const TextStyle(
                     fontSize: 16,
                     color: Colors.green,
@@ -116,7 +115,21 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                // Optionally, you may display seller info or purchase date
+                Text(
+                  'Purchased on: ${DateTime.parse(product['transactionDate']).toString().split('.')[0]}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Seller: ${product['seller']?['userName'] ?? 'Unknown'}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                ),
               ],
             ),
           ),
