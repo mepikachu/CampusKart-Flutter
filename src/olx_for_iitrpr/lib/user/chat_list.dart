@@ -28,6 +28,10 @@ class _ChatListScreenState extends State<ChatListScreen> {
   String currentUserName = '';
   String currentUserId = '';
   
+  // Selection mode variables
+  bool _isSelectionMode = false;
+  List<String> _selectedConversationIds = [];
+  
   // Access chat refresh service
   final ChatRefreshService _chatRefreshService = ChatRefreshService();
   
@@ -49,8 +53,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
   
   void _setupRefreshListener() {
-    // We'll check for updates every 2 seconds
-    _refreshSubscription = Stream.periodic(const Duration(seconds: 2)).listen((_) async {
+    // We'll check for updates every 4 seconds
+    _refreshSubscription = Stream.periodic(const Duration(seconds: 4)).listen((_) async {
       final prefs = await SharedPreferences.getInstance();
       final lastSync = prefs.getString('last_chat_sync');
       
@@ -81,6 +85,108 @@ class _ChatListScreenState extends State<ChatListScreen> {
   void dispose() {
     _refreshSubscription?.cancel();
     super.dispose();
+  }
+
+  // Format date to show "Today", "Yesterday", day of week, or full date
+  String _formatMessageDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final messageDate = DateTime(date.year, date.month, date.day);
+    
+    if (messageDate == today) {
+      return DateFormat('HH:mm').format(date); // Just time for today
+    } else if (messageDate == yesterday) {
+      return 'Yesterday';
+    } else if (today.difference(messageDate).inDays < 7) {
+      // Within the last week - show day of week
+      return DateFormat('EEEE').format(date); // e.g. "Monday"
+    } else {
+      // Older messages - show date
+      return DateFormat('MMM d').format(date); // e.g. "Apr 5"
+    }
+  }
+
+  // Toggle selection mode
+  void _toggleSelectionMode(String conversationId) {
+    setState(() {
+      if (_isSelectionMode) {
+        if (_selectedConversationIds.contains(conversationId)) {
+          _selectedConversationIds.remove(conversationId);
+          
+          if (_selectedConversationIds.isEmpty) {
+            _isSelectionMode = false;
+          }
+        } else {
+          _selectedConversationIds.add(conversationId);
+        }
+      } else {
+        _isSelectionMode = true;
+        _selectedConversationIds.add(conversationId);
+      }
+    });
+  }
+
+  // Cancel selection mode
+  void _cancelSelection() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedConversationIds.clear();
+    });
+  }
+
+  // Delete selected conversations
+  Future<void> _deleteSelectedConversations() async {
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete ${_selectedConversationIds.length} ${_selectedConversationIds.length == 1 ? 'conversation' : 'conversations'}?'),
+        content: Text('This will remove ${_selectedConversationIds.length == 1 ? 'this conversation' : 'these conversations'} from your device. This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    ) ?? false;
+
+    if (!confirmed) return;
+
+    try {
+      // Remove selected conversations locally
+      setState(() {
+        conversations.removeWhere((conversation) => 
+          _selectedConversationIds.contains(conversation['_id']));
+        
+        // Exit selection mode
+        _isSelectionMode = false;
+        _selectedConversationIds.clear();
+      });
+
+      // Delete conversation messages from local storage
+      for (var conversationId in _selectedConversationIds) {
+        await _secureStorage.delete(key: 'messages_$conversationId');
+      }
+
+      // Also update conversations list in storage
+      await _saveConversationsLocally();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Deleted ${_selectedConversationIds.length == 1 ? 'conversation' : 'conversations'} successfully')),
+      );
+    } catch (e) {
+      print('Error deleting conversations: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error deleting conversations: $e')),
+      );
+    }
   }
 
   Future<void> _loadCurrentUser() async {
@@ -117,6 +223,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
           currentUserName = name;
         });
       }
+      print("-------------------------------------------------------------------");
+      print(id);
+      print(name);
     } catch (e) {
       print('Error loading user: $e');
     }
@@ -551,10 +660,25 @@ class _ChatListScreenState extends State<ChatListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Chats'),
-        // Removed reload button as requested
-      ),
+      appBar: _isSelectionMode
+          ? AppBar(
+              title: Text('${_selectedConversationIds.length} selected'),
+              leading: IconButton(
+                icon: Icon(Icons.close),
+                onPressed: _cancelSelection,
+              ),
+              actions: [
+                IconButton(
+                  icon: Icon(Icons.delete),
+                  onPressed: _selectedConversationIds.isNotEmpty 
+                      ? _deleteSelectedConversations 
+                      : null,
+                ),
+              ],
+            )
+          : AppBar(
+              title: const Text('Chats'),
+            ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : errorMessage.isNotEmpty && conversations.isEmpty
@@ -614,29 +738,44 @@ class _ChatListScreenState extends State<ChatListScreen> {
                           final lastMessage = conversation['messages']?.isNotEmpty == true
                               ? conversation['messages'].last['text']
                               : 'No messages';
-                          final lastMessageTime = conversation['messages']?.isNotEmpty == true
-                              ? DateFormat('HH:mm').format(
-                                  DateTime.parse(conversation['messages'].last['createdAt']))
-                              : '';
+                          
+                          // Format the date properly
+                          String lastMessageTime = '';
+                          if (conversation['messages']?.isNotEmpty == true) {
+                            final messageDate = DateTime.parse(conversation['messages'].last['createdAt']);
+                            lastMessageTime = _formatMessageDate(messageDate);
+                          }
+                          
                           final unreadCount = unreadMessageCounts[conversationId] ?? 0;
+                          final isSelected = _selectedConversationIds.contains(conversationId);
                           
                           return ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: Colors.grey.shade200,
-                              child: profilePictures.containsKey(partnerId)
-                                  ? ClipOval(
-                                      child: Image.memory(
-                                        profilePictures[partnerId]!,
-                                        width: 40,
-                                        height: 40,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    )
-                                  : Text(
-                                      title.isNotEmpty ? title[0].toUpperCase() : '?',
-                                      style: TextStyle(color: Colors.grey.shade600),
-                                    ),
-                            ),
+                            selected: isSelected,
+                            selectedTileColor: Colors.blue.withOpacity(0.1),
+                            leading: _isSelectionMode
+                                ? Checkbox(
+                                    value: isSelected,
+                                    onChanged: (bool? value) {
+                                      _toggleSelectionMode(conversationId);
+                                    },
+                                    activeColor: Colors.blue,
+                                  )
+                                : CircleAvatar(
+                                    backgroundColor: Colors.grey.shade200,
+                                    child: profilePictures.containsKey(partnerId)
+                                        ? ClipOval(
+                                            child: Image.memory(
+                                              profilePictures[partnerId]!,
+                                              width: 40,
+                                              height: 40,
+                                              fit: BoxFit.cover,
+                                            ),
+                                          )
+                                        : Text(
+                                            title.isNotEmpty ? title[0].toUpperCase() : '?',
+                                            style: TextStyle(color: Colors.grey.shade600),
+                                          ),
+                                  ),
                             title: Text(
                               title,
                               style: TextStyle(
@@ -684,29 +823,36 @@ class _ChatListScreenState extends State<ChatListScreen> {
                               ],
                             ),
                             onTap: () {
-                              // Mark as read when opening the conversation
-                              markConversationAsRead(conversationId);
-                              
-                              // Notify service that we're in chat screen
-                              _chatRefreshService.setChatScreenActive(true, conversationId);
-                              
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ChatScreen(
-                                    conversationId: conversationId,
-                                    partnerNames: title,
-                                    partnerId: partnerId,
-                                  ),
-                                ),
-                              ).then((_) {
-                                // When returning from chat screen
-                                _chatRefreshService.setChatScreenActive(false, null);
+                              if (_isSelectionMode) {
+                                _toggleSelectionMode(conversationId);
+                              } else {
+                                // Mark as read when opening the conversation
+                                markConversationAsRead(conversationId);
                                 
-                                // Sync messages and fetch updates
-                                _syncConversationsWithMessages();
-                                fetchConversations(showLoadingIndicator: false);
-                              });
+                                // Notify service that we're in chat screen
+                                _chatRefreshService.setChatScreenActive(true, conversationId);
+                                
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ChatScreen(
+                                      conversationId: conversationId,
+                                      partnerNames: title,
+                                      partnerId: partnerId,
+                                    ),
+                                  ),
+                                ).then((_) {
+                                  // When returning from chat screen
+                                  _chatRefreshService.setChatScreenActive(false, null);
+                                  
+                                  // Sync messages and fetch updates
+                                  _syncConversationsWithMessages();
+                                  fetchConversations(showLoadingIndicator: false);
+                                });
+                              }
+                            },
+                            onLongPress: () {
+                              _toggleSelectionMode(conversationId);
                             },
                           );
                         },

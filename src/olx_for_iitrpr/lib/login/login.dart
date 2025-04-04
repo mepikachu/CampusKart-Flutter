@@ -81,6 +81,22 @@ class _LoginScreenState extends State<LoginScreen> {
           await prefs.remove('identifier');
         }
 
+        if (responseBody['user'] != null) {
+          await _secureStorage.write(
+            key: 'userId',
+            value: responseBody['user']['_id'],
+          );
+          await _secureStorage.write(
+            key: 'userName',
+            value: responseBody['user']['userName'],
+          );
+        } else {
+          // In case of error atleast delete the userId and userName
+          // from secure storage to avoid confusion
+          await _secureStorage.delete(key: 'userId');
+          await _secureStorage.delete(key: 'userName');
+        }
+
         // Navigate based on role:
         final role = responseBody['user']?['role'] ?? 'user';
         // Store the role locally for session persistence:
