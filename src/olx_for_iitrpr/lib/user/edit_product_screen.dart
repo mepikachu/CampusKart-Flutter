@@ -138,6 +138,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
       request.fields['description'] = _descriptionController.text.trim();
       request.fields['price'] = _priceController.text.trim();
       request.fields['category'] = _selectedCategory;
+      request.fields['clearOffers'] = 'true'; // Add this line to clear offers
       
       // Add existing images that weren't deleted
       if (_existingImages.isNotEmpty) {
@@ -166,7 +167,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
         if (!mounted) return;
         Navigator.of(context).pop({'refresh': true});
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Product updated successfully')),
+          const SnackBar(content: Text('Product updated successfully. All existing offers have been cleared.')),
         );
       } else {
         throw Exception(responseData['error'] ?? 'Failed to update product');
