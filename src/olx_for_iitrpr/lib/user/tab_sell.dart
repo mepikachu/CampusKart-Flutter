@@ -1,10 +1,13 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http_parser/http_parser.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter/services.dart';
 
 class SellTab extends StatefulWidget {
   const SellTab({super.key});
@@ -33,21 +36,55 @@ class _SellTabState extends State<SellTab> {
   static const textPrimaryColor = Color(0xFF202124);
   static const textSecondaryColor = Color(0xFF5F6368);
 
-  // Picks multiple images using image_picker
+  Future<File?> _compressImage(File file) async {
+    try {
+      final String tempPath = (await getTemporaryDirectory()).path;
+      final String targetPath = '$tempPath/${DateTime.now().millisecondsSinceEpoch}.jpg';
+      
+      // Read the image as bytes
+      final bytes = await file.readAsBytes();
+      
+      // Write to new file
+      final File targetFile = File(targetPath);
+      await targetFile.writeAsBytes(bytes);
+      
+      return targetFile;
+    } catch (e) {
+      print('Image compression error: $e');
+      return null;
+    }
+  }
+
   Future<void> _pickImages() async {
-    final ImagePicker picker = ImagePicker();
-    final List<XFile>? pickedFiles = await picker.pickMultiImage();
-    
-    if (pickedFiles != null && pickedFiles.isNotEmpty) {
-      setState(() {
-        _images.addAll(pickedFiles.map((xfile) => File(xfile.path)));
-        if (_images.length > 5) {
-          _images = _images.sublist(0, 5); // Limit to 5 images
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Maximum 5 images allowed')),
-          );
+    if (_images.length >= 5) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Maximum 5 images allowed')),
+      );
+      return;
+    }
+
+    try {
+      final ImagePicker picker = ImagePicker();
+      final List<XFile>? pickedFiles = await picker.pickMultiImage();
+      
+      if (pickedFiles != null) {
+        for (var xFile in pickedFiles) {
+          if (_images.length >= 5) break;
+          
+          File originalFile = File(xFile.path);
+          File? processedFile = await _compressImage(originalFile);
+          
+          if (processedFile != null) {
+            setState(() {
+              _images.add(processedFile);
+            });
+          }
         }
-      });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error selecting images: ${e.toString()}')),
+      );
     }
   }
 
@@ -60,82 +97,72 @@ class _SellTabState extends State<SellTab> {
       );
       return;
     }
-    setState(() {
-      _isLoading = true;
-    });
+
+    setState(() => _isLoading = true);
 
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
-      if (authCookie == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Not authenticated")),
-        );
-        return;
-      }
+      if (authCookie == null) throw Exception("Not authenticated");
+
       final uri = Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products');
       var request = http.MultipartRequest('POST', uri);
-      // Set auth cookie header (do not manually set Content-Type)
       request.headers['auth-cookie'] = authCookie;
 
       // Add form fields
-      request.fields['name'] = _nameController.text.trim();
-      request.fields['description'] = _descriptionController.text.trim();
-      request.fields['price'] = _priceController.text.trim();
-      request.fields['category'] = _selectedCategory;
+      request.fields.addAll({
+        'name': _nameController.text.trim(),
+        'description': _descriptionController.text.trim(),
+        'price': _priceController.text.trim(),
+        'category': _selectedCategory,
+      });
 
-      // Attach images
-      for (File image in _images) {
-        var stream = http.ByteStream(image.openRead());
-        var length = await image.length();
-        var multipartFile = http.MultipartFile(
+      // Add images
+      for (var image in _images) {
+        final stream = http.ByteStream(image.openRead());
+        final length = await image.length();
+        request.files.add(http.MultipartFile(
           'images',
           stream,
           length,
           filename: image.path.split('/').last,
-          contentType: MediaType('image', 'jpeg'), // update if needed
-        );
-        request.files.add(multipartFile);
+          contentType: MediaType('image', 'jpeg'),
+        ));
       }
 
-      // Send the request and capture the response
-      final response = await request.send();
-      final responseBody = await response.stream.bytesToString();
+      final response = await request.send().timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => throw TimeoutException('Request timed out'),
+      );
+
+      final responseData = await response.stream.bytesToString();
+      final jsonResponse = json.decode(responseData);
 
       if (response.statusCode == 201) {
-        final resData = json.decode(responseBody);
-        if (resData['success'] == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Product posted successfully")),
-          );
-          // Clear form fields on success
-          _nameController.clear();
-          _descriptionController.clear();
-          _priceController.clear();
-          setState(() {
-            _images.clear();
-            _selectedCategory = _categories.first;
-          });
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(resData['error'] ?? "Product submission failed")),
-          );
-        }
-      } else {
+        _clearForm();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Server error: ${response.statusCode}")),
+          const SnackBar(content: Text('Product added successfully')),
         );
+      } else {
+        throw Exception(jsonResponse['error'] ?? 'Failed to add product');
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
+        SnackBar(content: Text('Error: ${e.toString()}')),
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _clearForm() {
+    setState(() {
+      _nameController.clear();
+      _descriptionController.clear();
+      _priceController.clear();
+      _images = [];
+      _selectedCategory = 'electronics';
+      _isLoading = false;
+    });
   }
 
   @override

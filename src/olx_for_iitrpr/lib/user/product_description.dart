@@ -26,8 +26,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   @override
   void initState() {
     super.initState();
+    print('Product data received: ${widget.product}'); // Add this debug line
     _loadCurrentUser();
-    _checkExistingOffer();
+    if (widget.product != null && widget.product['_id'] != null) {
+      _checkExistingOffer();
+    }
   }
 
   Future<void> _loadCurrentUser() async {
@@ -43,6 +46,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   }
 
   Future<void> _checkExistingOffer() async {
+    if (widget.product == null || widget.product['_id'] == null) {
+      setState(() {
+        isCheckingOffer = false;
+      });
+      return;
+    }
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
@@ -57,8 +66,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         final data = json.decode(response.body);
         if (mounted) {
           setState(() {
-            hasOffer = data['hasOffer'] ?? false;
-            currentOfferAmount = data['offerAmount']?.toDouble();
+            // If the offer was rejected (status == 'rejected'), set hasOffer to false
+            hasOffer = (data['hasOffer'] ?? false) && (data['offerStatus'] != 'rejected');
+            currentOfferAmount = hasOffer ? data['offerAmount']?.toDouble() : null;
             isCheckingOffer = false;
           });
         }
@@ -156,6 +166,19 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.product == null) {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Product Details'),
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+        ),
+        body: const Center(
+          child: Text('Product not found'),
+        ),
+      );
+    }
+
     final images = _buildImageSlides();
     
     return Scaffold(
@@ -374,42 +397,54 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           Expanded(
             child: ElevatedButton(
               onPressed: isCheckingOffer ? null : () async {
-                final offerPrice = await _showOfferDialog(
-                  initialValue: currentOfferAmount,
-                );
-                
-                if (offerPrice != null) {
-                  final authCookie = await _secureStorage.read(key: 'authCookie');
-                  final response = await http.post(
-                    Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/offers'),
-                    headers: {
-                      'Content-Type': 'application/json',
-                      'auth-cookie': authCookie ?? '',
-                    },
-                    body: json.encode({
-                      'productId': widget.product['_id'],
-                      'offerPrice': offerPrice,
-                    }),
+                try {
+                  final offerPrice = await _showOfferDialog(
+                    initialValue: currentOfferAmount,
                   );
-                  
-                  if (response.statusCode == 200) {
-                    final data = json.decode(response.body);
-                    setState(() {
-                      hasOffer = data['hasOffer'] ?? false;
-                      currentOfferAmount = offerPrice;
-                    });
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(hasOffer ? 'Offer updated successfully' : 'Offer sent successfully'),
-                      ),
+                
+                  if (offerPrice != null) {
+                    final authCookie = await _secureStorage.read(key: 'authCookie');
+                    print('Making offer: $offerPrice'); // Debug print
+                    
+                    // Fixed URL - Changed from /api/products/offers to /api/products/${widget.product['_id']}/offers
+                    final response = await http.post(
+                      Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${widget.product['_id']}/offers'),
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'auth-cookie': authCookie ?? '',
+                      },
+                      body: json.encode({
+                        'offerPrice': offerPrice,
+                      }),
                     );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Failed to send offer'),
-                      ),
-                    );
+                    
+                    print('Response status: ${response.statusCode}'); // Debug print
+                    print('Response body: ${response.body}'); // Debug print
+                    
+                    if (response.statusCode == 200) {
+                      final data = json.decode(response.body);
+                      setState(() {
+                        hasOffer = true;
+                        currentOfferAmount = offerPrice;
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Offer ${hasOffer ? 'updated' : 'sent'} successfully'),
+                        ),
+                      );
+                    } else {
+                      final errorData = json.decode(response.body);
+                      throw Exception(errorData['error'] ?? 'Failed to send offer');
+                    }
                   }
+                } catch (e) {
+                  print('Error making offer: $e');
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: Unable to make offer. Please try again.'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
                 }
               },
               style: ElevatedButton.styleFrom(
