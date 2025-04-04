@@ -1,20 +1,23 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'view_profile.dart';
 import 'product_description.dart';
 import 'product_management.dart';
+import 'home.dart';
 
 class ChatScreen extends StatefulWidget {
   final String conversationId;
   final String partnerNames;
   final String partnerId;
-  final Map<String, dynamic>? initialProduct; // For "Chat with Seller"
-
+  final Map? initialProduct; // For "Chat with Seller"
+  
   const ChatScreen({
     Key? key,
     required this.conversationId,
@@ -24,7 +27,7 @@ class ChatScreen extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  State createState() => _ChatScreenState();
 }
 
 class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
@@ -33,11 +36,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final FocusNode _messageInputFocusNode = FocusNode();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final ScrollController _scrollController = ScrollController();
-
-  List<dynamic> messages = [];
-  List<dynamic> filteredMessages = []; // For search results
-  Set<String> processedMessageIds = {}; // Track processed message IDs to prevent duplicates
   
+  // Access chat refresh service
+  final ChatRefreshService _chatRefreshService = ChatRefreshService();
+  
+  List messages = [];
+  List filteredMessages = []; // For search results
+  Set processedMessageIds = {}; // Track processed message IDs to prevent duplicates
   bool isLoading = true;
   bool isBlocked = false;
   bool isCheckedBlocked = false;
@@ -50,27 +55,36 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   String currentUserName = '';
   String? _lastFetchedMessageId; // Track last fetched message ID
   String? _lastReadMessageId; // Track last read message ID
-  
   int _newMessagesCount = 0; // Count of new unread messages
   
-  Timer? _refreshTimer;
   String? _highlightedMessageId;
-  final Map<String, GlobalKey> _messageKeys = {};
-  
+  final Map _messageKeys = {};
   String? _swipingMessageId;
   double _messageSwipeOffset = 0.0;
   final double _replyThreshold = 60.0;
   
+  // Animation controllers
   AnimationController? _swipeController;
   Animation<double>? _swipeAnimation;
+  
+  // Cache for product details to avoid redundant loading
+  final Map<String, Map<String, dynamic>> _productCache = {};
+  // Cache for product futures to prevent rebuilds and flickering
+  final Map<String, Future<Map<String, dynamic>>> _productFutureCache = {};
   
   Uint8List? partnerProfilePicture;
   
   // For message selection and deletion
-  List<String> _selectedMessageIds = [];
+  List _selectedMessageIds = [];
   
   // For reply functionality
-  Map<String, dynamic>? _replyingTo;
+  Map? _replyingTo;
+  
+  // Flag to prevent multiple haptic feedback
+  bool _hapticFeedbackTriggered = false;
+  
+  // StreamSubscription to listen for updates
+  StreamSubscription? _refreshSubscription;
 
   @override
   void initState() {
@@ -79,6 +93,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(milliseconds: 200),
     );
+    
+    _swipeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(_swipeController!);
     
     _loadUserInfo();
     _loadLocalBlockStatus();
@@ -91,7 +107,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     // Handle initial product from "Chat with Seller"
     if (widget.initialProduct != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        // Instead of sending a product message, set it as replyingTo
         setState(() {
           _replyingTo = {
             'id': widget.initialProduct!['productId'],
@@ -99,82 +114,122 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             'text': widget.initialProduct!['name'] ?? 'Product',
           };
         });
+        
         // Focus the text field for typing
         FocusScope.of(context).requestFocus(_messageInputFocusNode);
       });
     }
     
-    // Set up periodic refresh
-    _refreshTimer = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) {
-        if (_initialLoadComplete) {
-          _fetchNewMessages();
-          _checkIfBlocked();
-        }
-      },
-    );
+    // Notify the refresh service that the chat screen is active
+    _chatRefreshService.setChatScreenActive(true, widget.conversationId);
     
     // Add scroll listener for showing scroll-to-bottom button and tracking read messages
     _scrollController.addListener(_handleScroll);
+    
+    // Setup periodic check for new messages from the service
+    _setupRefreshListener();
+  }
+  
+  void _setupRefreshListener() {
+    // Check for message updates every 500ms
+    _refreshSubscription = Stream.periodic(const Duration(milliseconds: 500)).listen((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      final lastSync = prefs.getString('last_message_sync_${widget.conversationId}');
+      
+      if (lastSync != null) {
+        final lastSyncTime = DateTime.parse(lastSync);
+        final lastChecked = prefs.getString('last_message_checked_${widget.conversationId}');
+        
+        if (lastChecked == null || 
+            DateTime.parse(lastChecked).isBefore(lastSyncTime)) {
+          // New messages available, refresh
+          await _fetchNewMessages();
+          // Update last checked timestamp
+          await prefs.setString(
+            'last_message_checked_${widget.conversationId}', 
+            DateTime.now().toIso8601String()
+          );
+        }
+      }
+    });
   }
 
   @override
   void dispose() {
+    // Notify the refresh service that the chat screen is no longer active
+    _chatRefreshService.setChatScreenActive(false, null);
+    
+    _refreshSubscription?.cancel();
     _swipeController?.dispose();
     _messageController.dispose();
     _searchController.dispose();
     _messageInputFocusNode.dispose();
     _scrollController.dispose();
-    _refreshTimer?.cancel();
     super.dispose();
   }
-  
+
   // Load last read message ID from storage
   Future<void> _loadLastReadMessageId() async {
     try {
-      final lastReadId = await _secureStorage.read(key: 'last_read_${widget.conversationId}');
-      if (lastReadId != null) {
-        _lastReadMessageId = lastReadId;
+      final json = await _secureStorage.read(key: 'lastReadMessageIds');
+      if (json != null) {
+        final Map<String, dynamic> data = Map<String, dynamic>.from(jsonDecode(json));
+        if (data.containsKey(widget.conversationId)) {
+          setState(() {
+            _lastReadMessageId = data[widget.conversationId];
+          });
+        }
       }
     } catch (e) {
       print('Error loading last read message ID: $e');
     }
   }
-  
-  // Save last read message ID to storage
+
+  // Save last read message ID to storage in a format usable by both screens
   Future<void> _saveLastReadMessageId(String messageId) async {
     try {
-      await _secureStorage.write(key: 'last_read_${widget.conversationId}', value: messageId);
+      // Load existing data
+      final json = await _secureStorage.read(key: 'lastReadMessageIds');
+      Map<String, dynamic> data = {};
+      
+      if (json != null) {
+        data = Map<String, dynamic>.from(jsonDecode(json));
+      }
+      
+      // Update with new message ID
+      data[widget.conversationId] = messageId;
       _lastReadMessageId = messageId;
       
-      // Also save to the format used by chat_list.dart
-      await _secureStorage.write(key: 'lastReadMessageIds', 
-        value: json.encode({widget.conversationId: messageId}));
+      // Save back
+      await _secureStorage.write(
+        key: 'lastReadMessageIds',
+        value: jsonEncode(data),
+      );
+      
+      // Update message counters
+      setState(() {
+        _newMessagesCount = 0;
+      });
     } catch (e) {
       print('Error saving last read message ID: $e');
     }
   }
-  
+
   // Mark messages as read up to a specific message
   void _markMessagesAsRead() {
     if (messages.isEmpty) return;
     
     try {
       // Find the newest visible message
-      if (_scrollController.hasClients && 
+      if (_scrollController.hasClients &&
           _scrollController.position.pixels <= _scrollController.position.minScrollExtent + 100) {
+        
         // We're at or near the bottom, mark latest message as read
         final latestMessage = messages.last;
         final latestMessageId = latestMessage['messageId'].toString();
         
         if (_lastReadMessageId != latestMessageId) {
           _saveLastReadMessageId(latestMessageId);
-          
-          // Reset new messages count if at bottom
-          setState(() {
-            _newMessagesCount = 0;
-          });
         }
       }
     } catch (e) {
@@ -235,12 +290,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             setState(() {
               partnerProfilePicture = response.bodyBytes;
             });
-            // Cache the profile picture
-            await _secureStorage.write(
-              key: 'profile_pic_${widget.partnerId}',
-              value: base64Encode(response.bodyBytes),
-            );
           }
+          
+          // Cache the profile picture
+          await _secureStorage.write(
+            key: 'profile_pic_${widget.partnerId}',
+            value: base64Encode(response.bodyBytes),
+          );
         }
       }
     } catch (e) {
@@ -290,7 +346,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       setState(() {
         _newMessagesCount = 0;
       });
-      
       _markMessagesAsRead();
     }
   }
@@ -342,12 +397,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
+  // Reset swipe with animation
   void _resetSwipe() {
     if (_swipingMessageId != null) {
       _swipeController?.reverse().then((_) {
         setState(() {
           _swipingMessageId = null;
           _messageSwipeOffset = 0.0;
+          _hapticFeedbackTriggered = false;
         });
       });
     }
@@ -431,6 +488,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             isCheckedBlocked = true;
           });
           _saveBlockStatus(serverBlocked);
+          
           if (wasBlocked != serverBlocked) {
             _fetchMessages();
           }
@@ -464,13 +522,15 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     });
   }
 
+  // Load messages from local storage
   Future<void> _loadLocalMessages() async {
     try {
       final messagesJson = await _secureStorage.read(key: 'messages_${widget.conversationId}');
       if (messagesJson != null) {
         final loadedMessages = json.decode(messagesJson);
+        
         // Initialize the set of processed message IDs
-        Set<String> localProcessedIds = {};
+        Set localProcessedIds = {};
         for (var msg in loadedMessages) {
           if (msg['messageId'] != null) {
             localProcessedIds.add(msg['messageId'].toString());
@@ -482,7 +542,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             messages = loadedMessages;
             filteredMessages = messages;
             processedMessageIds = localProcessedIds;
-            // Set loading to false regardless of whether messages are empty or not
             isLoading = false;
           });
         }
@@ -491,6 +550,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _fetchMessages();
           _initialLoadComplete = true;
+          
           if (_scrollController.hasClients && messages.isNotEmpty) {
             _scrollController.animateTo(
               0,
@@ -513,11 +573,19 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
+  // Save messages to local storage
   Future<void> _saveMessagesLocally() async {
     try {
       await _secureStorage.write(
         key: 'messages_${widget.conversationId}',
         value: json.encode(messages),
+      );
+      
+      // Update last sync timestamp for both screens
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        'last_message_sync_${widget.conversationId}', 
+        DateTime.now().toIso8601String()
       );
     } catch (e) {
       print('Error saving messages locally: $e');
@@ -529,7 +597,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     try {
       // Remove deleted messages from the local list
       setState(() {
-        messages = messages.where((msg) => 
+        messages = messages.where((msg) =>
           !_selectedMessageIds.contains(msg['messageId'].toString())
         ).toList();
         
@@ -560,7 +628,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   Future<void> _clearChat() async {
     try {
       // Confirm with the user
-      final confirmed = await showDialog<bool>(
+      final confirmed = await showDialog(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('Clear Chat'),
@@ -583,7 +651,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       
       setState(() {
         // Only remove messages sent by the current user
-        messages = messages.where((msg) => 
+        messages = messages.where((msg) =>
           msg['sender'] != currentUserId
         ).toList();
         
@@ -624,6 +692,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       
       if (messageIndex != -1) {
         final scrollIndex = messages.length - 1 - messageIndex;
+        
         _scrollController.animateTo(
           scrollIndex * 75.0,
           duration: const Duration(milliseconds: 300),
@@ -640,7 +709,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             );
           }
         });
-
+        
         Future.delayed(const Duration(milliseconds: 1500), () {
           if (mounted) {
             setState(() {
@@ -657,7 +726,38 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   // Navigate to product when clicking on product in messages
   void _navigateToProduct(String productId) async {
     try {
-      // First, get the product details
+      // First check if we have cached product details
+      if (_productCache.containsKey(productId)) {
+        final product = _productCache[productId];
+        final sellerId = product!['seller'] is String ?
+          product['seller'] :
+          product['seller']['_id'];
+        
+        if (sellerId == currentUserId) {
+          // Navigate to seller management if current user is the seller
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SellerOfferManagementScreen(
+                product: product,
+              ),
+            ),
+          );
+        } else {
+          // Navigate to product details if someone else is the seller
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ProductDetailsScreen(
+                product: product,
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      
+      // If not cached, fetch from server
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
         Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/$productId'),
@@ -671,12 +771,15 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         final data = json.decode(response.body);
         if (data['success'] && data['product'] != null) {
           final product = data['product'];
-          final sellerId = product['seller'] is String ? 
-                           product['seller'] : 
-                           product['seller']['_id'];
-                           
+          // Cache the product
+          _productCache[productId] = product;
+          
+          final sellerId = product['seller'] is String ?
+            product['seller'] :
+            product['seller']['_id'];
+          
           if (sellerId == currentUserId) {
-            // Navigate to seller management if current user is the seller
+            // Navigate to seller management
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -686,7 +789,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               ),
             );
           } else {
-            // Navigate to product details if someone else is the seller
+            // Navigate to product details
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -754,6 +857,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             for (var newMsg in newMessages) {
               if (newMsg['messageId'] != null) {
                 final msgId = newMsg['messageId'];
+                
                 if (!processedMessageIds.contains(msgId.toString())) {
                   messagesToAdd.add(newMsg);
                   processedMessageIds.add(msgId.toString());
@@ -768,6 +872,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             if (messagesToAdd.isNotEmpty && mounted) {
               // Check if user is at bottom before adding messages
               bool isAtBottom = false;
+              
               if (_scrollController.hasClients) {
                 isAtBottom = _scrollController.position.pixels <= 10;
               } else {
@@ -776,6 +881,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               
               setState(() {
                 messages = [...messages, ...messagesToAdd];
+                
                 // Sort messages by creation time
                 messages.sort((a, b) {
                   final aTime = DateTime.parse(a['createdAt']);
@@ -858,6 +964,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             for (var newMsg in newMessages) {
               if (newMsg['messageId'] != null) {
                 final msgId = newMsg['messageId'];
+                
                 if (!processedMessageIds.contains(msgId.toString())) {
                   messagesToAdd.add(newMsg);
                   processedMessageIds.add(msgId.toString());
@@ -872,12 +979,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             if (messagesToAdd.isNotEmpty && mounted) {
               // Check if user is at bottom before adding new messages
               bool isAtBottom = false;
+              
               if (_scrollController.hasClients) {
                 isAtBottom = _scrollController.position.pixels <= 10;
               }
               
               setState(() {
                 messages = [...messages, ...messagesToAdd];
+                
                 // Sort messages by creation time
                 messages.sort((a, b) {
                   final aTime = DateTime.parse(a['createdAt']);
@@ -916,8 +1025,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       print('Error fetching new messages: $e');
     }
   }
-  
-  // Send a message 
+
+  // Send a message
   Future<void> _sendMessage() async {
     final messageText = _messageController.text.trim();
     if (messageText.isEmpty) return;
@@ -926,8 +1035,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     
     // Create a temporary message with a temporary ID
     final tempId = DateTime.now().millisecondsSinceEpoch.toString();
-    
-    Map<String, dynamic> tempMessage = {
+    Map tempMessage = {
       'messageId': tempId,
       'sender': currentUserId,
       'text': messageText,
@@ -976,7 +1084,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       
       // Prepare API call parameters
-      final Map<String, dynamic> requestBody = {
+      final Map requestBody = {
         'text': messageText,
         'tempId': tempId,
       };
@@ -998,13 +1106,14 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        
         if (data['success']) {
           // Update the temporary message with the server's message ID
           final serverMessageId = data['messageId'];
           
           if (mounted) {
             setState(() {
-              final index = messages.indexWhere((m) => 
+              final index = messages.indexWhere((m) =>
                 m['messageId'] == tempId
               );
               
@@ -1013,7 +1122,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 messages[index]['messageId'] = serverMessageId;
                 
                 // Also update in filtered messages if present
-                final filteredIndex = filteredMessages.indexWhere((m) => 
+                final filteredIndex = filteredMessages.indexWhere((m) =>
                   m['messageId'] == tempId
                 );
                 
@@ -1023,20 +1132,20 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 }
               }
             });
-            
-            // Update processed message IDs
-            processedMessageIds.remove(tempId);
-            processedMessageIds.add(serverMessageId.toString());
-            
-            // Save the last message ID
-            await _saveLastMessageId(serverMessageId.toString());
-            
-            // Also mark as read since user is sending it
-            await _saveLastReadMessageId(serverMessageId.toString());
-            
-            // Save updated messages
-            await _saveMessagesLocally();
           }
+          
+          // Update processed message IDs
+          processedMessageIds.remove(tempId);
+          processedMessageIds.add(serverMessageId.toString());
+          
+          // Save the last message ID
+          await _saveLastMessageId(serverMessageId.toString());
+          
+          // Also mark as read since user is sending it
+          await _saveLastReadMessageId(serverMessageId.toString());
+          
+          // Save updated messages
+          await _saveMessagesLocally();
         } else {
           _markMessageAsFailed(tempId);
         }
@@ -1048,26 +1157,29 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       _markMessageAsFailed(tempId);
     }
   }
-  
+
   // Mark a message as failed
   void _markMessageAsFailed(String tempId) {
     if (mounted) {
       setState(() {
         final index = messages.indexWhere((m) => m['messageId'] == tempId);
+        
         if (index != -1) {
           messages[index]['status'] = 'failed';
           
           // Also update in filtered messages if present
           final filteredIndex = filteredMessages.indexWhere((m) => m['messageId'] == tempId);
+          
           if (filteredIndex != -1) {
             filteredMessages[filteredIndex]['status'] = 'failed';
           }
         }
       });
+      
       _saveMessagesLocally();
     }
   }
-  
+
   // Retry sending a failed message
   Future<void> _retryFailedMessage(dynamic failedMessage) async {
     final failedMessageId = failedMessage['messageId'];
@@ -1077,11 +1189,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     // Update status to pending
     setState(() {
       final index = messages.indexWhere((m) => m['messageId'] == failedMessageId);
+      
       if (index != -1) {
         messages[index]['status'] = 'pending';
         
         // Also update in filtered messages if present
         final filteredIndex = filteredMessages.indexWhere((m) => m['messageId'] == failedMessageId);
+        
         if (filteredIndex != -1) {
           filteredMessages[filteredIndex]['status'] = 'pending';
         }
@@ -1096,7 +1210,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       
       // Prepare request body
-      final Map<String, dynamic> requestBody = {
+      final Map requestBody = {
         'text': messageText,
         'tempId': failedMessageId,
       };
@@ -1118,6 +1232,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        
         if (data['success']) {
           // Update the message with the server's message ID
           final serverMessageId = data['messageId'];
@@ -1125,29 +1240,31 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           if (mounted) {
             setState(() {
               final index = messages.indexWhere((m) => m['messageId'] == failedMessageId);
+              
               if (index != -1) {
                 messages[index]['status'] = 'sent';
                 messages[index]['messageId'] = serverMessageId;
                 
                 // Also update in filtered messages if present
                 final filteredIndex = filteredMessages.indexWhere((m) => m['messageId'] == failedMessageId);
+                
                 if (filteredIndex != -1) {
                   filteredMessages[filteredIndex]['status'] = 'sent';
                   filteredMessages[filteredIndex]['messageId'] = serverMessageId;
                 }
               }
             });
-            
-            // Update processed message IDs
-            processedMessageIds.remove(failedMessageId);
-            processedMessageIds.add(serverMessageId.toString());
-            
-            // Save the last message ID
-            await _saveLastMessageId(serverMessageId.toString());
-            
-            // Save updated messages
-            await _saveMessagesLocally();
           }
+          
+          // Update processed message IDs
+          processedMessageIds.remove(failedMessageId);
+          processedMessageIds.add(serverMessageId.toString());
+          
+          // Save the last message ID
+          await _saveLastMessageId(serverMessageId.toString());
+          
+          // Save updated messages
+          await _saveMessagesLocally();
         } else {
           _markMessageAsFailed(failedMessageId);
         }
@@ -1159,7 +1276,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       _markMessageAsFailed(failedMessageId);
     }
   }
-  
+
   // Handle reply to a message
   void _handleReply(dynamic message) {
     setState(() {
@@ -1169,9 +1286,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         'text': message['text'],
       };
     });
+    
     FocusScope.of(context).requestFocus(_messageInputFocusNode);
   }
-  
+
   // Filter messages for search
   void _filterMessages(String query) {
     if (query.isEmpty) {
@@ -1182,6 +1300,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
     
     final lowercaseQuery = query.toLowerCase();
+    
     setState(() {
       filteredMessages = messages.where((message) {
         if (message['text'] == null) return false;
@@ -1189,21 +1308,22 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       }).toList();
     });
   }
-  
+
   // Toggle search mode
   void _toggleSearchMode() {
     setState(() {
       isSearching = !isSearching;
+      
       if (!isSearching) {
         _searchController.clear();
         filteredMessages = messages;
       }
     });
   }
-  
+
   // Block user
   Future<void> _blockUser() async {
-    bool confirmed = await showDialog<bool>(
+    bool confirmed = await showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
@@ -1243,7 +1363,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         setState(() {
           isBlocked = true;
         });
+        
         await _saveBlockStatus(true);
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('User blocked successfully')),
         );
@@ -1258,10 +1380,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       );
     }
   }
-  
+
   // Unblock user
   Future<void> _unblockUser() async {
-    bool confirmed = await showDialog<bool>(
+    bool confirmed = await showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
@@ -1301,7 +1423,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         setState(() {
           isBlocked = false;
         });
+        
         await _saveBlockStatus(false);
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('User unblocked successfully')),
         );
@@ -1316,7 +1440,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       );
     }
   }
-  
+
   String _getSenderNameForReply() {
     try {
       if (_replyingTo != null && _replyingTo!['type'] == 'product') {
@@ -1345,15 +1469,35 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
-  // Helper function to fetch product details
+  // Helper function to fetch product details with caching to prevent flickering
   Future<Map<String, dynamic>> _fetchProductDetails(String productId) async {
-    // Check if we have cached product details
-    final cachedData = await _secureStorage.read(key: 'product_${productId}');
-    if (cachedData != null) {
-      return json.decode(cachedData);
+    // Return the cached Future if it exists to prevent rebuilding the widget
+    if (_productFutureCache.containsKey(productId)) {
+      return _productFutureCache[productId]!;
     }
     
-    // Fetch from server
+    // Create a new Future and cache it before executing
+    final Future<Map<String, dynamic>> future = _fetchProductDetailsFromSources(productId);
+    _productFutureCache[productId] = future;
+    return future;
+  }
+
+  // Helper method that actually does the fetching
+  Future<Map<String, dynamic>> _fetchProductDetailsFromSources(String productId) async {
+    // First check our in-memory cache
+    if (_productCache.containsKey(productId)) {
+      return _productCache[productId]!;
+    }
+    
+    // Then check local storage cache
+    final cachedData = await _secureStorage.read(key: 'product_${productId}');
+    if (cachedData != null) {
+      final product = json.decode(cachedData);
+      _productCache[productId] = product; // Update in-memory cache
+      return product;
+    }
+    
+    // Fetch from server if not in any cache
     final authCookie = await _secureStorage.read(key: 'authCookie');
     final response = await http.get(
       Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/$productId'),
@@ -1372,172 +1516,189 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           'price': data['product']['price'],
           'seller': data['product']['seller'],
           'imageUrl': data['product']['images']?.isNotEmpty == true
-              ? data['product']['images'][0]['data']
-              : null,
+            ? data['product']['images'][0]['data']
+            : null,
         };
         
         // Cache the product details
         await _secureStorage.write(key: 'product_${productId}', value: json.encode(product));
-        
+        _productCache[productId] = product; // Update in-memory cache
         return product;
       }
     }
     
     throw Exception('Failed to load product details');
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: _isInSelectionMode
-          ? _buildSelectionAppBar()
-          : isSearching
-              ? _buildSearchAppBar()
-              : _buildRegularAppBar(),
+        ? _buildSelectionAppBar()
+        : isSearching
+          ? _buildSearchAppBar()
+          : _buildRegularAppBar(),
       body: Stack(
         children: [
           Column(
             children: [
               Expanded(
                 child: isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : messages.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.chat_bubble_outline,
-                                  size: 80,
-                                  color: Colors.grey.shade400,
-                                ),
-                                SizedBox(height: 16),
-                                Text(
-                                  'No messages yet',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                                SizedBox(height: 8),
-                                Text(
-                                  'Start the conversation!',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey.shade500,
-                                  ),
-                                ),
-                              ],
+                  ? const Center(child: CircularProgressIndicator())
+                  : messages.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.chat_bubble_outline,
+                              size: 80,
+                              color: Colors.grey.shade400,
                             ),
-                          )
-                        : ListView.builder(
-                            controller: _scrollController,
-                            reverse: true,
-                            itemCount: filteredMessages.length,
-                            // Add findChildIndexCallback for better performance with reversed list
-                            findChildIndexCallback: (key) {
-                              final ValueKey valueKey = key as ValueKey;
-                              final String messageId = valueKey.value;
-                              return filteredMessages.indexWhere((msg) => 
-                                msg['messageId'].toString() == messageId
-                              );
-                            },
-                            itemBuilder: (context, index) {
-                              try {
-                                final int adjustedIndex = filteredMessages.length - 1 - index;
-                                if (adjustedIndex < 0 || adjustedIndex >= filteredMessages.length) {
-                                  return SizedBox.shrink();
-                                }
+                            SizedBox(height: 16),
+                            Text(
+                              'No messages yet',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'Start the conversation!',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey.shade500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: _scrollController,
+                        reverse: true,
+                        itemCount: filteredMessages.length,
+                        // Add findChildIndexCallback for better performance with reversed list
+                        findChildIndexCallback: (key) {
+                          if (key is ValueKey) {
+                            final String messageId = key.value;
+                            return filteredMessages.indexWhere((msg) =>
+                              msg['messageId'].toString() == messageId
+                            );
+                          }
+                          return null;
+                        },
+                        itemBuilder: (context, index) {
+                          try {
+                            final int adjustedIndex = filteredMessages.length - 1 - index;
+                            if (adjustedIndex < 0 || adjustedIndex >= filteredMessages.length) {
+                              return SizedBox.shrink();
+                            }
+                            
+                            final message = filteredMessages[adjustedIndex];
+                            final messageId = message['messageId'].toString();
+                            final bool isMe = message['sender'] == currentUserId;
+                            final double offset = _swipingMessageId == messageId ? _messageSwipeOffset : 0.0;
+                            
+                            // Show date header if needed
+                            final bool showDateHeader = _shouldShowDateHeader(adjustedIndex);
+                            final String dateHeaderText = showDateHeader
+                              ? _formatDateForHeader(DateTime.parse(message['createdAt']))
+                              : '';
+                            
+                            return Column(
+                              children: [
+                                if (showDateHeader)
+                                  _buildDateHeader(dateHeaderText),
                                 
-                                final message = filteredMessages[adjustedIndex];
-                                final messageId = message['messageId'].toString();
-                                final bool isMe = message['sender'] == currentUserId;
-                                final double offset = _swipingMessageId == messageId ? _messageSwipeOffset : 0.0;
-                                
-                                // Show date header if needed
-                                final bool showDateHeader = _shouldShowDateHeader(adjustedIndex);
-                                final String dateHeaderText = showDateHeader 
-                                    ? _formatDateForHeader(DateTime.parse(message['createdAt']))
-                                    : '';
-                                
-                                return Column(
-                                  children: [
-                                    if (showDateHeader)
-                                      _buildDateHeader(dateHeaderText),
-                                    
-                                    // Use a key for each message to maintain identity during rebuilds
-                                    Container(
-                                      key: ValueKey(messageId),
-                                      width: double.infinity, // Full width container
-                                      child: GestureDetector(
-                                        behavior: HitTestBehavior.translucent, // Important for full width detection
-                                        onLongPress: () => _toggleMessageSelection(messageId),
-                                        onTap: () {
-                                          if (_isInSelectionMode) {
-                                            _toggleMessageSelection(messageId);
+                                // Use a key for each message to maintain identity during rebuilds
+                                Container(
+                                  key: ValueKey(messageId),
+                                  width: double.infinity, // Full width container
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.translucent, // Important for full width detection
+                                    onLongPress: () => _toggleMessageSelection(messageId),
+                                    onTap: () {
+                                      if (_isInSelectionMode) {
+                                        _toggleMessageSelection(messageId);
+                                      }
+                                    },
+                                    onHorizontalDragStart: (details) {
+                                      // Allow swiping for all messages in non-selection mode
+                                      if (!_isInSelectionMode) {
+                                        setState(() {
+                                          _swipingMessageId = messageId;
+                                          _messageSwipeOffset = 0.0;
+                                          _hapticFeedbackTriggered = false;
+                                          _swipeController!.reset();
+                                        });
+                                      }
+                                    },
+                                    onHorizontalDragUpdate: (details) {
+                                      if (_swipingMessageId == messageId) {
+                                        setState(() {
+                                          _messageSwipeOffset += details.delta.dx;
+                                          
+                                          if (_messageSwipeOffset > 100) {
+                                            _messageSwipeOffset = 100;
+                                          } else if (_messageSwipeOffset < 0) {
+                                            _messageSwipeOffset = 0;
                                           }
-                                        },
-                                        onHorizontalDragStart: (details) {
-                                          // Allow swiping for all messages in non-selection mode
-                                          if (!_isInSelectionMode) {
-                                            setState(() {
-                                              _swipingMessageId = messageId;
-                                              _messageSwipeOffset = 0.0;
-                                            });
+                                          
+                                          // Update animation value based on swipe offset
+                                          _swipeController!.value = _messageSwipeOffset / 100;
+                                          
+                                          // Add haptic feedback when crossing the reply threshold
+                                          if (_messageSwipeOffset >= _replyThreshold && !_hapticFeedbackTriggered) {
+                                            HapticFeedback.mediumImpact();
+                                            _hapticFeedbackTriggered = true;
                                           }
-                                        },
-                                        onHorizontalDragUpdate: (details) {
-                                          if (_swipingMessageId == messageId) {
-                                            setState(() {
-                                              _messageSwipeOffset += details.delta.dx;
-                                              if (_messageSwipeOffset > 100) {
-                                                _messageSwipeOffset = 100;
-                                              } else if (_messageSwipeOffset < 0) {
-                                                _messageSwipeOffset = 0;
-                                              }
-                                            });
-                                          }
-                                        },
-                                        onHorizontalDragEnd: (details) {
-                                          if (_swipingMessageId == messageId) {
-                                            if (_messageSwipeOffset >= _replyThreshold) {
-                                              _handleReply(message);
-                                            }
-                                            _resetSwipe();
-                                          }
-                                        },
-                                        onHorizontalDragCancel: () {
-                                          if (_swipingMessageId == messageId) {
-                                            _resetSwipe();
-                                          }
-                                        },
-                                        child: Stack(
+                                        });
+                                      }
+                                    },
+                                    onHorizontalDragEnd: (details) {
+                                      if (_swipingMessageId == messageId) {
+                                        if (_messageSwipeOffset >= _replyThreshold) {
+                                          _handleReply(message);
+                                        }
+                                        _resetSwipe();
+                                      }
+                                    },
+                                    onHorizontalDragCancel: () {
+                                      if (_swipingMessageId == messageId) {
+                                        _resetSwipe();
+                                      }
+                                    },
+                                    child: Stack(
+                                      children: [
+                                        // Message alignment
+                                        Row(
+                                          mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
                                           children: [
-                                            // Message alignment
-                                            Row(
-                                              mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-                                              children: [
-                                                AnimatedContainer(
-                                                  duration: const Duration(milliseconds: 50),
-                                                  transform: Matrix4.translationValues(offset, 0, 0),
-                                                  child: _buildMessageItem(message, isMe),
-                                                ),
-                                              ],
+                                            AnimatedContainer(
+                                              duration: const Duration(milliseconds: 50),
+                                              transform: Matrix4.translationValues(offset, 0, 0),
+                                              child: _buildMessageItem(message, isMe),
                                             ),
-                                            
-                                            // Swipe arrow indicator
-                                            if (_swipingMessageId == messageId && offset > 0)
-                                              Positioned(
-                                                left: 10,
-                                                top: 0,
-                                                bottom: 0,
-                                                child: Center(
-                                                  child: Container(
-                                                    padding: EdgeInsets.all(8),
-                                                    decoration: BoxDecoration(
-                                                      shape: BoxShape.circle,
-                                                      color: Colors.blue.withOpacity(0.2),
-                                                    ),
+                                          ],
+                                        ),
+                                        // Swipe arrow indicator with animation
+                                        if (_swipingMessageId == messageId && offset > 0)
+                                          Positioned(
+                                            left: 10,
+                                            top: 0,
+                                            bottom: 0,
+                                            child: FadeTransition(
+                                              opacity: _swipeAnimation as Animation<double>,
+                                              child: Center(
+                                                child: Container(
+                                                  padding: EdgeInsets.all(8),
+                                                  decoration: BoxDecoration(
+                                                    shape: BoxShape.circle,
+                                                    color: Colors.blue.withOpacity(_swipeController!.value * 0.2),
+                                                  ),
+                                                  child: Transform.scale(
+                                                    scale: 0.5 + (_swipeController!.value * 0.5),
                                                     child: const Icon(
                                                       Icons.reply,
                                                       color: Colors.blue,
@@ -1546,43 +1707,44 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                                                   ),
                                                 ),
                                               ),
-                                            
-                                            // Selection indicator
-                                            if (_isInSelectionMode)
-                                              Positioned(
-                                                top: 0,
-                                                left: isMe ? null : 0,
-                                                right: isMe ? 0 : null,
-                                                child: Container(
-                                                  padding: EdgeInsets.all(2),
-                                                  decoration: BoxDecoration(
-                                                    color: _selectedMessageIds.contains(messageId)
-                                                        ? Colors.blue
-                                                        : Colors.white,
-                                                    shape: BoxShape.circle,
-                                                    border: Border.all(color: Colors.blue),
-                                                  ),
-                                                  child: Icon(
-                                                    Icons.check,
-                                                    size: 16,
-                                                    color: _selectedMessageIds.contains(messageId)
-                                                        ? Colors.white
-                                                        : Colors.transparent,
-                                                  ),
-                                                ),
+                                            ),
+                                          ),
+                                        // Selection indicator
+                                        if (_isInSelectionMode)
+                                          Positioned(
+                                            top: 0,
+                                            left: isMe ? null : 0,
+                                            right: isMe ? 0 : null,
+                                            child: Container(
+                                              padding: EdgeInsets.all(2),
+                                              decoration: BoxDecoration(
+                                                color: _selectedMessageIds.contains(messageId)
+                                                  ? Colors.blue
+                                                  : Colors.white,
+                                                shape: BoxShape.circle,
+                                                border: Border.all(color: Colors.blue),
                                               ),
-                                          ],
-                                        ),
-                                      ),
+                                              child: Icon(
+                                                Icons.check,
+                                                size: 16,
+                                                color: _selectedMessageIds.contains(messageId)
+                                                  ? Colors.white
+                                                  : Colors.transparent,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
                                     ),
-                                  ],
-                                );
-                              } catch (e) {
-                                print('Error building message at index $index: $e');
-                                return Container(height: 0);
-                              }
-                            },
-                          ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          } catch (e) {
+                            print('Error building message at index $index: $e');
+                            return Container(height: 0);
+                          }
+                        },
+                      ),
               ),
               if (isBlocked)
                 Container(
@@ -1670,33 +1832,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                                                   const SizedBox(height: 2),
                                                   // For product replies, display the product details
                                                   if (_replyingTo!['type'] == 'product')
-                                                    FutureBuilder<Map<String, dynamic>>(
-                                                      future: _fetchProductDetails(_replyingTo!['id']),
-                                                      builder: (context, snapshot) {
-                                                        if (snapshot.connectionState == ConnectionState.waiting) {
-                                                          return Text(
-                                                            "Loading product...",
-                                                            maxLines: 1,
-                                                            overflow: TextOverflow.ellipsis,
-                                                            style: TextStyle(fontSize: 12),
-                                                          );
-                                                        }
-                                                        if (snapshot.hasData) {
-                                                          return Text(
-                                                            snapshot.data!['name'] ?? "Product",
-                                                            maxLines: 1,
-                                                            overflow: TextOverflow.ellipsis,
-                                                            style: TextStyle(fontSize: 12),
-                                                          );
-                                                        }
-                                                        return Text(
-                                                          _replyingTo!['text'] ?? "Product",
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow.ellipsis,
-                                                          style: TextStyle(fontSize: 12),
-                                                        );
-                                                      },
-                                                    )
+                                                    _buildProductReplyContent(_replyingTo!['id'])
                                                   else
                                                     Text(
                                                       _replyingTo!['text'] ?? "",
@@ -1818,7 +1954,40 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       ),
     );
   }
-  
+
+  // Special widget for product reply in the reply box to prevent flickering
+  Widget _buildProductReplyContent(String productId) {
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _fetchProductDetails(productId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Text(
+            "Loading product...",
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12),
+          );
+        }
+        
+        if (snapshot.hasData) {
+          return Text(
+            snapshot.data!['name'] ?? "Product",
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12),
+          );
+        }
+        
+        return Text(
+          "Product",
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 12),
+        );
+      },
+    );
+  }
+
   // Build the regular app bar
   PreferredSizeWidget _buildRegularAppBar() {
     return AppBar(
@@ -1838,16 +2007,16 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               radius: 18,
               backgroundColor: Colors.grey.shade200,
               backgroundImage: partnerProfilePicture != null
-                  ? MemoryImage(partnerProfilePicture!)
-                  : null,
+                ? MemoryImage(partnerProfilePicture!)
+                : null,
               child: partnerProfilePicture == null
-                  ? Text(
-                      widget.partnerNames.isNotEmpty
-                          ? widget.partnerNames[0].toUpperCase()
-                          : '?',
-                      style: TextStyle(color: Colors.grey.shade600),
-                    )
-                  : null,
+                ? Text(
+                    widget.partnerNames.isNotEmpty
+                      ? widget.partnerNames[0].toUpperCase()
+                      : '?',
+                    style: TextStyle(color: Colors.grey.shade600),
+                  )
+                : null,
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -1869,7 +2038,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           icon: Icon(Icons.search),
           onPressed: _toggleSearchMode,
         ),
-        PopupMenuButton<String>(
+        PopupMenuButton(
           onSelected: (value) {
             switch (value) {
               case 'block':
@@ -1887,8 +2056,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 break;
             }
           },
-          itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-            const PopupMenuItem<String>(
+          itemBuilder: (BuildContext context) => <PopupMenuEntry>[
+            const PopupMenuItem(
               value: 'view_profile',
               child: Row(
                 children: [
@@ -1898,12 +2067,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 ],
               ),
             ),
-            PopupMenuItem<String>(
+            PopupMenuItem(
               value: 'block',
               child: Row(
                 children: [
                   Icon(
-                    isBlocked ? Icons.lock_open : Icons.block, 
+                    isBlocked ? Icons.lock_open : Icons.block,
                     size: 18
                   ),
                   SizedBox(width: 8),
@@ -1911,7 +2080,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 ],
               ),
             ),
-            const PopupMenuItem<String>(
+            const PopupMenuItem(
               value: 'clear_chat',
               child: Row(
                 children: [
@@ -1926,7 +2095,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       ],
     );
   }
-  
+
   // Build the search app bar
   PreferredSizeWidget _buildSearchAppBar() {
     return AppBar(
@@ -1959,7 +2128,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       ),
     );
   }
-  
+
   // Build the selection app bar (shown when selecting messages)
   PreferredSizeWidget _buildSelectionAppBar() {
     return AppBar(
@@ -1976,7 +2145,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       ],
     );
   }
-  
+
   // Build a message item
   Widget _buildMessageItem(dynamic message, bool isMe) {
     try {
@@ -1986,12 +2155,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       
       final bool isPending = message['status'] == 'pending';
       final bool isFailed = message['status'] == 'failed';
-      final bool isHighlighted = message['messageId'] != null && 
-                              message['messageId'].toString() == _highlightedMessageId;
+      final bool isHighlighted = message['messageId'] != null &&
+        message['messageId'].toString() == _highlightedMessageId;
       
       // Check if this message is replying to a product
-      final bool replyingToProduct = message['replyTo'] != null && 
-                                message['replyTo']['type'] == 'product';
+      final bool replyingToProduct = message['replyTo'] != null &&
+        message['replyTo']['type'] == 'product';
       
       return Container(
         margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
@@ -2013,9 +2182,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 ),
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: isHighlighted 
-                      ? (isMe ? Colors.blue.shade300 : Colors.grey.shade400) 
-                      : (isMe ? Colors.blue.shade100 : Colors.grey.shade200),
+                  color: isHighlighted
+                    ? (isMe ? Colors.blue.shade300 : Colors.grey.shade400)
+                    : (isMe ? Colors.blue.shade100 : Colors.grey.shade200),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
@@ -2029,6 +2198,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     Text(message['text'] ?? ''),
                     
                     const SizedBox(height: 4),
+                    
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -2053,7 +2223,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 ),
               ),
             ),
-            
             // Only show retry button if message failed
             if (isFailed && isMe)
               TextButton.icon(
@@ -2076,7 +2245,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       );
     }
   }
-  
+
   // Build reply preview inside a message
   Widget _buildReplyPreview(dynamic message) {
     try {
@@ -2087,9 +2256,41 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       if (replyTo['type'] == 'product') {
         final productId = replyTo['id'];
         
+        // Get a reference to the Future only once per productId to prevent rebuilds
+        final Future<Map<String, dynamic>> productFuture = _fetchProductDetails(productId);
+        
         return FutureBuilder<Map<String, dynamic>>(
-          future: _fetchProductDetails(productId),
+          future: productFuture,
           builder: (context, snapshot) {
+            // If we have data, immediately show it
+            if (snapshot.hasData) {
+              return _buildProductPreviewContent(snapshot.data!);
+            }
+            
+            // If there's an error, show error state
+            if (snapshot.hasError) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.all(6),
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border(
+                    left: BorderSide(
+                      color: Colors.red.shade300,
+                      width: 4,
+                    ),
+                  ),
+                ),
+                child: Text(
+                  'Product unavailable',
+                  style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                ),
+              );
+            }
+            
+            // If still loading, show a stable loading state
             return Container(
               margin: const EdgeInsets.only(bottom: 6),
               padding: const EdgeInsets.all(6),
@@ -2104,72 +2305,27 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   ),
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+              child: Row(
                 children: [
-                  Row(
-                    children: [
-                      Icon(Icons.shopping_bag, size: 12, color: Colors.green.shade700),
-                      SizedBox(width: 4),
-                      Text(
-                        'Product',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: Colors.green.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  if (snapshot.connectionState == ConnectionState.waiting)
-                    Text(
-                      'Loading product...',
-                      style: const TextStyle(fontSize: 12),
-                    )
-                  else if (snapshot.hasData)
-                    Row(
-                      children: [
-                        if (snapshot.data!['imageUrl'] != null)
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(4),
-                            child: Image.memory(
-                              base64Decode(snapshot.data!['imageUrl']),
-                              width: 30,
-                              height: 30,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        SizedBox(width: 4),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                snapshot.data!['name'] ?? 'Product',
-                                style: const TextStyle(fontSize: 12),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              Text(
-                                '₹${snapshot.data!['price'] ?? ''}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.green.shade800,
-                                  fontWeight: FontWeight.bold
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    )
-                  else
-                    Text(
-                      'Product unavailable',
-                      style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
+                  Icon(Icons.shopping_bag, size: 12, color: Colors.green.shade700),
+                  SizedBox(width: 4),
+                  Text(
+                    'Product',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                      color: Colors.green.shade700,
                     ),
+                  ),
+                  Expanded(child: SizedBox()), // Spacer
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.green.shade700),
+                    ),
+                  ),
                 ],
               ),
             );
@@ -2185,8 +2341,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       );
       
       final messageText = originalMessage['text'] ?? 'Message unavailable';
-      
       bool isOriginalSenderMe = false;
+      
       if (originalMessage['sender'] != null) {
         if (originalMessage['sender'] is String) {
           isOriginalSenderMe = originalMessage['sender'].toString() == currentUserId.toString();
@@ -2252,7 +2408,83 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       );
     }
   }
-  
+
+  // Helper widget for product preview content
+  Widget _buildProductPreviewContent(Map<String, dynamic> product) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.all(6),
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border(
+          left: BorderSide(
+            color: Colors.green.shade700,
+            width: 4,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.shopping_bag, size: 12, color: Colors.green.shade700),
+              SizedBox(width: 4),
+              Text(
+                'Product',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  color: Colors.green.shade700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Row(
+            children: [
+              if (product['imageUrl'] != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: Image.memory(
+                    base64Decode(product['imageUrl']),
+                    width: 30,
+                    height: 30,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              SizedBox(width: 4),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product['name'] ?? 'Product',
+                      style: const TextStyle(fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      '₹${product['price'] ?? ''}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.green.shade800,
+                        fontWeight: FontWeight.bold
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDateHeader(String text) {
     return Container(
       margin: EdgeInsets.symmetric(vertical: 12),
@@ -2283,8 +2515,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       final prevDate = DateTime.parse(filteredMessages[adjustedIndex - 1]['createdAt']);
       
       return currentDate.year != prevDate.year ||
-             currentDate.month != prevDate.month ||
-             currentDate.day != prevDate.day;
+        currentDate.month != prevDate.month ||
+        currentDate.day != prevDate.day;
     }
     
     return false;

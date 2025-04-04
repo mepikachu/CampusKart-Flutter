@@ -1,22 +1,25 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'chat_screen.dart';
+import 'home.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
 
   @override
-  State<ChatListScreen> createState() => _ChatListScreenState();
+  State createState() => _ChatListScreenState();
 }
 
 class _ChatListScreenState extends State<ChatListScreen> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  List<dynamic> conversations = [];
+  List conversations = [];
   Map<String, Uint8List> profilePictures = {};
   Map<String, int> unreadMessageCounts = {};
   Map<String, String> lastReadMessageIds = {};
@@ -24,34 +27,60 @@ class _ChatListScreenState extends State<ChatListScreen> {
   String errorMessage = '';
   String currentUserName = '';
   String currentUserId = '';
-  Timer? _pollingTimer;
+  
+  // Access chat refresh service
+  final ChatRefreshService _chatRefreshService = ChatRefreshService();
+  
+  // StreamSubscription to listen for changes
+  StreamSubscription? _refreshSubscription;
 
   @override
   void initState() {
     super.initState();
+    
+    // Initialize data
     _loadCurrentUser().then((_) {
       _loadLastReadMessageIds();
       _loadLocalConversations();
-      fetchConversations();
     });
     
-    _pollingTimer = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) => fetchConversations(),
-    );
+    // Set up listener for refresh events from SharedPreferences
+    _setupRefreshListener();
+  }
+  
+  void _setupRefreshListener() {
+    // We'll check for updates every 2 seconds
+    _refreshSubscription = Stream.periodic(const Duration(seconds: 2)).listen((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      final lastSync = prefs.getString('last_chat_sync');
+      
+      if (lastSync != null) {
+        final lastSyncTime = DateTime.parse(lastSync);
+        final lastLoaded = prefs.getString('last_chat_loaded');
+        
+        if (lastLoaded == null || 
+            DateTime.parse(lastLoaded).isBefore(lastSyncTime)) {
+          // New data is available, reload
+          await _loadLocalConversations();
+          // Update last loaded timestamp
+          await prefs.setString('last_chat_loaded', DateTime.now().toIso8601String());
+        }
+      }
+    });
+  }
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    
+    // Request an immediate refresh when becoming visible
+    fetchConversations(showLoadingIndicator: false);
   }
 
   @override
   void dispose() {
-    _pollingTimer?.cancel();
+    _refreshSubscription?.cancel();
     super.dispose();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Sync with chat_screen when returning to this screen
-    _syncConversationsWithMessages();
   }
 
   Future<void> _loadCurrentUser() async {
@@ -70,7 +99,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
             'auth-cookie': authCookie ?? '',
           },
         );
-
+        
         if (response.statusCode == 200) {
           final data = json.decode(response.body);
           if (data['success'] && data['user'] != null) {
@@ -130,11 +159,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
           
           // Update the conversation's messages with the most recent version
           conversation['messages'] = chatScreenMessages;
-          
-          // Update unread counts based on the latest message set
-          _updateUnreadCounts();
         }
       }
+      
+      // Update unread counts based on the latest message set
+      _updateUnreadCounts();
       
       // Re-sort conversations based on latest message times
       conversations.sort((a, b) {
@@ -162,7 +191,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     try {
       final conversationsJson = await _secureStorage.read(key: 'conversations');
       if (conversationsJson != null) {
-        List<dynamic> localConversations = json.decode(conversationsJson);
+        List localConversations = json.decode(conversationsJson);
         
         // Load local messages for each conversation
         for (var conversation in localConversations) {
@@ -189,7 +218,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
           }
         });
         
-        // NEW: Also sync with messages from chat_screen
+        // Also sync with messages from chat_screen
         await _syncConversationsWithMessages();
         
         // Load profile pictures
@@ -211,7 +240,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
         final localMessages = json.decode(localMessagesJson);
         
         // Get pending/failed messages that are stored locally
-        final pendingOrFailedMessages = localMessages.where((m) => 
+        final pendingOrFailedMessages = localMessages.where((m) =>
           m['status'] == 'pending' || m['status'] == 'failed'
         ).toList();
         
@@ -222,15 +251,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
           }
           
           // Create a set of existing message IDs for quick lookup
-          final existingIds = Set<String>.from(
+          final existingIds = Set.from(
             conversation['messages']
-                .where((m) => m['_id'] != null)
-                .map((m) => m['_id'].toString())
+                .where((m) => m['messageId'] != null)
+                .map((m) => m['messageId'].toString())
           );
           
           // Add pending/failed messages that aren't already in the conversation
           for (var message in pendingOrFailedMessages) {
-            if (!existingIds.contains(message['_id'].toString())) {
+            if (!existingIds.contains(message['messageId'].toString())) {
               conversation['messages'].add(message);
             }
           }
@@ -272,35 +301,35 @@ class _ChatListScreenState extends State<ChatListScreen> {
           // If no message has been read, all messages are unread
           // Only count messages from the other user as unread
           unreadCount = conversation['messages']
-              .where((m) => 
-                m['sender'] != null && 
-                (m['sender'] is String 
-                  ? m['sender'] != currentUserId
-                  : m['sender']['_id'] != currentUserId))
+              .where((m) =>
+                  m['sender'] != null &&
+                  (m['sender'] is String
+                      ? m['sender'] != currentUserId
+                      : m['sender']['_id'] != currentUserId))
               .length;
         } else {
           // Find the index of the last read message
           final lastReadIndex = conversation['messages']
-              .indexWhere((m) => m['_id'].toString() == lastReadId);
+              .indexWhere((m) => m['messageId'].toString() == lastReadId);
           
           if (lastReadIndex == -1) {
             // Last read message not found, count all messages from other user
             unreadCount = conversation['messages']
-                .where((m) => 
-                  m['sender'] != null && 
-                  (m['sender'] is String 
-                    ? m['sender'] != currentUserId
-                    : m['sender']['_id'] != currentUserId))
+                .where((m) =>
+                    m['sender'] != null &&
+                    (m['sender'] is String
+                        ? m['sender'] != currentUserId
+                        : m['sender']['_id'] != currentUserId))
                 .length;
           } else {
             // Count messages after the last read message from other user
             unreadCount = conversation['messages']
                 .sublist(lastReadIndex + 1)
-                .where((m) => 
-                  m['sender'] != null && 
-                  (m['sender'] is String 
-                    ? m['sender'] != currentUserId
-                    : m['sender']['_id'] != currentUserId))
+                .where((m) =>
+                    m['sender'] != null &&
+                    (m['sender'] is String
+                        ? m['sender'] != currentUserId
+                        : m['sender']['_id'] != currentUserId))
                 .length;
           }
         }
@@ -312,7 +341,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }
   }
 
-  Future<void> fetchConversations() async {
+  Future<void> fetchConversations({bool showLoadingIndicator = false}) async {
+    // Only show loading indicator on initial load or explicit user refresh
+    if (showLoadingIndicator && mounted) {
+      setState(() {
+        isLoading = true;
+        errorMessage = '';
+      });
+    }
+    
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
@@ -321,8 +358,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
         },
-      );
-
+      ).timeout(const Duration(seconds: 15));
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success']) {
@@ -333,6 +370,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
             await _mergeLocalMessages(conversation);
           }
           
+          // Sort conversations by most recent message time
           serverConversations.sort((a, b) {
             final aTime = a['messages']?.isNotEmpty == true
                 ? DateTime.parse(a['messages'].last['createdAt'])
@@ -351,27 +389,41 @@ class _ChatListScreenState extends State<ChatListScreen> {
             });
           }
           
-          // NEW: Sync with messages from chat_screen
+          // Sync with messages from chat_screen
           await _syncConversationsWithMessages();
           
           // Load profile pictures
-          for (var conversation in conversations) {
-            _loadProfilePicture(conversation);
+          for (var conversation in serverConversations) {
+            await _loadProfilePicture(conversation);
           }
           
-          _saveConversationsLocally();
+          await _saveConversationsLocally();
+          
+          // Update last loaded timestamp
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('last_chat_loaded', DateTime.now().toIso8601String());
+        }
+      } else {
+        if (mounted && showLoadingIndicator) {
+          setState(() => errorMessage = 'Failed to load chats');
         }
       }
     } catch (e) {
-      if (mounted) {
+      print('Error fetching conversations: $e');
+      
+      if (mounted && showLoadingIndicator) {
         setState(() => errorMessage = e.toString());
       }
+      
       // Still try to sync with local messages even if server fetch fails
       await _syncConversationsWithMessages();
-      if (conversations.isEmpty) _loadLocalConversations();
-    }
-    if (mounted) {
-      setState(() => isLoading = false);
+      if (conversations.isEmpty) {
+        await _loadLocalConversations();
+      }
+    } finally {
+      if (mounted && showLoadingIndicator) {
+        setState(() => isLoading = false);
+      }
     }
   }
 
@@ -379,6 +431,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     try {
       if (conversation['participants']?.length >= 2) {
         final participants = conversation['participants'];
+        
         // Get the partner (not current user)
         final partner = participants.firstWhere(
           (p) => p['_id'] != currentUserId,
@@ -448,24 +501,32 @@ class _ChatListScreenState extends State<ChatListScreen> {
   }
 
   String getPartnerName(dynamic conversation) {
-    if (conversation['participants']?.length == 2) {
+    if (conversation['participants']?.length >= 2) {
       final participants = conversation['participants'];
-      // Compare by ID instead of username
-      final isFirstParticipantMe = participants[0]['_id'] == currentUserId;
-      return isFirstParticipantMe ? participants[1]['userName'] : participants[0]['userName'];
+      
+      // Find the participant that is not the current user
+      for (var participant in participants) {
+        if (participant['_id'] != currentUserId) {
+          return participant['userName'] ?? "Unknown User";
+        }
+      }
     }
+    
     return "Chat";
   }
 
   String getPartnerId(dynamic conversation) {
-    if (conversation['participants']?.length == 2) {
+    if (conversation['participants']?.length >= 2) {
       final participants = conversation['participants'];
+      
       // Find the participant that is not the current user
-      return participants.firstWhere(
-        (p) => p['_id'] != currentUserId,
-        orElse: () => {'_id': 'unknown'},
-      )['_id'];
+      for (var participant in participants) {
+        if (participant['_id'] != currentUserId) {
+          return participant['_id'];
+        }
+      }
     }
+    
     return "unknown";
   }
 
@@ -476,7 +537,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     );
     
     if (conversation != null && conversation['messages']?.isNotEmpty == true) {
-      final lastMessageId = conversation['messages'].last['_id'].toString();
+      final lastMessageId = conversation['messages'].last['messageId'].toString();
       lastReadMessageIds[conversationId] = lastMessageId;
       _saveLastReadMessageIds();
       
@@ -492,12 +553,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Chats'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: fetchConversations,
-          ),
-        ],
+        // Removed reload button as requested
       ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -509,110 +565,153 @@ class _ChatListScreenState extends State<ChatListScreen> {
                       Text('Error: $errorMessage'),
                       const SizedBox(height: 16),
                       ElevatedButton(
-                        onPressed: fetchConversations,
+                        onPressed: () => fetchConversations(showLoadingIndicator: true),
                         child: const Text('Retry'),
                       ),
                     ],
                   ),
                 )
-              : ListView.builder(
-                  itemCount: conversations.length,
-                  itemBuilder: (context, index) {
-                    final conversation = conversations[index];
-                    final conversationId = conversation['_id'];
-                    final title = getPartnerName(conversation);
-                    final partnerId = getPartnerId(conversation);
-                    final lastMessage = conversation['messages']?.isNotEmpty == true
-                        ? conversation['messages'].last['text']
-                        : 'No messages';
-                    final lastMessageTime = conversation['messages']?.isNotEmpty == true
-                        ? DateFormat('HH:mm').format(
-                            DateTime.parse(conversation['messages'].last['createdAt']))
-                        : '';
-                    final unreadCount = unreadMessageCounts[conversationId] ?? 0;
-
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.grey.shade200,
-                        child: profilePictures.containsKey(partnerId)
-                            ? ClipOval(
-                                child: Image.memory(
-                                  profilePictures[partnerId]!,
-                                  width: 40,
-                                  height: 40,
-                                  fit: BoxFit.cover,
-                                ),
-                              )
-                            : Icon(Icons.person, color: Colors.grey.shade600),
-                      ),
-                      title: Text(
-                        title,
-                        style: TextStyle(
-                          fontWeight: unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
-                        ),
-                      ),
-                      subtitle: Text(
-                        lastMessage,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontWeight: unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
-                        ),
-                      ),
-                      trailing: Column(
+              : conversations.isEmpty
+                  ? Center(
+                      child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
+                          Icon(
+                            Icons.chat_rounded,
+                            size: 80,
+                            color: Colors.grey.shade400,
+                          ),
+                          SizedBox(height: 16),
                           Text(
-                            lastMessageTime,
+                            'No conversations yet',
                             style: TextStyle(
-                              fontSize: 12,
-                              color: unreadCount > 0 
-                                  ? Colors.blue.shade700 
-                                  : Colors.grey.shade600,
+                              fontSize: 16,
+                              color: Colors.grey.shade600,
                             ),
                           ),
-                          if (unreadCount > 0)
-                            Container(
-                              margin: const EdgeInsets.only(top: 4),
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade700,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(
-                                unreadCount.toString(),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Your chats will appear here',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey.shade500,
                             ),
+                          ),
                         ],
                       ),
-                      onTap: () {
-                        // Mark as read when opening the conversation
-                        markConversationAsRead(conversationId);
-                        
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ChatScreen(
-                              conversationId: conversationId,
-                              partnerNames: title,
-                              partnerId: partnerId,
-                            ),
-                          ),
-                        ).then((_) {
-                          // When returning from chat screen, sync messages and fetch updates
-                          _syncConversationsWithMessages();
-                          fetchConversations();
-                        });
+                    )
+                  : RefreshIndicator(
+                      onRefresh: () async {
+                        await fetchConversations(showLoadingIndicator: true);
                       },
-                    );
-                  },
-                ),
+                      child: ListView.builder(
+                        itemCount: conversations.length,
+                        itemBuilder: (context, index) {
+                          final conversation = conversations[index];
+                          final conversationId = conversation['_id'];
+                          final title = getPartnerName(conversation);
+                          final partnerId = getPartnerId(conversation);
+                          final lastMessage = conversation['messages']?.isNotEmpty == true
+                              ? conversation['messages'].last['text']
+                              : 'No messages';
+                          final lastMessageTime = conversation['messages']?.isNotEmpty == true
+                              ? DateFormat('HH:mm').format(
+                                  DateTime.parse(conversation['messages'].last['createdAt']))
+                              : '';
+                          final unreadCount = unreadMessageCounts[conversationId] ?? 0;
+                          
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Colors.grey.shade200,
+                              child: profilePictures.containsKey(partnerId)
+                                  ? ClipOval(
+                                      child: Image.memory(
+                                        profilePictures[partnerId]!,
+                                        width: 40,
+                                        height: 40,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    )
+                                  : Text(
+                                      title.isNotEmpty ? title[0].toUpperCase() : '?',
+                                      style: TextStyle(color: Colors.grey.shade600),
+                                    ),
+                            ),
+                            title: Text(
+                              title,
+                              style: TextStyle(
+                                fontWeight: unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                            subtitle: Text(
+                              lastMessage,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: unreadCount > 0 ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                            trailing: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  lastMessageTime,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: unreadCount > 0
+                                        ? Colors.blue.shade700
+                                        : Colors.grey.shade600,
+                                  ),
+                                ),
+                                if (unreadCount > 0)
+                                  Container(
+                                    margin: const EdgeInsets.only(top: 4),
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade700,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Text(
+                                      unreadCount.toString(),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            onTap: () {
+                              // Mark as read when opening the conversation
+                              markConversationAsRead(conversationId);
+                              
+                              // Notify service that we're in chat screen
+                              _chatRefreshService.setChatScreenActive(true, conversationId);
+                              
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ChatScreen(
+                                    conversationId: conversationId,
+                                    partnerNames: title,
+                                    partnerId: partnerId,
+                                  ),
+                                ),
+                              ).then((_) {
+                                // When returning from chat screen
+                                _chatRefreshService.setChatScreenActive(false, null);
+                                
+                                // Sync messages and fetch updates
+                                _syncConversationsWithMessages();
+                                fetchConversations(showLoadingIndicator: false);
+                              });
+                            },
+                          );
+                        },
+                      ),
+                    ),
     );
   }
 }
