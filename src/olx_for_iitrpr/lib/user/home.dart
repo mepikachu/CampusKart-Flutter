@@ -7,6 +7,7 @@ import 'tab_donations.dart';
 import 'tab_profile.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'notifications_screen.dart';  // Add this import at the top
 
 class UserHomeScreen extends StatefulWidget {
   const UserHomeScreen({super.key});
@@ -73,6 +74,20 @@ class _HomeScreenState extends State<UserHomeScreen> {
         ),
         centerTitle: false, // This aligns the title to the left
         actions: [
+          IconButton(
+            icon: const Icon(
+              Icons.notifications,
+              color: Colors.black87,
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const NotificationsScreen(),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(
               Icons.chat_bubble,
