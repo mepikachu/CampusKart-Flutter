@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'product_detail.dart';
+import 'product_description.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -128,8 +128,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => ProductDetailScreen(
-                                    productId: notification['productId'],
+                                  builder: (context) => ProductDetailsScreen(
+                                    product: notification['productId'],
                                   ),
                                 ),
                               );

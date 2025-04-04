@@ -8,7 +8,7 @@ import 'package:http_parser/http_parser.dart';
 
 class EditProductScreen extends StatefulWidget {
   final Map<String, dynamic> product;
-  const EditProductScreen({Key? key, required this.product}) : super(key: key);
+  const EditProductScreen({super.key, required this.product});
 
   @override
   State<EditProductScreen> createState() => _EditProductScreenState();
