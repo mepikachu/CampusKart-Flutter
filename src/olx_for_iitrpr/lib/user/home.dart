@@ -120,7 +120,7 @@ class ChatRefreshService {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie,
         },
-      ).timeout(const Duration(seconds: 10));
+      ).timeout(const Duration(seconds: 20));
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);

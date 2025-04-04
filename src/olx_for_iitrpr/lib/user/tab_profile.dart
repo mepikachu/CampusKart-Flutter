@@ -92,6 +92,12 @@ class _ProfileTabState extends State<ProfileTab> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
 
+    await _secureStorage.deleteAll();
+    setState(() {
+      userData = null;
+      errorMessage = '';
+    });
+
     if (mounted) {
       Navigator.pushNamedAndRemoveUntil(
         context,

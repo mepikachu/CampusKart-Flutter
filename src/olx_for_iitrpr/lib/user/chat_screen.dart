@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -71,6 +73,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final Map<String, Map<String, dynamic>> _productCache = {};
   // Cache for product futures to prevent rebuilds and flickering
   final Map<String, Future<Map<String, dynamic>>> _productFutureCache = {};
+  final Map<String, Uint8List> _decodedImageCache = {};
+
   
   Uint8List? partnerProfilePicture;
   
@@ -131,8 +135,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
   
   void _setupRefreshListener() {
-    // Check for message updates every 500ms
-    _refreshSubscription = Stream.periodic(const Duration(milliseconds: 500)).listen((_) async {
+    // Check for message updates every 2000ms
+    _refreshSubscription = Stream.periodic(const Duration(milliseconds: 2000)).listen((_) async {
       final prefs = await SharedPreferences.getInstance();
       final lastSync = prefs.getString('last_message_sync_${widget.conversationId}');
       
@@ -2409,6 +2413,39 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
+  // Add this method to cache decoded images
+  Widget _getCachedProductImage(String base64Image, double width, double height) {
+    // Create a key for this specific image
+    final String imageKey = base64Image.substring(0, min(20, base64Image.length));
+    
+    // Check if we've already decoded this image
+    if (!_decodedImageCache.containsKey(imageKey)) {
+      try {
+        // Decode once and cache the result
+        _decodedImageCache[imageKey] = base64Decode(base64Image);
+      } catch (e) {
+        print('Error decoding image: $e');
+        return Container(
+          width: width,
+          height: height,
+          color: Colors.grey.shade200,
+          child: Icon(Icons.image_not_supported, size: 16, color: Colors.grey.shade400),
+        );
+      }
+    }
+    
+    // Use the cached decoded bytes
+    return Image.memory(
+      _decodedImageCache[imageKey]!,
+      width: width,
+      height: height,
+      fit: BoxFit.cover,
+      gaplessPlayback: true,  // Prevents image from disappearing during reload
+      cacheWidth: (width * 2).toInt(),  // Optimize memory usage
+    );
+  }
+
+
   // Helper widget for product preview content
   Widget _buildProductPreviewContent(Map<String, dynamic> product) {
     return Container(
@@ -2449,12 +2486,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               if (product['imageUrl'] != null)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
-                  child: Image.memory(
-                    base64Decode(product['imageUrl']),
-                    width: 30,
-                    height: 30,
-                    fit: BoxFit.cover,
-                  ),
+                  child: _getCachedProductImage(product['imageUrl'], 30, 30),
                 ),
               SizedBox(width: 4),
               Expanded(
