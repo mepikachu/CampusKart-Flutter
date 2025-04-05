@@ -39,8 +39,10 @@ class _AdminProfileViewState extends State<AdminProfileView> {
     
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
+      
+      // UPDATED: Now using the admin route instead of user route
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/profile/${widget.userId}'),
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/admin/users/${widget.userId}'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -52,9 +54,12 @@ class _AdminProfileViewState extends State<AdminProfileView> {
         if (data['success']) {
           setState(() {
             userData = data['user'];
-            userDonations = data['donations'] ?? [];
-            userSoldProducts = userData?['soldProducts'] ?? [];
-            userPurchasedProducts = userData?['purchasedProducts'] ?? [];
+            // Handle activity data from the admin route response
+            if (data['activity'] != null) {
+              userDonations = data['activity']['donations'] ?? [];
+              userSoldProducts = data['activity']['products'] ?? [];
+              userPurchasedProducts = data['activity']['purchasedProducts'] ?? [];
+            }
             isLoading = false;
           });
           
@@ -67,7 +72,7 @@ class _AdminProfileViewState extends State<AdminProfileView> {
           setState(() {
             isLoading = false;
             isError = true;
-            errorMessage = data['error'] ?? 'Failed to load user profile';
+            errorMessage = data['message'] ?? 'Failed to load user profile';
           });
         }
       } else {
@@ -114,7 +119,7 @@ class _AdminProfileViewState extends State<AdminProfileView> {
       print('Error loading profile picture: $e');
     }
   }
-
+  
   String _formatDate(String? dateString) {
     if (dateString == null) return 'N/A';
     try {

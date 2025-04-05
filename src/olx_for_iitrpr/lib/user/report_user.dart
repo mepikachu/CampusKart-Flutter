@@ -54,7 +54,7 @@ class _ReportDialogState extends State<ReportDialog> {
       print('conversationId: ${_includeChat ? widget.conversationId : null}');
 
       final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/reports'),
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/reports/user'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie,

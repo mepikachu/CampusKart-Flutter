@@ -4,24 +4,26 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'tab_dashboard.dart';
 import 'tab_volunteer_approval.dart';
-import 'tab_profile.dart';  // Add this import
+import 'tab_reports.dart'; // Add this import
+import 'tab_profile.dart';
 
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
 
   @override
-  State<AdminHomeScreen> createState() => _AdminHomeScreenState();
+  State createState() => _AdminHomeScreenState();
 }
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   int _selectedIndex = 0;
-
-  // Three tabs: Dashboard, Volunteer Requests, and Profile
-  final List<Widget> _tabs = const [
+  
+  // Four tabs: Dashboard, Volunteer Requests, Reports, and Profile
+  final List _tabs = const [
     AdminDashboard(),
     VolunteerRequestsScreen(),
-    AdminProfileTab(),  // Add the profile tab
+    ReportsTab(), // Add the reports tab
+    AdminProfileTab(),
   ];
 
   @override
@@ -30,12 +32,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     _verifyAuthCookie();
   }
 
-  Future<void> _verifyAuthCookie() async {
+  Future _verifyAuthCookie() async {
     final authCookie = await _secureStorage.read(key: 'authCookie');
     if (authCookie == null) {
       Navigator.pushReplacementNamed(context, '/login');
       return;
     }
+
     final response = await http.get(
       Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/me'),
       headers: {
@@ -43,6 +46,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         'auth-cookie': authCookie,
       },
     );
+    
     if (response.statusCode != 200) {
       await _secureStorage.delete(key: 'authCookie');
       Navigator.pushReplacementNamed(context, '/login');
@@ -57,6 +61,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       ),
       body: _tabs[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed, // Required for more than 3 items
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() { _selectedIndex = index; }),
         items: const [
@@ -68,7 +73,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             icon: Icon(Icons.request_page),
             label: "Requests",
           ),
-          BottomNavigationBarItem(  // Add profile tab item
+          BottomNavigationBarItem( // Add reports tab item
+            icon: Icon(Icons.report),
+            label: "Reports",
+          ),
+          BottomNavigationBarItem(
             icon: Icon(Icons.person),
             label: "Profile",
           ),

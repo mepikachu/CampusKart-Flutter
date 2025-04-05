@@ -215,7 +215,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 try {
                   final authCookie = await _secureStorage.read(key: 'authCookie');
                   final response = await http.post(
-                    Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/product-reports'),
+                    Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/reports/product'),
                     headers: {
                       'Content-Type': 'application/json',
                       'auth-cookie': authCookie ?? '',
