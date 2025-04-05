@@ -13,6 +13,7 @@ import 'view_profile.dart';
 import 'product_description.dart';
 import 'product_management.dart';
 import 'home.dart';
+import 'report_user.dart';
 
 class ChatScreen extends StatefulWidget {
   final String conversationId;
@@ -2045,6 +2046,15 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         PopupMenuButton(
           onSelected: (value) {
             switch (value) {
+              case 'report':
+                showDialog(
+                  context: context,
+                  builder: (context) => ReportDialog(
+                    userId: widget.partnerId,
+                    conversationId: widget.conversationId,
+                  ),
+                );
+                break;
               case 'block':
                 if (isBlocked) {
                   _unblockUser();
@@ -2068,6 +2078,16 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   Icon(Icons.person, size: 18),
                   SizedBox(width: 8),
                   Text('View Profile'),
+                ],
+              ),
+            ),
+            PopupMenuItem(
+              value: 'report',
+              child: Row(
+                children: [
+                  Icon(Icons.report_problem, size: 18, color: Colors.red),
+                  SizedBox(width: 8),
+                  Text('Report User', style: TextStyle(color: Colors.red)),
                 ],
               ),
             ),

@@ -164,6 +164,91 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     );
   }
 
+  Future<void> _showReportDialog() async {
+    final reasonController = TextEditingController();
+    final descriptionController = TextEditingController();
+    
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Report Product'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                decoration: const InputDecoration(labelText: 'Reason'),
+                items: [
+                  'Inappropriate Content',
+                  'Fake Product',
+                  'Misleading Information',
+                  'Other'
+                ].map((String value) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  reasonController.text = value ?? '';
+                },
+              ),
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  hintText: 'Please provide more details'
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (reasonController.text.isNotEmpty && descriptionController.text.isNotEmpty) {
+                try {
+                  final authCookie = await _secureStorage.read(key: 'authCookie');
+                  final response = await http.post(
+                    Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/product-reports'),
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'auth-cookie': authCookie ?? '',
+                    },
+                    body: json.encode({
+                      'productId': widget.product['_id'],
+                      'reason': reasonController.text,
+                      'description': descriptionController.text,
+                    }),
+                  );
+
+                  if (response.statusCode == 201) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Report submitted successfully')),
+                    );
+                  } else {
+                    throw Exception('Failed to submit report');
+                  }
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Error submitting report')),
+                  );
+                }
+              }
+            },
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.product == null) {
@@ -186,6 +271,13 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         title: const Text('Product Details'),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.flag),
+            onPressed: _showReportDialog,
+            tooltip: 'Report Product',
+          ),
+        ],
       ),
       body: Column(
         children: [
