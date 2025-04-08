@@ -5,9 +5,6 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// Import your ForgotPasswordScreen
-import 'forgot_password.dart';
-
 class LoginScreen extends StatefulWidget {
   final String? errorMessage;
   
@@ -25,7 +22,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   bool _rememberMe = false;
   bool _isLoading = false;
-  String? _errorMessage;
 
   @override
   void initState() {
@@ -33,12 +29,9 @@ class _LoginScreenState extends State<LoginScreen> {
     _loadSavedIdentifier();
     _checkExistingSession();
     
-    // Set error message if provided
     if (widget.errorMessage != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        setState(() {
-          _errorMessage = widget.errorMessage;
-        });
+        _showTopSnackBar(widget.errorMessage!);
       });
     }
   }
@@ -47,7 +40,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final authCookie = await _secureStorage.read(key: 'authCookie');
     final prefs = await SharedPreferences.getInstance();
     final remember = prefs.getBool('rememberMe') ?? false;
-    final storedRole = prefs.getString('role'); // retrieve stored role
+    final storedRole = prefs.getString('role');
     if (authCookie != null && remember && storedRole != null && mounted) {
       if (storedRole == 'admin') {
         Navigator.pushReplacementNamed(context, '/admin_home');
@@ -59,11 +52,35 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  void _showTopSnackBar(String message, {bool isError = true}) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: const TextStyle(
+            color: Colors.white,
+            fontFamily: 'Poppins',
+          ),
+        ),
+        backgroundColor: isError 
+            ? Colors.red.withOpacity(0.8)
+            : Colors.green.withOpacity(0.8),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.only(
+          bottom: MediaQuery.of(context).size.height - 100,
+          right: 20,
+          left: 20,
+        ),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
       _isLoading = true;
-      _errorMessage = null;
     });
     try {
       final response = await http
@@ -102,34 +119,28 @@ class _LoginScreenState extends State<LoginScreen> {
             value: responseBody['user']['userName'],
           );
         } else {
-          // In case of error atleast delete the userId and userName
-          // from secure storage to avoid confusion
           await _secureStorage.delete(key: 'userId');
           await _secureStorage.delete(key: 'userName');
         }
 
-        // Navigate based on role:
         final role = responseBody['user']?['role'] ?? 'user';
-        // Store the role locally for session persistence:
         await prefs.setString('role', role);
         if (role == 'admin') {
           Navigator.pushReplacementNamed(context, '/admin_home');
         } else if (role == 'volunteer' || role == 'volunteer_pending') {
           Navigator.pushReplacementNamed(context, '/volunteer_home');
         } else {
-          Navigator.pushReplacementNamed(context, '/user_home'); // changed from '/home'
+          Navigator.pushReplacementNamed(context, '/user_home');
         }
       } else {
-        setState(() {
-          _errorMessage = responseBody['error'] ?? 'Login failed';
-        });
+        _showTopSnackBar(responseBody['error'] ?? 'Login failed');
       }
     } on TimeoutException {
-      setState(() => _errorMessage = 'Connection timeout');
+      _showTopSnackBar('Connection timeout');
     } on http.ClientException {
-      setState(() => _errorMessage = 'Network error');
+      _showTopSnackBar('Network error');
     } catch (e) {
-      setState(() => _errorMessage = 'An error occurred');
+      _showTopSnackBar('An error occurred');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -155,134 +166,248 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    
     return Scaffold(
-      backgroundColor: Colors.white, // Plain single-color background
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const SizedBox(height: 16),
-                const CircleAvatar(
-                  radius: 40,
-                  backgroundColor: Colors.white,
-                  child: Icon(Icons.person, size: 50, color: Colors.black54),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  "Welcome Back!",
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Email/Username field
-                TextFormField(
-                  controller: _identifierController,
-                  decoration: const InputDecoration(
-                    labelText: "Email/Username",
-                    prefixIcon: Icon(Icons.person_outline),
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) =>
-                      (value?.isEmpty ?? true) ? "Required" : null,
-                ),
-                const SizedBox(height: 16),
-
-                // Password field
-                TextFormField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: "Password",
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                      ),
-                      onPressed: () => setState(() {
-                        _obscurePassword = !_obscurePassword;
-                      }),
+      backgroundColor: Colors.white,
+      resizeToAvoidBottomInset: false,
+      body: Stack(
+        children: [
+          // Main scrollable content
+          Positioned.fill(
+            bottom: 60, // Make space for the footer
+            child: Center(
+              child: SingleChildScrollView(
+                child: Container(
+                  width: screenWidth,
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  // Precisely center the content
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: screenHeight - 60 - bottomPadding,
                     ),
-                    border: const OutlineInputBorder(),
-                  ),
-                  validator: (value) =>
-                      (value?.isEmpty ?? true) ? "Required" : null,
-                ),
-
-                // Remember me & Forgot Password row
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Checkbox(
-                      value: _rememberMe,
-                      onChanged: (value) =>
-                          setState(() => _rememberMe = value ?? false),
-                    ),
-                    const Text("Remember me"),
-                    const Spacer(),
-
-                    // Directly navigate to ForgotPasswordScreen
-                    TextButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ForgotPasswordScreen(),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Text(
+                            "IITRPR MarketPlace",
+                            style: TextStyle(
+                              fontSize: 36,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -1.0,
+                              color: Colors.black,
+                            ),
                           ),
-                        );
-                      },
-                      child: const Text("Forgot Password?"),
-                    ),
-                  ],
-                ),
+                          const SizedBox(height: 40),
 
-                if (_errorMessage != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: Text(
-                      _errorMessage!,
-                      style: const TextStyle(
-                        color: Colors.red,
-                        fontSize: 16,
+                          // Username/Email field
+                          TextFormField(
+                            controller: _identifierController,
+                            decoration: InputDecoration(
+                              hintText: "Username or email",
+                              hintStyle: TextStyle(color: Colors.grey[500], fontSize: 14),
+                              filled: true,
+                              fillColor: Colors.grey[100],
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(5),
+                                borderSide: BorderSide(color: Colors.grey[300]!),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(5),
+                                borderSide: BorderSide(color: Colors.grey[300]!),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(5),
+                                borderSide: BorderSide(color: Colors.grey[400]!),
+                              ),
+                            ),
+                            validator: (value) => (value?.isEmpty ?? true) ? "Required" : null,
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Password field
+                          TextFormField(
+                            controller: _passwordController,
+                            obscureText: _obscurePassword,
+                            decoration: InputDecoration(
+                              hintText: "Password",
+                              hintStyle: TextStyle(color: Colors.grey[500], fontSize: 14),
+                              filled: true,
+                              fillColor: Colors.grey[100],
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(5),
+                                borderSide: BorderSide(color: Colors.grey[300]!),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(5),
+                                borderSide: BorderSide(color: Colors.grey[300]!),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(5),
+                                borderSide: BorderSide(color: Colors.grey[400]!),
+                              ),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                                  color: Colors.grey[500],
+                                ),
+                                onPressed: () => setState(() {
+                                  _obscurePassword = !_obscurePassword;
+                                }),
+                              ),
+                            ),
+                            validator: (value) => (value?.isEmpty ?? true) ? "Required" : null,
+                          ),
+
+                          const SizedBox(height: 8),
+                          
+                          // Remember me and Forgot password row
+                          Row(
+                            children: [
+                              // Remember me checkbox
+                              Checkbox(
+                                value: _rememberMe,
+                                onChanged: (bool? value) {
+                                  setState(() {
+                                    _rememberMe = value ?? false;
+                                  });
+                                },
+                                activeColor: Colors.blue[700],
+                              ),
+                              Text(
+                                "Remember me",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                              
+                              const Spacer(),
+                              
+                              // Forgot password button
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.pushNamed(context, '/forgot_password');
+                                },
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: const Size(10, 30),
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: Text(
+                                  "Forgot password?",
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 12,
+                                    color: Colors.blue[900],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          // Login button
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: _isLoading ? null : _handleLogin,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue[400],
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(5),
+                                ),
+                                disabledBackgroundColor: Colors.blue[200],
+                              ),
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : Text(
+                                      "Log in",
+                                      style: TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-
-                // Login "button" as a text link (same style as "Create Account")
-                _isLoading
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2.5),
-                      )
-                    : TextButton(
-                        onPressed: _handleLogin,
-                        child: const Text(
-                          "Login",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                const SizedBox(height: 20),
-
-                // Create account link
-                TextButton(
-                  onPressed: () => Navigator.pushNamed(context, '/signup'),
-                  child: const Text("Create Account"),
                 ),
-              ],
+              ),
             ),
           ),
-        ),
+          
+          // Fixed footer at the bottom for "Don't have an account"
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              color: Colors.white,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Divider(color: Colors.grey[300], thickness: 1),
+                  Padding(
+                    padding: EdgeInsets.only(
+                      top: 16,
+                      bottom: 16 + bottomPadding,
+                      left: 16,
+                      right: 16,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          "Don't have an account? ",
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            color: Colors.grey[600], 
+                            fontSize: 12
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.pushNamed(context, '/signup');
+                          },
+                          child: Text(
+                            "Sign up",
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              color: Colors.blue[900],
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

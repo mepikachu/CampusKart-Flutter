@@ -25,7 +25,7 @@ class MyApp extends StatelessWidget {
         '/admin_home': (context) => const AdminHomeScreen(),
         '/volunteer_home': (context) => const VolunteerHomeScreen(),
         '/signup': (context) => const SignUpScreen(),
-        '/forgot-password': (context) => const ForgotPasswordScreen(),
+        '/forgot_password': (context) => const ForgotPasswordScreen(),
         '/login': (context) {
           final args = ModalRoute.of(context)?.settings.arguments as Map<String, String>?;
           return LoginScreen(errorMessage: args?['errorMessage']);
