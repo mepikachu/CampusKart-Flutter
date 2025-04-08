@@ -255,7 +255,6 @@ class UserHomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver {
-  final _secureStorage = const FlutterSecureStorage();
   int _selectedIndex = 0;
   
   // Create an instance of the chat refresh service
@@ -265,7 +264,6 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _verifyAuthCookie();
     
     // Initialize the chat refresh service
     _chatRefreshService.initialize();
@@ -295,27 +293,6 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
       setState(() {
         _selectedIndex = index;
       });
-    }
-  }
-
-  Future<void> _verifyAuthCookie() async {
-    final authCookie = await _secureStorage.read(key: 'authCookie');
-    if (authCookie == null) {
-      Navigator.pushReplacementNamed(context, '/login');
-      return;
-    }
-    // Call /api/me to verify the cookie:
-    final response = await http.get(
-      Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/me'),
-      headers: {
-        'Content-Type': 'application/json',
-        'auth-cookie': authCookie,
-      },
-    );
-    if (response.statusCode != 200) {
-      // Invalid cookie; clear it and redirect:
-      await _secureStorage.delete(key: 'authCookie');
-      Navigator.pushReplacementNamed(context, '/login');
     }
   }
 

@@ -9,8 +9,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'forgot_password.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
-
+  final String? errorMessage;
+  
+  const LoginScreen({Key? key, this.errorMessage}) : super(key: key);
+  
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
@@ -30,6 +32,15 @@ class _LoginScreenState extends State<LoginScreen> {
     super.initState();
     _loadSavedIdentifier();
     _checkExistingSession();
+    
+    // Set error message if provided
+    if (widget.errorMessage != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        setState(() {
+          _errorMessage = widget.errorMessage;
+        });
+      });
+    }
   }
 
   Future<void> _checkExistingSession() async {

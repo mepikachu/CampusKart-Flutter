@@ -41,6 +41,57 @@ class _ProductsTabState extends State<ProductsTab> {
           products = data['products'];
           isLoading = false;
         });
+      } else if (response.statusCode == 401) {
+        // Handle authentication error
+        await _secureStorage.delete(key: 'authCookie');
+        if (mounted) {
+          Navigator.pushReplacementNamed(
+            context, 
+            '/login',
+            arguments: {'errorMessage': 'Authentication failed. Please login again.'}
+          );
+        }
+      } else if (response.statusCode == 403){
+        final data = json.decode(response.body);
+        if (mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+              title: const Row(
+                children: [
+                  Text('Account Blocked'),
+                  SizedBox(width: 8),
+                  Text('😔', style: TextStyle(fontSize: 24)),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Your account has been blocked by admin.'),
+                  if (data['blockedAt'] != null) Text(
+                    'Blocked on: ${DateTime.parse(data['blockedAt']).toString().split('.')[0]}',
+                  ),
+                  if (data['blockedReason'] != null) Text(
+                    'Reason: ${data['blockedReason']}',
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  child: const Text('Logout'),
+                  onPressed: () async {
+                    await _secureStorage.delete(key: 'authCookie');
+                    if (mounted) {
+                      Navigator.pushReplacementNamed(context, '/login');
+                    }
+                  },
+                ),
+              ],
+            ),
+          );
+        }
       }
     } catch (e) {
       setState(() {

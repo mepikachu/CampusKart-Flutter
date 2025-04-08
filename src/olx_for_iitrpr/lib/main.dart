@@ -26,6 +26,10 @@ class MyApp extends StatelessWidget {
         '/volunteer_home': (context) => const VolunteerHomeScreen(),
         '/signup': (context) => const SignUpScreen(),
         '/forgot-password': (context) => const ForgotPasswordScreen(),
+        '/login': (context) {
+          final args = ModalRoute.of(context)?.settings.arguments as Map<String, String>?;
+          return LoginScreen(errorMessage: args?['errorMessage']);
+        },
       },
       home: const LoginScreen(),
       theme: ThemeData(

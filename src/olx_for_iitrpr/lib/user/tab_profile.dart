@@ -101,7 +101,7 @@ class _ProfileTabState extends State<ProfileTab> {
     if (mounted) {
       Navigator.pushNamedAndRemoveUntil(
         context,
-        '/',
+        '/login',
         (route) => false,
       );
     }
