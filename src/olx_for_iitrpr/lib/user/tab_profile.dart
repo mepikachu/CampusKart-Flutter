@@ -7,6 +7,7 @@ import 'package:shimmer/shimmer.dart';
 import 'my_listings.dart';
 import 'my_donations.dart';
 import 'my_purchases.dart';
+import 'my_lost_items.dart';
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -182,6 +183,11 @@ class _ProfileTabState extends State<ProfileTab> {
             context,
             MaterialPageRoute(builder: (context) => const MyDonationsPage()),
           );
+        } else if (title == 'My Lost Items') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const MyLostItemsPage()),
+          );
         } else if (title == 'Settings') {
           Navigator.pushNamed(context, '/settings');
         }
@@ -282,6 +288,7 @@ class _ProfileTabState extends State<ProfileTab> {
         _buildSection('My Listings', Icons.list),
         _buildSection('My Purchases', Icons.shopping_bag),
         _buildSection('My Donations', Icons.volunteer_activism),
+        _buildSection('My Lost Items', Icons.search),
         _buildSection('Settings', Icons.settings),
         const SizedBox(height: 20),
         // Static logout button without shimmer
@@ -358,6 +365,7 @@ class _ProfileTabState extends State<ProfileTab> {
                     _buildSection('My Listings', Icons.list),
                     _buildSection('My Purchases', Icons.shopping_bag),
                     _buildSection('My Donations', Icons.volunteer_activism),
+                    _buildSection('My Lost Items', Icons.search),
                     _buildSection('Settings', Icons.settings),
                     const SizedBox(height: 20),
                     // Logout button
