@@ -7,8 +7,35 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'view_profile.dart';
 
+class DonationLabels {
+  final String imagesSectionTitle;
+  final String imagesSubtitle;
+  final String nameLabel;
+  final String nameHint;
+  final String descriptionLabel;
+  final String descriptionHint;
+  final String submitButtonText;
+
+  const DonationLabels({
+    this.imagesSectionTitle = 'Product Images',
+    this.imagesSubtitle = 'Add up to 5 images',
+    this.nameLabel = 'Item Name',
+    this.nameHint = 'Enter item name',
+    this.descriptionLabel = 'Description',
+    this.descriptionHint = 'Enter description',
+    this.submitButtonText = 'Submit Donation',
+  });
+}
+
 class DonationsTab extends StatefulWidget {
-  const DonationsTab({super.key});
+  final bool showLeaderboard;
+  final DonationLabels labels;
+  
+  const DonationsTab({
+    super.key, 
+    this.showLeaderboard = true,
+    this.labels = const DonationLabels(),
+  });
 
   @override
   State<DonationsTab> createState() => _DonationsTabState();
@@ -220,6 +247,87 @@ class _DonationsTabState extends State<DonationsTab> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.showLeaderboard) {
+      // Only show the donation form when showLeaderboard is false
+      return SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Center(child: _buildImagePreviews()),
+                const SizedBox(height: 24),
+                // ... rest of the donation form fields ...
+                TextFormField(
+                  controller: _nameController,
+                  decoration: InputDecoration(
+                    labelText: widget.labels.nameLabel,
+                    hintText: widget.labels.nameHint,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: outlineColor),
+                    ),
+                    // ...existing decoration properties...
+                  ),
+                  validator: (value) =>
+                      value?.isEmpty ?? true ? "Enter item name" : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _descriptionController,
+                  decoration: InputDecoration(
+                    labelText: widget.labels.descriptionLabel,
+                    hintText: widget.labels.descriptionHint,
+                    alignLabelWithHint: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: outlineColor),
+                    ),
+                    // ...existing decoration properties...
+                  ),
+                  maxLines: null,
+                  minLines: 3,
+                  // ...existing properties...
+                ),
+                const SizedBox(height: 32),
+                Container(
+                  width: double.infinity,
+                  height: 54,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _submitDonation,
+                    style: ElevatedButton.styleFrom(
+                      // ...existing style properties...
+                    ),
+                    child: _isLoading
+                        ? const SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : Text(
+                            widget.labels.submitButtonText,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Original tab view with leaderboard
     return DefaultTabController(
       length: 2,
       child: Column(
@@ -257,7 +365,8 @@ class _DonationsTabState extends State<DonationsTab> {
                           TextFormField(
                             controller: _nameController,
                             decoration: InputDecoration(
-                              labelText: "Item Name",
+                              labelText: widget.labels.nameLabel,
+                              hintText: widget.labels.nameHint,
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: BorderSide(color: outlineColor),
@@ -281,7 +390,8 @@ class _DonationsTabState extends State<DonationsTab> {
                           TextFormField(
                             controller: _descriptionController,
                             decoration: InputDecoration(
-                              labelText: "Description",
+                              labelText: widget.labels.descriptionLabel,
+                              hintText: widget.labels.descriptionHint,
                               alignLabelWithHint: true,
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -331,9 +441,9 @@ class _DonationsTabState extends State<DonationsTab> {
                                         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                       ),
                                     )
-                                  : const Text(
-                                      'Submit Donation',
-                                      style: TextStyle(
+                                  : Text(
+                                      widget.labels.submitButtonText,
+                                      style: const TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,
                                         letterSpacing: 0.5,
@@ -374,7 +484,7 @@ class _DonationsTabState extends State<DonationsTab> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Product Images',
+            widget.labels.imagesSectionTitle,
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
@@ -383,7 +493,7 @@ class _DonationsTabState extends State<DonationsTab> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Add up to 5 images',
+            widget.labels.imagesSubtitle,
             style: TextStyle(
               fontSize: 14,
               color: textSecondaryColor,

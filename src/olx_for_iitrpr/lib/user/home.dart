@@ -11,6 +11,10 @@ import 'tab_profile.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'notifications_screen.dart';
+import 'leaderboard_tab.dart';
+import 'lost_found_tab.dart';
+import 'add_donation.dart';
+import 'add_lost_item.dart';
 
 // Chat refresh service to manage periodic updates
 class ChatRefreshService {
@@ -254,26 +258,57 @@ class UserHomeScreen extends StatefulWidget {
   State<UserHomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver {
+class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   int _selectedIndex = 0;
+  bool _isFabExpanded = false; // Add this line
   
   // Create an instance of the chat refresh service
   final ChatRefreshService _chatRefreshService = ChatRefreshService();
+
+  // List of four tabs displayed in the home screen
+  final List<Widget> _tabs = const [
+    ProductsTab(),
+    LeaderboardTab(),
+    LostFoundTab(),
+    ProfileTab(),
+  ];
+
+  late AnimationController _animationController;
+  late Animation<double> _animation;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    
-    // Initialize the chat refresh service
     _chatRefreshService.initialize();
+    
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    
+    _animation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeOut,
+      reverseCurve: Curves.easeIn,
+    );
   }
-  
+
+  void _toggleFab() {
+    setState(() {
+      _isFabExpanded = !_isFabExpanded;
+      if (_isFabExpanded) {
+        _animationController.forward();
+      } else {
+        _animationController.reverse();
+      }
+    });
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
     
-    // Update chat refresh service based on app state
     if (state == AppLifecycleState.resumed) {
       _chatRefreshService.setAppState(true);
     } else if (state == AppLifecycleState.paused) {
@@ -283,6 +318,7 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
 
   @override
   void dispose() {
+    _animationController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _chatRefreshService.dispose();
     super.dispose();
@@ -296,14 +332,6 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
     }
   }
 
-  // List of four tabs displayed in the home screen.
-  final List<Widget> _tabs = const [
-    ProductsTab(),
-    SellTab(),
-    DonationsTab(),
-    ProfileTab(),
-  ];
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -312,39 +340,133 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
           "OLX-IITRPR",
           style: TextStyle(color: Colors.black87),
         ),
-        centerTitle: false, // This aligns the title to the left
+        centerTitle: false,
         actions: [
           IconButton(
-            icon: const Icon(
-              Icons.notifications,
-              color: Colors.black87,
-            ),
+            icon: const Icon(Icons.notifications, color: Colors.black87),
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const NotificationsScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const NotificationsScreen()),
               );
             },
           ),
           IconButton(
-            icon: const Icon(
-              Icons.chat_bubble,
-              color: Colors.black87,
-            ),
+            icon: const Icon(Icons.chat_bubble, color: Colors.black87),
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => const ChatListScreen(),
-                ),
+                MaterialPageRoute(builder: (context) => const ChatListScreen()),
               );
             },
           ),
         ],
       ),
       body: _tabs[_selectedIndex],
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ScaleTransition(
+            scale: _animation,
+            child: Column(
+              children: [
+                if (_isFabExpanded) ...[
+                  FloatingActionButton.extended(
+                    heroTag: 'lost',
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const AddLostItemScreen()),
+                      ).then((success) {
+                        if (success == true) {
+                          // Refresh lost items tab if needed
+                          setState(() {});
+                        }
+                      });
+                    },
+                    backgroundColor: Colors.orange[600],
+                    label: const Text(
+                      'Report Lost Item',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    icon: const Icon(Icons.search),
+                  ),
+                  const SizedBox(height: 12),
+                  FloatingActionButton.extended(
+                    heroTag: 'donate',
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const AddDonationScreen()),
+                      );
+                    },
+                    backgroundColor: Colors.green[600],
+                    label: const Text(
+                      'Add Donation',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    icon: const Icon(Icons.volunteer_activism),
+                  ),
+                  const SizedBox(height: 12),
+                  FloatingActionButton.extended(
+                    heroTag: 'sell',
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const SellTab()),
+                      );
+                    },
+                    backgroundColor: Colors.blue[600],
+                    label: const Text(
+                      'Sell Product',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    icon: const Icon(Icons.sell),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ],
+            ),
+          ),
+          Container(
+            height: 56,
+            width: 56,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  _isFabExpanded ? Colors.red : Colors.blue[700]!,
+                  _isFabExpanded ? Colors.redAccent : Colors.blue[500]!,
+                ],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: AnimatedRotation(
+              duration: const Duration(milliseconds: 300),
+              turns: _isFabExpanded ? 0.125 : 0,
+              child: MaterialButton(
+                onPressed: _toggleFab,
+                shape: const CircleBorder(),
+                padding: EdgeInsets.zero,
+                child: Icon(
+                  Icons.add,
+                  color: Colors.white,
+                  size: 32,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() { _selectedIndex = index; }),
@@ -355,12 +477,12 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
             label: "Products",
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.sell),
-            label: "Sell",
+            icon: Icon(Icons.leaderboard),
+            label: "Leaderboard",
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.volunteer_activism),
-            label: "Donations",
+            icon: Icon(Icons.find_in_page),
+            label: "Lost & Found",
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person),
