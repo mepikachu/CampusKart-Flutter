@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'lost_item_details_screen.dart';
 
 class MyLostItemsPage extends StatefulWidget {
   const MyLostItemsPage({super.key});
@@ -76,77 +77,94 @@ class _MyLostItemsPageState extends State<MyLostItemsPage> {
       );
     }
 
-    return Card(
-      elevation: 4,
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-            child: AspectRatio(
-              aspectRatio: 16 / 9,
-              child: imageWidget,
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => LostItemDetailsScreen(
+              item: item,
+              isOwner: true,
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item['name'] ?? 'Untitled Item',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  item['description'] ?? 'No description provided',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Posted on: $formattedDate',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 12,
-                      ),
+        ).then((result) {
+          if (result == true) {
+            _fetchLostItems(); // Refresh list if item was updated
+          }
+        });
+      },
+      child: Card(
+        elevation: 4,
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: imageWidget,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item['name'] ?? 'Untitled Item',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: status == 'found' ? Colors.green[100] : Colors.orange[100],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        status.toUpperCase(),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    item['description'] ?? 'No description provided',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Posted on: $formattedDate',
                         style: TextStyle(
-                          color: status == 'found' ? Colors.green[900] : Colors.orange[900],
+                          color: Colors.grey[600],
                           fontSize: 12,
-                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: status == 'found' ? Colors.green[100] : Colors.orange[100],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          status.toUpperCase(),
+                          style: TextStyle(
+                            color: status == 'found' ? Colors.green[900] : Colors.orange[900],
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

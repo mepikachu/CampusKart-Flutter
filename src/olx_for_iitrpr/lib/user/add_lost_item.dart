@@ -1,5 +1,5 @@
-import 'dart:io';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -16,11 +16,11 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _lastSeenLocationController = TextEditingController();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   List<File> _images = [];
   bool _isLoading = false;
 
-  // Material Design 3 colors
   static const primaryColor = Color(0xFF1A73E8);
   static const surfaceColor = Color(0xFFFFFFFF);
   static const backgroundColor = Color(0xFFFFFFFF);
@@ -31,7 +31,7 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
   Future<void> _pickImages() async {
     final ImagePicker picker = ImagePicker();
     final List<XFile>? pickedFiles = await picker.pickMultiImage();
-    
+
     if (pickedFiles != null && pickedFiles.isNotEmpty) {
       setState(() {
         _images.addAll(pickedFiles.map((xfile) => File(xfile.path)));
@@ -64,29 +64,40 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
 
       request.fields['name'] = _nameController.text.trim();
       request.fields['description'] = _descriptionController.text.trim();
+      request.fields['lastSeenLocation'] = _lastSeenLocationController.text.trim();
 
       for (File image in _images) {
         request.files.add(await http.MultipartFile.fromPath('images', image.path));
       }
 
-      final response = await request.send();
-      final responseBody = await response.stream.bytesToString();
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 201) {
-        final resData = json.decode(responseBody);
+        final resData = json.decode(response.body);
         if (resData['success'] == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Lost item reported successfully")),
-          );
-          Navigator.pop(context, true); // Return true to trigger refresh
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Lost item posted successfully")),
+            );
+            Navigator.pop(context, true);
+          }
+        } else {
+          throw Exception(resData['error'] ?? 'Failed to post lost item');
         }
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: ${e.toString()}")),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -109,7 +120,7 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Item Images',
             style: TextStyle(
               fontSize: 18,
@@ -183,7 +194,6 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
                     ),
                   );
                 }
-
                 return Container(
                   key: ValueKey(_images[index]),
                   width: 120,
@@ -236,6 +246,30 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
                           ),
                         ),
                       ),
+                      if (index == 0)
+                        Positioned(
+                          bottom: 8,
+                          left: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: primaryColor,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Text(
+                              'MAIN',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 );
@@ -252,107 +286,83 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Report Lost Item'),
-        elevation: 0,
       ),
       body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildImagePreviews(),
-                const SizedBox(height: 24),
-                TextFormField(
-                  controller: _nameController,
-                  decoration: InputDecoration(
-                    labelText: "Item Name",
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: outlineColor),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: outlineColor),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: primaryColor, width: 2),
-                    ),
-                    filled: true,
-                    fillColor: surfaceColor,
-                  ),
-                  validator: (value) => 
-                      value?.isEmpty ?? true ? "Enter item name" : null,
+        padding: const EdgeInsets.all(16),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildImagePreviews(),
+              const SizedBox(height: 24),
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Item Name',
+                  border: OutlineInputBorder(),
                 ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _descriptionController,
-                  decoration: InputDecoration(
-                    labelText: "Description",
-                    hintText: "Provide details about where and when the item was lost",
-                    alignLabelWithHint: true,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: outlineColor),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: outlineColor),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: primaryColor, width: 2),
-                    ),
-                    filled: true,
-                    fillColor: surfaceColor,
-                  ),
-                  maxLines: 3,
-                  validator: (value) => 
-                      value?.isEmpty ?? true ? "Enter description" : null,
+                validator: (value) =>
+                    value?.isEmpty ?? true ? "Enter item name" : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _lastSeenLocationController,
+                decoration: const InputDecoration(
+                  labelText: 'Last Seen Location',
+                  border: OutlineInputBorder(),
                 ),
-                const SizedBox(height: 32),
-                SizedBox(
-                  height: 54,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _submitLostItem,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange[600],
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                validator: (value) =>
+                    value?.isEmpty ?? true ? "Enter last seen location" : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+                validator: (value) =>
+                    value?.isEmpty ?? true ? "Enter description" : null,
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                height: 54,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _submitLostItem,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2E7D32),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 24,
-                            width: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : const Text(
-                            'Submit Report',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
-                  ),
+                        )
+                      : const Text(
+                          'Report Lost Item',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _descriptionController.dispose();
-    super.dispose();
   }
 }

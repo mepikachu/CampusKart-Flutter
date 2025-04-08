@@ -14,6 +14,7 @@ import 'product_description.dart';
 import 'product_management.dart';
 import 'home.dart';
 import 'report_user.dart';
+import 'lost_item_details.dart';
 
 class ChatScreen extends StatefulWidget {
   final String conversationId;
@@ -728,96 +729,89 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
-  // Navigate to product when clicking on product in messages
   void _navigateToProduct(String productId) async {
     try {
       // First check if we have cached product details
       if (_productCache.containsKey(productId)) {
-        final product = _productCache[productId];
-        final sellerId = product!['seller'] is String ?
-          product['seller'] :
-          product['seller']['_id'];
-        
-        if (sellerId == currentUserId) {
-          // Navigate to seller management if current user is the seller
+        final item = _productCache[productId];
+        if (item!['type'] == 'lost_item') {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => SellerOfferManagementScreen(
-                product: product,
+              builder: (context) => LostItemDetailsScreen(
+                item: item,
               ),
             ),
           );
         } else {
-          // Navigate to product details if someone else is the seller
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ProductDetailsScreen(
-                product: product,
-              ),
-            ),
-          );
-        }
-        return;
-      }
-      
-      // If not cached, fetch from server
-      final authCookie = await _secureStorage.read(key: 'authCookie');
-      final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/$productId'),
-        headers: {
-          'Content-Type': 'application/json',
-          'auth-cookie': authCookie ?? '',
-        },
-      );
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] && data['product'] != null) {
-          final product = data['product'];
-          // Cache the product
-          _productCache[productId] = product;
-          
-          final sellerId = product['seller'] is String ?
-            product['seller'] :
-            product['seller']['_id'];
+          final sellerId = item['seller'] is String ? 
+            item['seller'] : 
+            item['seller']['_id'];
           
           if (sellerId == currentUserId) {
-            // Navigate to seller management
             Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => SellerOfferManagementScreen(
-                  product: product,
+                  product: item,
                 ),
               ),
             );
           } else {
-            // Navigate to product details
             Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => ProductDetailsScreen(
-                  product: product,
+                  product: item,
                 ),
               ),
             );
           }
+        }
+        return;
+      }
+
+      // If not cached, try fetching as either product or lost item
+      final item = await _fetchProductDetailsFromSources(productId);
+      
+      if (item['type'] == 'lost_item') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => LostItemDetailsScreen(
+              item: item,
+            ),
+          ),
+        );
+      } else {
+        final sellerId = item['seller'] is String ? 
+          item['seller'] : 
+          item['seller']['_id'];
+        
+        if (sellerId == currentUserId) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => SellerOfferManagementScreen(
+                product: item,
+              ),
+            ),
+          );
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Product details could not be loaded')),
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ProductDetailsScreen(
+                product: item,
+              ),
+            ),
           );
         }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Product not available')),
-        );
       }
     } catch (e) {
       print('Error navigating to product: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not load product details')),
+        SnackBar(content: Text('Could not load details')),
       );
     }
   }
@@ -1502,37 +1496,69 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       return product;
     }
     
-    // Fetch from server if not in any cache
+    // Try fetching as a regular product first
     final authCookie = await _secureStorage.read(key: 'authCookie');
-    final response = await http.get(
-      Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/$productId'),
-      headers: {
-        'Content-Type': 'application/json',
-        'auth-cookie': authCookie ?? '',
-      },
-    );
     
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      if (data['success'] && data['product'] != null) {
-        // Extract essential details
-        final product = {
-          'name': data['product']['name'],
-          'price': data['product']['price'],
-          'seller': data['product']['seller'],
-          'imageUrl': data['product']['images']?.isNotEmpty == true
-            ? data['product']['images'][0]['data']
-            : null,
-        };
-        
-        // Cache the product details
-        await _secureStorage.write(key: 'product_${productId}', value: json.encode(product));
-        _productCache[productId] = product; // Update in-memory cache
-        return product;
+    try {
+      final response = await http.get(
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/$productId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] && data['product'] != null) {
+          final product = {
+            'name': data['product']['name'],
+            'price': data['product']['price'],
+            'seller': data['product']['seller'],
+            'imageUrl': data['product']['images']?.isNotEmpty == true
+              ? data['product']['images'][0]['data']
+              : null,
+            'type': 'product',
+          };
+          
+          await _secureStorage.write(key: 'product_${productId}', value: json.encode(product));
+          _productCache[productId] = product;
+          return product;
+        }
       }
+
+      // If not found as product, try fetching as lost item
+      final lostItemResponse = await http.get(
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/lost-items/$productId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+
+      if (lostItemResponse.statusCode == 200) {
+        final data = json.decode(lostItemResponse.body);
+        if (data['success'] && data['item'] != null) {
+          final item = {
+            'name': data['item']['name'],
+            'lastSeenLocation': data['item']['lastSeenLocation'],
+            'status': data['item']['status'] ?? 'lost',
+            'imageUrl': data['item']['images']?.isNotEmpty == true
+              ? data['item']['images'][0]['data']
+              : null,
+            'type': 'lost_item',
+          };
+          
+          await _secureStorage.write(key: 'product_${productId}', value: json.encode(item));
+          _productCache[productId] = item;
+          return item;
+        }
+      }
+    } catch (e) {
+      print('Error fetching product/item details: $e');
     }
     
-    throw Exception('Failed to load product details');
+    throw Exception('Failed to load details');
   }
 
   @override
@@ -2467,7 +2493,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
 
   // Helper widget for product preview content
-  Widget _buildProductPreviewContent(Map<String, dynamic> product) {
+  Widget _buildProductPreviewContent(Map<String, dynamic> item) {
+    final bool isLostItem = item['type'] == 'lost_item';
+    final Color accentColor = isLostItem ? Colors.orange.shade700 : Colors.green.shade700;
+    
+    // Get the correct image - check both 'image' and 'imageUrl' fields
+    final imageData = item['imageUrl'] ?? item['images']?[0]?['data'];
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.all(6),
@@ -2477,7 +2509,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         borderRadius: BorderRadius.circular(8),
         border: Border(
           left: BorderSide(
-            color: Colors.green.shade700,
+            color: accentColor,
             width: 4,
           ),
         ),
@@ -2488,25 +2520,50 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         children: [
           Row(
             children: [
-              Icon(Icons.shopping_bag, size: 12, color: Colors.green.shade700),
+              Icon(
+                isLostItem ? Icons.search : Icons.shopping_bag,
+                size: 12,
+                color: accentColor,
+              ),
               SizedBox(width: 4),
               Text(
-                'Product',
+                isLostItem ? 'Lost Item' : 'Product',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
-                  color: Colors.green.shade700,
+                  color: accentColor,
                 ),
               ),
+              if (isLostItem && item['status'] != null)
+                Container(
+                  margin: EdgeInsets.only(left: 4),
+                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: item['status'] == 'found' 
+                      ? Colors.green.withOpacity(0.1)
+                      : Colors.orange.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    item['status'].toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: item['status'] == 'found' 
+                        ? Colors.green.shade900
+                        : Colors.orange.shade900,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 2),
           Row(
             children: [
-              if (product['imageUrl'] != null)
+              if (imageData != null)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
-                  child: _getCachedProductImage(product['imageUrl'], 30, 30),
+                  child: _getCachedProductImage(imageData, 30, 30),
                 ),
               SizedBox(width: 4),
               Expanded(
@@ -2514,19 +2571,31 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      product['name'] ?? 'Product',
+                      item['name'] ?? (isLostItem ? 'Lost Item' : 'Product'),
                       style: const TextStyle(fontSize: 12),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    Text(
-                      '₹${product['price'] ?? ''}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.green.shade800,
-                        fontWeight: FontWeight.bold
+                    if (!isLostItem && item['price'] != null)
+                      Text(
+                        '₹${item['price']}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.green.shade800,
+                          fontWeight: FontWeight.bold
+                        ),
+                      )
+                    else if (isLostItem && item['lastSeenLocation'] != null)
+                      Text(
+                        'Last seen: ${item['lastSeenLocation']}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade700,
+                          fontStyle: FontStyle.italic,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
                   ],
                 ),
               ),

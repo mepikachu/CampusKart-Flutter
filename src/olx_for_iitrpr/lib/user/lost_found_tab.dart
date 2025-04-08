@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'lost_item_details.dart';  // Add this import
+import 'lost_item_details_screen.dart';  // Update this import
 
 class LostFoundTab extends StatefulWidget {
   const LostFoundTab({super.key});
@@ -57,9 +57,10 @@ class _LostFoundTabState extends State<LostFoundTab> {
         final data = json.decode(response.body);
         if (data['success']) {
           setState(() {
-            // Filter out items posted by the current user
+            // Filter out items posted by current user AND items with 'found' status
             lostItems = (data['items'] as List).where((item) => 
-              item['user']['_id'] != currentUserId
+              item['user']['_id'] != currentUserId && 
+              item['status'] != 'found'
             ).toList();
             isLoading = false;
           });
@@ -115,9 +116,12 @@ class _LostFoundTabState extends State<LostFoundTab> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => LostItemDetailsScreen(item: item),
+              builder: (context) => LostItemDetailsScreen(
+                item: item,
+                isOwner: false,
+              ),
             ),
-          );
+          ).then((_) => fetchLostItems());
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

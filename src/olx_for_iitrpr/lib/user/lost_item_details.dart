@@ -40,6 +40,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       
+      // First, get or create the conversation
       final conversationResponse = await http.post(
         Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations'),
         headers: {
@@ -55,39 +56,37 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
       
       if (conversationResponse.statusCode == 200) {
         final conversationData = json.decode(conversationResponse.body);
-        if (conversationData['success'] == true) {
-          final conversationId = conversationData['conversation']['_id'];
-          
-          if (mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ChatScreen(
-                  conversationId: conversationId,
-                  partnerNames: widget.item['user']['userName'] ?? 'Unknown',
-                  partnerId: widget.item['user']['_id'],
-                  initialProduct: {
-                    'type': 'lost_item',
-                    'itemId': widget.item['_id'],
-                    'name': widget.item['name'] ?? 'Unknown Item',
-                    'image': widget.item['images']?.isNotEmpty == true ? widget.item['images'][0]['data'] : null,
-                  },
-                ),
-              ),
-            );
-          }
-        } else {
-          throw Exception(conversationData['error'] ?? 'Failed to start conversation');
-        }
-      } else {
-        throw Exception('Failed to start conversation');
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error starting chat: ${e.toString()}')),
+        final conversationId = conversationData['conversation']['_id'];
+        
+        // Format the initial product data to match the product chat format
+        final initialProduct = {
+          'productId': widget.item['_id'],
+          'name': widget.item['name'],
+          'image': (widget.item['images'] != null && widget.item['images'].isNotEmpty) 
+              ? widget.item['images'][0]['data'] 
+              : null,
+          'type': 'lost_item',
+          'lastSeenLocation': widget.item['lastSeenLocation'],
+          'status': widget.item['status'] ?? 'lost',
+        };
+        
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ChatScreen(
+              conversationId: conversationId,
+              partnerNames: widget.item['user']['userName'] ?? 'Unknown',
+              partnerId: widget.item['user']['_id'],
+              initialProduct: initialProduct,
+            ),
+          ),
         );
       }
+    } catch (e) {
+      print('Error starting chat: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error starting chat. Please try again.')),
+      );
     }
   }
 
