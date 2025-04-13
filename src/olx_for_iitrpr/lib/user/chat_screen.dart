@@ -14,7 +14,7 @@ import 'product_description.dart';
 import 'product_management.dart';
 import 'home.dart';
 import 'report_user.dart';
-import 'lost_item_details.dart';
+import 'lost_item_description.dart';
 
 class ChatScreen extends StatefulWidget {
   final String conversationId;

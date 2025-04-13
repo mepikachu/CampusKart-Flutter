@@ -8,6 +8,7 @@ import 'my_listings.dart';
 import 'my_donations.dart';
 import 'my_purchases.dart';
 import 'my_lost_items.dart';
+import 'edit_profile_screen.dart';
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -336,6 +337,28 @@ class _ProfileTabState extends State<ProfileTab> {
                           ? const Icon(Icons.person, size: 50, color: Colors.grey)
                           : null,
                     ),
+                    const SizedBox(height: 8),
+                    // Add Edit Profile Button
+                    TextButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EditProfileScreen(
+                              userData: userData!,
+                              onProfileUpdated: () => fetchUserData(),
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.edit, size: 16),
+                      label: const Text('Edit Profile'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.blue,
+                        textStyle: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     const SizedBox(height: 16),
                     // Username
                     Text(

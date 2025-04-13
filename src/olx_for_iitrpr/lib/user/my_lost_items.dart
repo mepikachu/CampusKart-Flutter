@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'lost_item_details_screen.dart';
+import 'lost_item_management.dart';
 
 class MyLostItemsPage extends StatefulWidget {
   const MyLostItemsPage({super.key});

@@ -5,15 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'chat_list.dart';
 import 'tab_products.dart';
-import 'tab_sell.dart';
-import 'tab_donations.dart';
+import 'add_product.dart';
+import 'add_donation.dart';
 import 'tab_profile.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'notifications_screen.dart';
-import 'leaderboard_tab.dart';
-import 'lost_found_tab.dart';
-import 'add_donation.dart';
+import 'tab_leaderboard.dart';
+import 'tab_lost&found.dart';
 import 'add_lost_item.dart';
 
 // Chat refresh service to manage periodic updates
@@ -268,8 +267,8 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
   // List of four tabs displayed in the home screen
   final List<Widget> _tabs = const [
     ProductsTab(),
-    LeaderboardTab(),
     LostFoundTab(),
+    LeaderboardTab(),
     ProfileTab(),
   ];
 
@@ -363,109 +362,112 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
         ],
       ),
       body: _tabs[_selectedIndex],
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ScaleTransition(
-            scale: _animation,
-            child: Column(
-              children: [
-                if (_isFabExpanded) ...[
-                  FloatingActionButton.extended(
-                    heroTag: 'lost',
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const AddLostItemScreen()),
-                      ).then((success) {
-                        if (success == true) {
-                          // Refresh lost items tab if needed
-                          setState(() {});
-                        }
-                      });
-                    },
-                    backgroundColor: Colors.orange[600],
-                    label: const Text(
-                      'Report Lost Item',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat, // Change this
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 16), // Add padding to match tab height
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ScaleTransition(
+              scale: _animation,
+              child: Column(
+                children: [
+                  if (_isFabExpanded) ...[
+                    FloatingActionButton.extended(
+                      heroTag: 'lost',
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const AddLostItemScreen()),
+                        ).then((success) {
+                          if (success == true) {
+                            // Refresh lost items tab if needed
+                            setState(() {});
+                          }
+                        });
+                      },
+                      backgroundColor: Colors.orange[600],
+                      label: const Text(
+                        'Report Lost Item',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      icon: const Icon(Icons.search),
                     ),
-                    icon: const Icon(Icons.search),
-                  ),
-                  const SizedBox(height: 12),
-                  FloatingActionButton.extended(
-                    heroTag: 'donate',
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const AddDonationScreen()),
-                      );
-                    },
-                    backgroundColor: Colors.green[600],
-                    label: const Text(
-                      'Add Donation',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                    const SizedBox(height: 12),
+                    FloatingActionButton.extended(
+                      heroTag: 'donate',
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const AddDonationScreen()),
+                        );
+                      },
+                      backgroundColor: Colors.green[600],
+                      label: const Text(
+                        'Add Donation',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      icon: const Icon(Icons.volunteer_activism),
                     ),
-                    icon: const Icon(Icons.volunteer_activism),
-                  ),
-                  const SizedBox(height: 12),
-                  FloatingActionButton.extended(
-                    heroTag: 'sell',
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const SellTab()),
-                      );
-                    },
-                    backgroundColor: Colors.blue[600],
-                    label: const Text(
-                      'Sell Product',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                    const SizedBox(height: 12),
+                    FloatingActionButton.extended(
+                      heroTag: 'sell',
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const SellTab()),
+                        );
+                      },
+                      backgroundColor: Colors.blue[600],
+                      label: const Text(
+                        'Sell Product',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      icon: const Icon(Icons.sell),
                     ),
-                    icon: const Icon(Icons.sell),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-              ],
-            ),
-          ),
-          Container(
-            height: 56,
-            width: 56,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  _isFabExpanded ? Colors.red : Colors.blue[700]!,
-                  _isFabExpanded ? Colors.redAccent : Colors.blue[500]!,
+                    const SizedBox(height: 16),
+                  ],
                 ],
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
-                ),
-              ],
             ),
-            child: AnimatedRotation(
-              duration: const Duration(milliseconds: 300),
-              turns: _isFabExpanded ? 0.125 : 0,
-              child: MaterialButton(
-                onPressed: _toggleFab,
-                shape: const CircleBorder(),
-                padding: EdgeInsets.zero,
-                child: Icon(
-                  Icons.add,
-                  color: Colors.white,
-                  size: 32,
+            Container(
+              height: 56,
+              width: 56,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    _isFabExpanded ? Colors.red : Colors.blue[700]!,
+                    _isFabExpanded ? Colors.redAccent : Colors.blue[500]!,
+                  ],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: AnimatedRotation(
+                duration: const Duration(milliseconds: 300),
+                turns: _isFabExpanded ? 0.125 : 0,
+                child: MaterialButton(
+                  onPressed: _toggleFab,
+                  shape: const CircleBorder(),
+                  padding: EdgeInsets.zero,
+                  child: Icon(
+                    Icons.add,
+                    color: Colors.white,
+                    size: 32,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
@@ -477,12 +479,12 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
             label: "Products",
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.leaderboard),
-            label: "Leaderboard",
-          ),
-          BottomNavigationBarItem(
             icon: Icon(Icons.find_in_page),
             label: "Lost & Found",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.leaderboard),
+            label: "Leaderboard",
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person),

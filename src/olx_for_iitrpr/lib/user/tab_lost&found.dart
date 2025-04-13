@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'lost_item_details_screen.dart';  // Update this import
+import 'lost_item_description.dart';  // Update this import
 
 class LostFoundTab extends StatefulWidget {
   const LostFoundTab({super.key});
@@ -118,7 +118,6 @@ class _LostFoundTabState extends State<LostFoundTab> {
             MaterialPageRoute(
               builder: (context) => LostItemDetailsScreen(
                 item: item,
-                isOwner: false,
               ),
             ),
           ).then((_) => fetchLostItems());
