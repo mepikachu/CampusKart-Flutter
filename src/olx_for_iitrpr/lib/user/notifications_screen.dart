@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'my_purchases.dart';
+import 'product_description.dart';
+import 'product_management.dart';  // Add this import
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -206,6 +209,139 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                           .split('.')[0],
                                       style: const TextStyle(fontSize: 12),
                                     ),
+                                    onTap: () async {
+                                      switch (notification['type']) {
+                                        case 'offer_accepted':
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => const MyPurchasesPage(),
+                                            ),
+                                          );
+                                          break;
+                                        
+                                        case 'new_offer':
+                                        case 'offer_received':
+                                        case 'received_offer':
+                                          if (notification['productId'] != null) {
+                                            try {
+                                              final authCookie = await _secureStorage.read(key: 'authCookie');
+                                              
+                                              // First, check if the offer is still valid
+                                              final offerResponse = await http.get(
+                                                Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/offers/${notification['offerId']}'),
+                                                headers: {
+                                                  'Content-Type': 'application/json',
+                                                  'auth-cookie': authCookie ?? '',
+                                                },
+                                              );
+
+                                              if (offerResponse.statusCode == 200) {
+                                                final offerData = json.decode(offerResponse.body);
+                                                
+                                                if (!offerData['valid']) {
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text('This offer has expired'),
+                                                      backgroundColor: Colors.orange,
+                                                    ),
+                                                  );
+                                                  return;
+                                                }
+
+                                                // Then check the product status
+                                                final productResponse = await http.get(
+                                                  Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${notification['productId']}'),
+                                                  headers: {
+                                                    'Content-Type': 'application/json',
+                                                    'auth-cookie': authCookie ?? '',
+                                                  },
+                                                );
+
+                                                if (productResponse.statusCode == 200) {
+                                                  final productData = json.decode(productResponse.body);
+                                                  
+                                                  if (productData['success'] && mounted) {
+                                                    if (productData['product']['status'] == 'available') {
+                                                      // Navigate to product management if both product and offer are valid
+                                                      Navigator.push(
+                                                        context,
+                                                        MaterialPageRoute(
+                                                          builder: (context) => SellerOfferManagementScreen(
+                                                            product: productData['product'],
+                                                          ),
+                                                        ),
+                                                      );
+                                                    } else {
+                                                      ScaffoldMessenger.of(context).showSnackBar(
+                                                        const SnackBar(
+                                                          content: Text('This product is no longer available'),
+                                                          backgroundColor: Colors.red,
+                                                        ),
+                                                      );
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            } catch (e) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text('Error loading details'),
+                                                  backgroundColor: Colors.red,
+                                                ),
+                                              );
+                                            }
+                                          }
+                                          break;
+
+                                        case 'offer_rejected':
+                                        case 'product_updated':
+                                          if (notification['productId'] != null) {
+                                            try {
+                                              final authCookie = await _secureStorage.read(key: 'authCookie');
+                                              final response = await http.get(
+                                                Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${notification['productId']}'),
+                                                headers: {
+                                                  'Content-Type': 'application/json',
+                                                  'auth-cookie': authCookie ?? '',
+                                                },
+                                              );
+
+                                              if (response.statusCode == 200) {
+                                                final productData = json.decode(response.body);
+                                                if (productData['success'] && mounted) {
+                                                  if (productData['product']['status'] == 'available') {
+                                                    Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (context) => ProductDetailsScreen(
+                                                          product: productData['product'],
+                                                        ),
+                                                      ),
+                                                    );
+                                                  } else {
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      const SnackBar(
+                                                        content: Text('This product is no longer available'),
+                                                        duration: Duration(seconds: 2),
+                                                        backgroundColor: Colors.red,
+                                                      ),
+                                                    );
+                                                  }
+                                                }
+                                              }
+                                            } catch (e) {
+                                              ScaffoldMessenger.of(context).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text('Error loading product details'),
+                                                  backgroundColor: Colors.red,
+                                                ),
+                                              );
+                                            }
+                                          }
+                                          break;
+                                      }
+                                    },
                                   ),
                                 );
                               },
