@@ -82,32 +82,44 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
 
       final response = await http.put(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/profile'),
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/me'), // Fixed URL
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie,
         },
         body: json.encode(updateData),
-      );
+      ).timeout(const Duration(seconds: 30));
 
-      final responseData = json.decode(response.body);
-      if (response.statusCode == 200 && responseData['success']) {
-        widget.onProfileUpdated();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Profile updated successfully')),
-          );
-          Navigator.pop(context);
+      // Debug prints to help identify issues
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+        if (responseData['success']) {
+          widget.onProfileUpdated();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Profile updated successfully')),
+            );
+            Navigator.pop(context);
+          }
+        } else {
+          throw Exception(responseData['error'] ?? 'Failed to update profile');
         }
       } else {
-        throw Exception(responseData['error'] ?? 'Failed to update profile');
+        throw Exception('Server returned status code: ${response.statusCode}');
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
+      print('Error updating profile: $e');
     } finally {
       setState(() => _isLoading = false);
     }
@@ -139,17 +151,39 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                               : null) as ImageProvider?,
                       child: (_imageFile == null &&
                               widget.userData['profilePicture']?['data'] == null)
-                          ? const Icon(Icons.person, size: 50)
+                          ? Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: const [
+                                Icon(
+                                  Icons.person,
+                                  size: 40,
+                                  color: Colors.grey,
+                                ),
+                                SizedBox(height: 4),
+                                Icon(
+                                  Icons.camera_alt,
+                                  size: 20,
+                                  color: Colors.grey,
+                                ),
+                              ],
+                            )
                           : null,
                     ),
                     Positioned(
                       right: 0,
                       bottom: 0,
-                      child: CircleAvatar(
-                        radius: 15,
-                        backgroundColor: Theme.of(context).primaryColor,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).primaryColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white,
+                            width: 2,
+                          ),
+                        ),
                         child: const Icon(
-                          Icons.camera_alt,
+                          Icons.edit,
                           size: 18,
                           color: Colors.white,
                         ),
