@@ -1,12 +1,17 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
+import 'view_product.dart';
+import 'view_donation.dart';
+import 'view_user_items.dart';
+import 'package:shimmer/shimmer.dart';
 
 class AdminProfileView extends StatefulWidget {
   final String userId;
-  
+
   const AdminProfileView({Key? key, required this.userId}) : super(key: key);
 
   @override
@@ -15,15 +20,15 @@ class AdminProfileView extends StatefulWidget {
 
 class _AdminProfileViewState extends State<AdminProfileView> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  
+
   bool isLoading = true;
   bool isError = false;
   String errorMessage = '';
   Map<String, dynamic>? userData;
-  List<dynamic> userDonations = [];
-  List<dynamic> userSoldProducts = [];
-  List<dynamic> userPurchasedProducts = [];
-  bool isPerformingAction = false;
+  Map<String, List<dynamic>> userActivity = {
+    'products': [],
+    'donations': []
+  };
 
   @override
   void initState() {
@@ -36,11 +41,10 @@ class _AdminProfileViewState extends State<AdminProfileView> {
       isLoading = true;
       isError = false;
     });
-    
+
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
-      
-      // UPDATED: Now using the admin route instead of user route
+
       final response = await http.get(
         Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/admin/users/${widget.userId}'),
         headers: {
@@ -54,41 +58,26 @@ class _AdminProfileViewState extends State<AdminProfileView> {
         if (data['success']) {
           setState(() {
             userData = data['user'];
-            // Handle activity data from the admin route response
             if (data['activity'] != null) {
-              userDonations = data['activity']['donations'] ?? [];
-              userSoldProducts = data['activity']['products'] ?? [];
-              userPurchasedProducts = data['activity']['purchasedProducts'] ?? [];
+              userActivity['products'] = data['activity']['products'] ?? [];
+              userActivity['donations'] = data['activity']['donations'] ?? [];
             }
             isLoading = false;
           });
-          
-          // Load profile picture if available
-          if (userData != null && (userData!['profilePicture'] == true || 
-              (userData!['profilePicture'] is Map && userData!['profilePicture']['data'] != null))) {
+
+          if (userData != null && userData!['profilePicture'] != null) {
             _loadProfilePicture();
           }
         } else {
-          setState(() {
-            isLoading = false;
-            isError = true;
-            errorMessage = data['message'] ?? 'Failed to load user profile';
-          });
+          throw Exception(data['message'] ?? 'Failed to load user profile');
         }
-      } else {
-        setState(() {
-          isLoading = false;
-          isError = true;
-          errorMessage = 'Failed to load user profile. Status: ${response.statusCode}';
-        });
       }
     } catch (e) {
       setState(() {
-        isLoading = false;
         isError = true;
-        errorMessage = 'Error: $e';
+        errorMessage = e.toString();
+        isLoading = false;
       });
-      print('Error fetching profile: $e');
     }
   }
 
@@ -105,7 +94,6 @@ class _AdminProfileViewState extends State<AdminProfileView> {
 
       if (response.statusCode == 200) {
         if (response.headers['content-type']?.contains('application/json') != true) {
-          // This is binary data (image)
           if (mounted) {
             setState(() {
               if (userData != null) {
@@ -119,7 +107,44 @@ class _AdminProfileViewState extends State<AdminProfileView> {
       print('Error loading profile picture: $e');
     }
   }
-  
+
+  void _navigateToProduct(String productId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AdminProductView(productId: productId),
+      ),
+    );
+  }
+
+  void _viewAllProducts() {
+    if (userData == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => UserItemsView(
+          userId: widget.userId,
+          type: 'products',
+          userName: userData!['userName'] ?? 'User',
+        ),
+      ),
+    );
+  }
+
+  void _viewAllDonations() {
+    if (userData == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => UserItemsView(
+          userId: widget.userId,
+          type: 'donations',
+          userName: userData!['userName'] ?? 'User',
+        ),
+      ),
+    );
+  }
+
   String _formatDate(String? dateString) {
     if (dateString == null) return 'N/A';
     try {
@@ -130,192 +155,94 @@ class _AdminProfileViewState extends State<AdminProfileView> {
     }
   }
 
-  Future<void> _approveVolunteer() async {
-    if (userData == null || userData!['role'] != 'volunteer_pending') return;
-    
-    setState(() {
-      isPerformingAction = true;
-    });
-    
+  String _formatTimeAgo(String? dateString) {
+    if (dateString == null) return 'N/A';
     try {
-      final authCookie = await _secureStorage.read(key: 'authCookie');
-      final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/approve-volunteer/${widget.userId}'),
-        headers: {
-          'Content-Type': 'application/json',
-          'auth-cookie': authCookie ?? '',
-        },
-      );
+      final date = DateTime.parse(dateString);
+      final now = DateTime.now();
+      final difference = now.difference(date);
 
-      if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Volunteer approved successfully')),
-        );
-        _fetchUserProfile();
+      if (difference.inDays == 0) {
+        return DateFormat('h:mm a').format(date);
+      } else if (difference.inDays == 1) {
+        return 'Yesterday ${DateFormat('h:mm a').format(date)}';
+      } else if (difference.inDays < 7) {
+        return '${DateFormat('EEEE').format(date)} ${DateFormat('h:mm a').format(date)}';
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to approve volunteer')),
-        );
+        return DateFormat('MMM d, y h:mm a').format(date);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
-    } finally {
-      setState(() {
-        isPerformingAction = false;
-      });
+      return dateString;
     }
   }
 
-  Future<void> _deleteUser() async {
-    bool confirmed = await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete User'),
-        content: const Text('Are you sure you want to delete this user? This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    ) ?? false;
-
-    if (!confirmed) return;
-    
-    setState(() {
-      isPerformingAction = true;
-    });
-    
-    try {
-      final authCookie = await _secureStorage.read(key: 'authCookie');
-      final response = await http.delete(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/${widget.userId}'),
-        headers: {
-          'Content-Type': 'application/json',
-          'auth-cookie': authCookie ?? '',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('User deleted successfully')),
-        );
-        Navigator.of(context).pop(); // Go back to previous screen
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to delete user')),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
-    } finally {
-      setState(() {
-        isPerformingAction = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(userData != null ? userData!['userName'] ?? 'User Profile' : 'User Profile'),
-        elevation: 2,
-        actions: [
-          if (!isLoading && !isError && userData != null)
-            PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'delete') {
-                  _deleteUser();
-                } else if (value == 'approve' && userData!['role'] == 'volunteer_pending') {
-                  _approveVolunteer();
-                }
-              },
-              itemBuilder: (context) => [
-                if (userData!['role'] == 'volunteer_pending')
-                  const PopupMenuItem(
-                    value: 'approve',
-                    child: Text('Approve as Volunteer'),
+  Widget _buildProductPreview(Map<String, dynamic> product) {
+    return GestureDetector(
+      onTap: () => _navigateToProduct(product['_id']),
+      child: Container(
+        width: 160,
+        margin: const EdgeInsets.only(right: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (product['images']?.isNotEmpty ?? false)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: Stack(
+                    children: [
+                      Shimmer.fromColors(
+                        baseColor: Colors.grey[300]!,
+                        highlightColor: Colors.grey[100]!,
+                        child: Container(
+                          color: Colors.white,
+                        ),
+                      ),
+                      Image.memory(
+                        base64Decode(product['images'][0]['data']),
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
+                      ),
+                    ],
                   ),
-                const PopupMenuItem(
-                  value: 'delete',
-                  child: Text('Delete User'),
                 ),
-              ],
-            ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          if (isLoading) 
-            const Center(child: CircularProgressIndicator())
-          else if (isError)
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                  const SizedBox(height: 16),
-                  Text(errorMessage, textAlign: TextAlign.center),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _fetchUserProfile,
-                    child: const Text('Retry'),
-                  ),
-                ],
               ),
-            )
-          else
-            _buildAdminProfileContent(),
-            
-          if (isPerformingAction)
-            Container(
-              color: Colors.black26,
-              child: const Center(child: CircularProgressIndicator()),
+            const SizedBox(height: 8),
+            Text(
+              product['name'] ?? 'Unnamed Product',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 14),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildAdminProfileContent() {
+  Widget _buildUserProfile() {
     if (userData == null) {
       return const Center(child: Text('No user data available'));
     }
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Admin Header - User Identity
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue.shade100),
-            ),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
             child: Row(
               children: [
                 CircleAvatar(
-                  radius: 40,
-                  backgroundColor: Colors.grey.shade200,
+                  radius: 50,
+                  backgroundColor: Colors.grey[200],
                   backgroundImage: userData!['profilePictureData'] != null
                       ? MemoryImage(base64Decode(userData!['profilePictureData']))
                       : null,
                   child: userData!['profilePictureData'] == null
-                      ? const Icon(Icons.person, size: 40, color: Colors.grey)
+                      ? const Icon(Icons.person, size: 50, color: Colors.grey)
                       : null,
                 ),
                 const SizedBox(width: 16),
@@ -326,319 +253,92 @@ class _AdminProfileViewState extends State<AdminProfileView> {
                       Text(
                         userData!['userName'] ?? 'Unknown User',
                         style: const TextStyle(
-                          fontSize: 22,
+                          fontSize: 24,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: _getRoleColor(userData!['role']),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              userData!['role']?.toUpperCase() ?? 'USER',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'ID: ${widget.userId}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
                       Text(
-                        'Member since ${_formatDate(userData!['registrationDate'])}',
+                        userData!['email'] ?? '',
                         style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 12,
+                          fontSize: 16,
+                          color: Colors.grey[600],
                         ),
                       ),
-                      if (userData!['lastSeen'] != null)
-                        Text(
-                          'Last seen: ${_formatDate(userData!['lastSeen'])}',
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 12,
-                          ),
-                        ),
                     ],
                   ),
                 ),
               ],
             ),
           ),
-          
-          const SizedBox(height: 24),
-          
-          // Contact Information Section
-          Card(
-            elevation: 1,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.contact_mail, color: Colors.blue.shade800),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'Contact Information',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  
-                  if (userData!['email'] != null)
-                    _buildInfoItem(Icons.email_outlined, 'Email', userData!['email']),
-                  
-                  if (userData!['phone'] != null)
-                    _buildInfoItem(Icons.phone_outlined, 'Phone', userData!['phone']),
-                  
-                  if (userData!['address'] != null)
-                    _buildAddressSection(userData!['address']),
-                ],
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Activity Summary Card
-          Card(
-            elevation: 1,
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.analytics, color: Colors.blue.shade800),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'User Activity',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildActivityCounter(
-                        'Donations', 
-                        userDonations.length, 
-                        Icons.volunteer_activism
-                      ),
-                      _buildActivityCounter(
-                        'Sold', 
-                        userSoldProducts.length, 
-                        Icons.sell
-                      ),
-                      _buildActivityCounter(
-                        'Purchased', 
-                        userPurchasedProducts.length, 
-                        Icons.shopping_bag
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Admin Actions Section
-          if (userData!['role'] == 'volunteer_pending')
-            ElevatedButton.icon(
-              onPressed: _approveVolunteer,
-              icon: const Icon(Icons.check_circle),
-              label: const Text('Approve as Volunteer'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 48),
-              ),
-            ),
-          
-          const SizedBox(height: 8),
-          
-          ElevatedButton.icon(
-            onPressed: _deleteUser,
-            icon: const Icon(Icons.delete_forever),
-            label: const Text('Delete User Account'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 48),
-            ),
-          ),
-          
-          const SizedBox(height: 24),
-          
-          // Donations Section
-          const Text(
-            'Donations',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          
-          userDonations.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.volunteer_activism_outlined,
-                          size: 48,
-                          color: Colors.grey.shade400,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No donations yet',
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: userDonations.length,
-                  itemBuilder: (context, index) => _buildDonationItem(userDonations[index]),
-                ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActivityCounter(String label, int count, IconData icon) {
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.blue.shade50,
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: Colors.blue.shade700, size: 28),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          count.toString(),
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            color: Colors.grey.shade700,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInfoItem(IconData icon, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 20, color: Colors.blue.shade700),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade700,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 16,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAddressSection(Map<String, dynamic> address) {
-    final street = address['street'];
-    final city = address['city'];
-    final state = address['state'];
-    final zipCode = address['zipCode'];
-    final country = address['country'];
-    
-    final formattedAddress = [
-      if (street != null && street.isNotEmpty) street,
-      if (city != null && city.isNotEmpty) city,
-      if (state != null && state.isNotEmpty) state,
-      if (zipCode != null && zipCode.isNotEmpty) zipCode,
-      if (country != null && country.isNotEmpty) country,
-    ].join(', ');
-    
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.location_on_outlined, size: 20, color: Colors.blue.shade700),
-          const SizedBox(width: 12),
-          Expanded(
+          Padding(
+            padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Address',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  formattedAddress.isNotEmpty ? formattedAddress : 'No address provided',
-                  style: const TextStyle(
-                    fontSize: 16,
-                  ),
-                ),
+                _buildDetailRow('Role', userData!['role']?.toUpperCase() ?? 'USER'),
+                _buildDetailRow('User ID', widget.userId),
+                _buildDetailRow('Member since', _formatDate(userData!['registrationDate'])),
+                _buildDetailRow('Last seen', _formatTimeAgo(userData!['lastSeen'])),
+                if (userData!['phone'] != null)
+                  _buildDetailRow('Phone', userData!['phone']),
+                if (userData!['department'] != null)
+                  _buildDetailRow('Department', userData!['department']),
+                if (userData!['entryNumber'] != null)
+                  _buildDetailRow('Entry Number', userData!['entryNumber']),
               ],
+            ),
+          ),
+          if ((userActivity['products'] ?? []).isNotEmpty) ...[
+            _buildSectionHeader('Products', _viewAllProducts),
+            SizedBox(
+              height: 200,
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                scrollDirection: Axis.horizontal,
+                itemCount: math.min(userActivity['products']!.length, 10),
+                itemBuilder: (context, index) => _buildProductPreview(userActivity['products']![index]),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+          if ((userActivity['donations'] ?? []).isNotEmpty) ...[
+            _buildSectionHeader('Donations', _viewAllDonations),
+            SizedBox(
+              height: 200,
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                scrollDirection: Axis.horizontal,
+                itemCount: math.min(userActivity['donations']!.length, 10),
+                itemBuilder: (context, index) => _buildProductPreview(userActivity['donations']![index]),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w500,
+                color: Colors.grey,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 16),
             ),
           ),
         ],
@@ -646,99 +346,54 @@ class _AdminProfileViewState extends State<AdminProfileView> {
     );
   }
 
-  Widget _buildDonationItem(Map<String, dynamic> donation) {
-    final status = donation['status'] ?? 'available';
-    
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12.0),
-      elevation: 1,
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                Icons.volunteer_activism,
-                size: 30,
-                color: Colors.blue.shade700,
-              ),
+  Widget _buildSectionHeader(String title, VoidCallback onViewAll) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    donation['name'] ?? 'Unnamed Donation',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    donation['description'] ?? 'No description',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.grey.shade700,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        _formatDate(donation['donationDate']),
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 12,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: status == 'available' ? Colors.green.shade100 : Colors.amber.shade100,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          status.toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: status == 'available' ? Colors.green.shade800 : Colors.amber.shade800,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+          TextButton(
+            onPressed: onViewAll,
+            child: const Text('View All'),
+          ),
+        ],
       ),
     );
   }
 
-  Color _getRoleColor(String? role) {
-    switch (role) {
-      case 'admin':
-        return Colors.red.shade700;
-      case 'volunteer':
-        return Colors.green.shade700;
-      case 'volunteer_pending':
-        return Colors.orange.shade700;
-      default:
-        return Colors.blue.shade700;
-    }
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(userData != null ? userData!['userName'] ?? 'User Profile' : 'User Profile'),
+        elevation: 2,
+      ),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : isError
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                      const SizedBox(height: 16),
+                      Text(errorMessage, textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _fetchUserProfile,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                )
+              : _buildUserProfile(),
+    );
   }
 }

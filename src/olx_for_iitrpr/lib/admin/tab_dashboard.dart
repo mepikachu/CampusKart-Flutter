@@ -451,7 +451,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           height: 220,
           child: ListView(
             scrollDirection: Axis.horizontal,
-            children: [
+            children: <Widget>[
               SizedBox(
                 width: 300,
                 child: _buildChartCard(
@@ -847,7 +847,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         ),
                       )
                     : Column(
-                        children: recentActivity.take(10).map((activity) {
+                        children: recentActivity.take(10).map<Widget>((activity) {
                           IconData activityIcon;
                           Color iconColor;
                           
@@ -1395,7 +1395,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: legendItems.map((item) {
+                children: legendItems.map<Widget>((item) {
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 6.0),
                     child: Row(
