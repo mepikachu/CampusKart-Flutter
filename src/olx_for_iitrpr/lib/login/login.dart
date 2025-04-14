@@ -95,6 +95,8 @@ class _LoginScreenState extends State<LoginScreen> {
           .timeout(const Duration(seconds: 15));
 
       final responseBody = json.decode(response.body);
+      print("-------------------------------------------");
+      print(responseBody['user']);
       if (response.statusCode == 200 && responseBody['success'] == true) {
         await _secureStorage.write(
           key: 'authCookie',
