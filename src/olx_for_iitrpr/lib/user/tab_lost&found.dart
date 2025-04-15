@@ -3,7 +3,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'lost_item_description.dart';  // Update this import
+import 'lost_item_description.dart';
+import '../services/lost_found_cache_service.dart';
 
 class LostFoundTab extends StatefulWidget {
   const LostFoundTab({super.key});
@@ -12,12 +13,16 @@ class LostFoundTab extends StatefulWidget {
   State<LostFoundTab> createState() => _LostFoundTabState();
 }
 
-class _LostFoundTabState extends State<LostFoundTab> {
+class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClientMixin {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   List<dynamic> lostItems = [];
   bool isLoading = true;
   String? errorMessage;
   
+  // For image caching
+  final Map<String, Uint8List> _loadedImages = {};
+  final Set<String> _loadingItemIds = {};
+
   @override
   void initState() {
     super.initState();
@@ -26,25 +31,58 @@ class _LostFoundTabState extends State<LostFoundTab> {
 
   Future<void> fetchLostItems() async {
     try {
+      setState(() {
+        isLoading = true;
+        errorMessage = null;
+      });
+      
+      // Check cached items first
+      final cachedItems = await LostFoundCacheService.getCachedItems();
+      if (cachedItems != null && cachedItems.isNotEmpty) {
+        setState(() {
+          lostItems = cachedItems;
+          isLoading = false;
+        });
+        
+        // Load cached images
+        for (var item in lostItems) {
+          _loadCachedImage(item['_id']);
+        }
+        
+        // Still fetch fresh data in background
+        _fetchFreshLostItems();
+        return;
+      }
+      
+      await _fetchFreshLostItems();
+    } catch (e) {
+      setState(() {
+        errorMessage = e.toString();
+        isLoading = false;
+      });
+    }
+  }
+  
+  Future<void> _loadCachedImage(String itemId) async {
+    try {
+      final cachedImage = await LostFoundCacheService.getCachedImage(itemId);
+      if (cachedImage != null && mounted) {
+        setState(() {
+          _loadedImages[itemId] = cachedImage;
+        });
+      } else {
+        // If no cached image, try to fetch it
+        _fetchItemImage(itemId);
+      }
+    } catch (e) {
+      print('Error loading cached image: $e');
+    }
+  }
+
+  Future<void> _fetchFreshLostItems() async {
+    try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       
-      // First get the current user's data
-      final userResponse = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/me'),
-        headers: {
-          'Content-Type': 'application/json',
-          'auth-cookie': authCookie ?? '',
-        },
-      );
-
-      if (userResponse.statusCode != 200) {
-        throw Exception('Failed to get user data');
-      }
-
-      final userData = json.decode(userResponse.body);
-      final currentUserId = userData['user']['_id'];
-
-      // Then fetch lost items
       final response = await http.get(
         Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/lost-items'),
         headers: {
@@ -55,55 +93,131 @@ class _LostFoundTabState extends State<LostFoundTab> {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        
         if (data['success']) {
-          setState(() {
-            // Filter out items posted by current user AND items with 'found' status
-            lostItems = (data['items'] as List).where((item) => 
-              item['user']['_id'] != currentUserId && 
-              item['status'] != 'found'
-            ).toList();
-            isLoading = false;
-          });
-        } else {
-          throw Exception(data['error']);
+          // Modify the filter to only exclude 'found' items
+          final filteredItems = (data['items'] as List).where((item) =>
+            item['status'] != 'found'
+          ).toList();
+          
+          // Cache the items
+          await LostFoundCacheService.cacheItems(filteredItems);
+          
+          if (mounted) {
+            setState(() {
+              lostItems = filteredItems;
+              isLoading = false;
+            });
+          }
+          
+          // Fetch images for each item
+          for (var item in lostItems) {
+            if (!_loadedImages.containsKey(item['_id'])) {
+              _fetchItemImage(item['_id']);
+            }
+          }
+        }
+      } else if (response.statusCode == 401) {
+        await _secureStorage.delete(key: 'authCookie');
+        if (mounted) {
+          Navigator.pushReplacementNamed(
+            context,
+            '/login',
+            arguments: {'errorMessage': 'Authentication failed. Please login again.'}
+          );
         }
       } else {
         throw Exception('Failed to load lost items');
       }
     } catch (e) {
-      setState(() {
-        errorMessage = e.toString();
-        isLoading = false;
-      });
+      print('Error fetching fresh items: $e');
+      if (mounted) {
+        setState(() {
+          errorMessage = e.toString();
+          isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchItemImage(String itemId) async {
+    // Skip if already loading
+    if (_loadingItemIds.contains(itemId)) return;
+    _loadingItemIds.add(itemId);
+    
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      final response = await http.get(
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/lost-items/$itemId/main_image'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] && data['image'] != null) {
+          // main_image endpoint returns a single image directly (not as a list)
+          final image = data['image'];
+          final numImages = data['numImages'] ?? 1;
+          
+          if (image != null && image['data'] != null) {
+            final String base64Str = image['data'];
+            final Uint8List bytes = base64Decode(base64Str);
+            
+            // Cache the image and number of images
+            await LostFoundCacheService.cacheImage(itemId, bytes, numImages);
+            
+            if (mounted) {
+              setState(() {
+                _loadedImages[itemId] = bytes;
+                _loadingItemIds.remove(itemId);
+              });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error fetching image: $e');
+      if (mounted) {
+        setState(() {
+          _loadingItemIds.remove(itemId);
+        });
+      }
     }
   }
 
   Widget buildLostItemCard(dynamic item) {
-    List<dynamic> imagesList = item['images'] ?? [];
+    final String itemId = item['_id'];
     Widget imageWidget;
 
-    if (imagesList.isNotEmpty && imagesList[0] is Map && imagesList[0]['data'] != null) {
-      try {
-        final String base64Str = imagesList[0]['data'];
-        final Uint8List bytes = base64Decode(base64Str);
-        imageWidget = Image.memory(
-          bytes,
-          fit: BoxFit.cover,
-          height: 200,
-          width: double.infinity,
-        );
-      } catch (e) {
-        imageWidget = Container(
-          color: Colors.grey[300],
-          height: 200,
-          child: const Center(child: Text('Error loading image')),
-        );
-      }
+    // Display image if loaded
+    if (_loadedImages.containsKey(itemId)) {
+      imageWidget = Image.memory(
+        _loadedImages[itemId]!,
+        fit: BoxFit.cover,
+        height: 200,
+        width: double.infinity,
+        errorBuilder: (context, error, stackTrace) {
+          print('Error displaying image: $error');
+          return Container(
+            color: Colors.grey[300],
+            height: 200,
+            child: const Center(child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey)),
+          );
+        },
+      );
     } else {
+      // Show loading indicator
       imageWidget = Container(
         color: Colors.grey[300],
         height: 200,
-        child: const Center(child: Text('No image')),
+        child: Center(
+          child: _loadingItemIds.contains(itemId)
+              ? const CircularProgressIndicator()
+              : const Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
+        ),
       );
     }
 
@@ -118,6 +232,7 @@ class _LostFoundTabState extends State<LostFoundTab> {
             MaterialPageRoute(
               builder: (context) => LostItemDetailsScreen(
                 item: item,
+                initialImage: _loadedImages[itemId],
               ),
             ),
           ).then((_) => fetchLostItems());
@@ -211,16 +326,43 @@ class _LostFoundTabState extends State<LostFoundTab> {
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
+    super.build(context);
+    if (isLoading && lostItems.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
     
     if (errorMessage != null) {
-      return Center(child: Text('Error: $errorMessage'));
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.red),
+            const SizedBox(height: 16),
+            Text('Error: $errorMessage'),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: fetchLostItems,
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
     }
 
     if (lostItems.isEmpty) {
-      return const Center(child: Text('No lost items reported'));
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'No lost items reported',
+              style: TextStyle(color: Colors.grey[600], fontSize: 16),
+            ),
+          ],
+        ),
+      );
     }
 
     return RefreshIndicator(
@@ -232,4 +374,7 @@ class _LostFoundTabState extends State<LostFoundTab> {
       ),
     );
   }
+
+  @override
+  bool get wantKeepAlive => true;
 }

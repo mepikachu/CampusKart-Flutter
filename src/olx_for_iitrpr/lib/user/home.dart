@@ -259,10 +259,15 @@ class UserHomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   int _selectedIndex = 0;
-  bool _isFabExpanded = false; // Add this line
+  bool _isFabExpanded = false;
   
-  // Create an instance of the chat refresh service
+  // Only keep chat service
   final ChatRefreshService _chatRefreshService = ChatRefreshService();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  Timer? _notificationTimer;
+  Timer? _notificationBackgroundTimer;
+  Timer? _profileUpdateTimer;
+  String? _lastNotificationId;
 
   // List of four tabs displayed in the home screen
   final List<Widget> _tabs = const [
@@ -280,6 +285,9 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _chatRefreshService.initialize();
+    _loadLastNotificationId();
+    _startNotificationRefresh();
+    _startProfileRefresh();
     
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 300),
@@ -291,6 +299,147 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
       curve: Curves.easeOut,
       reverseCurve: Curves.easeIn,
     );
+  }
+
+  Future<void> _loadLastNotificationId() async {
+    _lastNotificationId = await _secureStorage.read(key: 'last_notification_id');
+  }
+
+  void _startNotificationRefresh() {
+    // Cancel existing timers
+    _notificationTimer?.cancel();
+    _notificationBackgroundTimer?.cancel();
+
+    // Start foreground refresh (4 seconds)
+    _notificationTimer = Timer.periodic(
+      const Duration(seconds: 10), 
+      (_) => _refreshNotifications()
+    );
+  }
+
+  void _startNotificationBackgroundRefresh() {
+    // Cancel existing timers
+    _notificationTimer?.cancel();
+    _notificationBackgroundTimer?.cancel();
+
+    // Start background refresh (10 seconds)
+    _notificationBackgroundTimer = Timer.periodic(
+      const Duration(seconds: 60),
+      (_) => _refreshNotifications()
+    );
+  }
+
+  Future<void> _refreshNotifications() async {
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      if (authCookie == null) return;
+
+      String url = 'https://olx-for-iitrpr-backend.onrender.com/api/notifications';
+      if (_lastNotificationId != null) {
+        url = 'https://olx-for-iitrpr-backend.onrender.com/api/notifications/after/$_lastNotificationId';
+      }
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final notifications = data['notifications'] ?? [];
+        
+        if (notifications.isNotEmpty) {
+          // Get cached notifications
+          final String? notificationsJson = await _secureStorage.read(key: 'notifications');
+          List existingNotifications = [];
+
+          if (notificationsJson != null) {
+            existingNotifications = json.decode(notificationsJson);
+          }
+
+          // Fix: Convert notificationId to String before comparison
+          if (notifications.isNotEmpty) {
+            existingNotifications.insertAll(0, notifications);
+
+            // Get the highest notification ID
+            int highestId = 0;
+            for (var notification in notifications) {
+              if (notification['notificationId'] != null) {
+                final int notifId = int.parse(notification['notificationId'].toString());
+
+                if (notifId > highestId) {
+                  highestId = notifId;
+                }
+              }
+            }
+
+            _lastNotificationId = highestId.toString();
+
+            // Save updated notifications
+            await _secureStorage.write(
+              key: 'notifications',
+              value: json.encode(existingNotifications)
+            );
+
+            // Save last notification ID
+            await _secureStorage.write(
+              key: 'last_notification_id',
+              value: _lastNotificationId
+            );
+          }
+        }
+      }
+    } catch (e) {
+      print('Error refreshing notifications: $e');
+    }
+  }
+
+  void _startProfileRefresh() {
+    // Cancel existing timer
+    _profileUpdateTimer?.cancel();
+
+    // Start profile refresh (every 30 seconds)
+    _profileUpdateTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _refreshProfile()
+    );
+  }
+
+  Future<void> _refreshProfile() async {
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      if (authCookie == null) return;
+
+      final response = await http.get(
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/me'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          // Save to secure storage for tab_profile.dart to use
+          await _secureStorage.write(
+            key: 'cached_user_profile',
+            value: json.encode(data['user'])
+          );
+          
+          // Update last sync time
+          await _secureStorage.write(
+            key: 'last_profile_sync',
+            value: DateTime.now().toIso8601String()
+          );
+        }
+      }
+    } catch (e) {
+      print('Error refreshing profile: $e');
+    }
   }
 
   void _toggleFab() {
@@ -310,16 +459,21 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
     
     if (state == AppLifecycleState.resumed) {
       _chatRefreshService.setAppState(true);
+      _startNotificationRefresh(); // Start foreground refresh
     } else if (state == AppLifecycleState.paused) {
       _chatRefreshService.setAppState(false);
+      _startNotificationBackgroundRefresh(); // Start background refresh
     }
   }
 
   @override
   void dispose() {
+    _profileUpdateTimer?.cancel();
     _animationController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _chatRefreshService.dispose();
+    _notificationTimer?.cancel();
+    _notificationBackgroundTimer?.cancel();
     super.dispose();
   }
 

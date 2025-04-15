@@ -8,6 +8,7 @@ import 'tab_dashboard.dart';
 import 'tab_volunteer_approval.dart';
 import 'tab_reports.dart';
 import 'tab_profile.dart';
+import 'view_all_users.dart';
 
 // Application theme with black color scheme instead of blue
 final ThemeData appTheme = ThemeData(
@@ -123,14 +124,15 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             style: TextStyle(fontWeight: FontWeight.bold)
           ),
           actions: [
-            // Notification icon removed as requested
             IconButton(
               icon: const Icon(Icons.person_outline), 
               onPressed: () {
-                // Navigate to profile
-                setState(() {
-                  _selectedIndex = 3; // Profile tab
-                });
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const AllUsersScreen(),
+                  ),
+                );
               }
             ),
             const SizedBox(width: 8),

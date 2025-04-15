@@ -11,7 +11,7 @@ class LeaderboardTab extends StatefulWidget {
   State<LeaderboardTab> createState() => _LeaderboardTabState();
 }
 
-class _LeaderboardTabState extends State<LeaderboardTab> {
+class _LeaderboardTabState extends State<LeaderboardTab> with AutomaticKeepAliveClientMixin {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   bool _isLoadingLeaderboard = true;
   List<dynamic> _donorsLeaderboard = [];
@@ -126,6 +126,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (_isLoadingLeaderboard) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -146,4 +147,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> {
       ),
     );
   }
+
+  @override
+  bool get wantKeepAlive => true;
 }

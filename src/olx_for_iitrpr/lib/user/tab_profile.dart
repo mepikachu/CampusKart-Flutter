@@ -23,8 +23,6 @@ class _ProfileTabState extends State<ProfileTab> {
   String errorMessage = '';
   bool isLoading = true;
   static const cacheDuration = Duration(minutes: 5); // Time to live for cached data
-  static const String cacheKey = 'user_profile_cache';
-  static const String cacheTimeKey = 'user_profile_cache_time';
 
   @override
   void initState() {
@@ -34,11 +32,11 @@ class _ProfileTabState extends State<ProfileTab> {
 
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
-    final cachedData = prefs.getString(cacheKey);
-    final cachedTime = prefs.getString(cacheTimeKey);
+    final cachedData = await _secureStorage.read(key: 'cached_user_profile');
+    final lastSync = await _secureStorage.read(key: 'last_profile_sync');
 
-    if (cachedData != null && cachedTime != null) {
-      final cacheDateTime = DateTime.parse(cachedTime);
+    if (cachedData != null && lastSync != null) {
+      final cacheDateTime = DateTime.parse(lastSync);
       if (DateTime.now().difference(cacheDateTime) < cacheDuration) {
         setState(() {
           userData = json.decode(cachedData);
@@ -47,6 +45,8 @@ class _ProfileTabState extends State<ProfileTab> {
         return;
       }
     }
+
+    // If no valid cache, fetch from server
     await fetchUserData();
   }
 
@@ -69,9 +69,14 @@ class _ProfileTabState extends State<ProfileTab> {
       final responseBody = json.decode(response.body);
       if (response.statusCode == 200 && responseBody['success'] == true) {
         // Cache the data
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(cacheKey, json.encode(responseBody['user']));
-        await prefs.setString(cacheTimeKey, DateTime.now().toIso8601String());
+        await _secureStorage.write(
+          key: 'cached_user_profile',
+          value: json.encode(responseBody['user'])
+        );
+        await _secureStorage.write(
+          key: 'last_profile_sync',
+          value: DateTime.now().toIso8601String()
+        );
 
         setState(() {
           userData = responseBody['user'];
