@@ -5,7 +5,6 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http_parser/http_parser.dart';
-import '../config/api_config.dart';
 
 class EditProductScreen extends StatefulWidget {
   final Map<String, dynamic> product;
@@ -90,11 +89,13 @@ class _EditProductScreenState extends State<EditProductScreen> {
 
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
+      if (authCookie == null) throw Exception('Authentication required');
+
       final response = await http.delete(
-        Uri.parse(ApiConfig.getProductUrl(widget.product['_id'])),
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${widget.product['_id']}'),
         headers: {
           'Content-Type': 'application/json',
-          'auth-cookie': authCookie ?? '',
+          'auth-cookie': authCookie,
         },
       );
 
@@ -125,8 +126,10 @@ class _EditProductScreenState extends State<EditProductScreen> {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       if (authCookie == null) throw Exception('Authentication required');
 
-      final uri = Uri.parse(ApiConfig.getProductUrl(widget.product['_id']));
-      final request = http.MultipartRequest('PUT', uri);
+      final request = http.MultipartRequest(
+        'PUT',
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${widget.product['_id']}'),
+      );
 
       request.headers['auth-cookie'] = authCookie;
       

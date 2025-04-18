@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import '../config/api_config.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -268,7 +267,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/api/reset-password'),
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/reset-password'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'identifier': _email,

@@ -5,7 +5,6 @@ import 'package:http/http.dart' as http;
 import 'my_purchases.dart';
 import 'product_description.dart';
 import 'product_management.dart';
-import '../config/api_config.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -66,22 +65,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         error = e.toString();
         isLoading = false;
       });
-    }
-  }
-
-  Future<void> _fetchNotifications() async {
-    try {
-      final authCookie = await _secureStorage.read(key: 'authCookie');
-      final response = await http.get(
-        Uri.parse(ApiConfig.notificationsUrl),
-        headers: {
-          'Content-Type': 'application/json',
-          'auth-cookie': authCookie ?? '',
-        },
-      );
-      // ...rest of existing code...
-    } catch (e) {
-      // Handle error
     }
   }
 

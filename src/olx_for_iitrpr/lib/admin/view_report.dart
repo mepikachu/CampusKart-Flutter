@@ -7,7 +7,6 @@ import 'package:shimmer/shimmer.dart';
 import 'view_chat.dart';
 import 'view_profile.dart';
 import 'view_product.dart';
-import '../config/api_config.dart';
 
 class ReportDetailScreen extends StatefulWidget {
   final String reportId;
@@ -173,7 +172,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       try {
         final reportedUserId = _reportData!['reportedUser']['_id'];
         final response = await http.get(
-          Uri.parse(ApiConfig.getUserProfilePictureUrl(reportedUserId)),
+          Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/profile-picture/$reportedUserId'),
           headers: {
             'Content-Type': 'application/json',
             'auth-cookie': authCookie ?? '',
@@ -201,7 +200,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       
       final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/api/admin/reports/${widget.reportId}/resolve/dismiss'),
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/admin/reports/${widget.reportId}/resolve/dismiss'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',

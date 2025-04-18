@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../config/api_config.dart';
 
 class AddLostItemScreen extends StatefulWidget {
   const AddLostItemScreen({super.key});
@@ -59,7 +58,7 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
 
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
-      final uri = Uri.parse(ApiConfig.lostItemsUrl);
+      final uri = Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/lost-items');
       var request = http.MultipartRequest('POST', uri)
         ..headers['auth-cookie'] = authCookie ?? '';
 

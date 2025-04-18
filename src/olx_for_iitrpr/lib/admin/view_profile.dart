@@ -8,7 +8,6 @@ import 'view_product.dart';
 import 'view_donation.dart';
 import 'view_user_items.dart';
 import 'package:shimmer/shimmer.dart';
-import '../config/api_config.dart';
 
 class AdminProfileView extends StatefulWidget {
   final String userId;
@@ -178,7 +177,7 @@ class _AdminProfileViewState extends State<AdminProfileView> {
       
       try {
         final response = await http.get(
-          Uri.parse(ApiConfig.getProductImageUrl(product['_id'])),
+          Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${product['_id']}/main_image'),
           headers: {
             'Content-Type': 'application/json',
             'auth-cookie': authCookie ?? '',
@@ -246,7 +245,7 @@ class _AdminProfileViewState extends State<AdminProfileView> {
       
       try {
         final response = await http.get(
-          Uri.parse(ApiConfig.getDonationImageUrl(donation['_id'])),
+          Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/donations/${donation['_id']}/main_image'),
           headers: {
             'Content-Type': 'application/json',
             'auth-cookie': authCookie ?? '',

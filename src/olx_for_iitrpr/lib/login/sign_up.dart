@@ -9,7 +9,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/services.dart';
-import '../config/api_config.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -318,7 +317,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse(ApiConfig.sendOtpUrl),
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/send-register-otp'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'email': _emailController.text}),
       ).timeout(const Duration(seconds: 15));
@@ -371,7 +370,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse(ApiConfig.verifyOtpUrl),
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/verify-otp'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'otp': otp,
@@ -474,7 +473,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
     try {
       // Use a multipart request to send both fields and an image if provided.
-      final uri = Uri.parse(ApiConfig.signupUrl);
+      final uri = Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/register');
       final request = http.MultipartRequest('POST', uri);
 
       request.fields['verificationId'] = _verificationId!;

@@ -6,7 +6,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/profile_service.dart';
 import '../services/product_cache_service.dart';
 import 'product_management.dart';
-import '../config/api_config.dart';
 
 class MyListingsScreen extends StatefulWidget {
   const MyListingsScreen({super.key});
@@ -113,7 +112,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
       if (authCookie == null) throw Exception('Not authenticated');
 
       final response = await http.get(
-        Uri.parse(ApiConfig.userProfileUrl),
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/me'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie,
@@ -154,7 +153,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse(ApiConfig.getProductImageUrl(productId)),
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/$productId/main_image'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',

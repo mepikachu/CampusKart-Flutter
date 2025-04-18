@@ -6,7 +6,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/profile_service.dart';
 import '../services/product_cache_service.dart';
 import 'product_description.dart';
-import '../config/api_config.dart';
 
 class MyPurchasesPage extends StatefulWidget {
   const MyPurchasesPage({super.key});
@@ -108,7 +107,7 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse(ApiConfig.getProductImageUrl(productId)),
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/$productId/main_image'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',

@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
-import '../config/api_config.dart';
 
 class AdminDonationView extends StatefulWidget {
   final String donationId;
@@ -32,7 +31,7 @@ class _AdminDonationViewState extends State<AdminDonationView> {
       setState(() => isLoading = true);
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse(ApiConfig.getDonationUrl(widget.donationId)),
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/donations/${widget.donationId}'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -82,7 +81,7 @@ class _AdminDonationViewState extends State<AdminDonationView> {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final donationId = donation!['_id'];
       final response = await http.post(
-        Uri.parse('${ApiConfig.donationsUrl}/$donationId/collect'),
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/donations/$donationId/collect'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
