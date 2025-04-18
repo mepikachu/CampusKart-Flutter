@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -9,6 +10,10 @@ import 'my_donations.dart';
 import 'my_purchases.dart';
 import 'my_lost_items.dart';
 import 'edit_profile_screen.dart';
+import '../services/product_cache_service.dart';
+import '../services/donation_cache_service.dart';
+import '../services/lost_found_cache_service.dart';
+import '../services/profile_service.dart';
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -22,7 +27,8 @@ class _ProfileTabState extends State<ProfileTab> {
   Map<String, dynamic>? userData;
   String errorMessage = '';
   bool isLoading = true;
-  static const cacheDuration = Duration(minutes: 5); // Time to live for cached data
+  bool _hasLoadedProfileImage = false;
+  Uint8List? _profileImageBytes;
 
   @override
   void initState() {
@@ -31,64 +37,103 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 
   Future<void> _loadUserData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final cachedData = await _secureStorage.read(key: 'cached_user_profile');
-    final lastSync = await _secureStorage.read(key: 'last_profile_sync');
+    setState(() => isLoading = true);
 
-    if (cachedData != null && lastSync != null) {
-      final cacheDateTime = DateTime.parse(lastSync);
-      if (DateTime.now().difference(cacheDateTime) < cacheDuration) {
+    try {
+      // First load cached data
+      final cachedData = await _secureStorage.read(key: 'cached_user_profile');
+      if (cachedData != null) {
         setState(() {
           userData = json.decode(cachedData);
           isLoading = false;
         });
-        return;
       }
-    }
 
-    // If no valid cache, fetch from server
-    await fetchUserData();
-  }
-
-  Future<void> fetchUserData() async {
-    setState(() => isLoading = true);
-    try {
+      // Then fetch fresh data
       final authCookie = await _secureStorage.read(key: 'authCookie');
-      if (authCookie == null) {
-        throw Exception('Not authenticated');
-      }
-
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/me'),
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/me'),
         headers: {
           'Content-Type': 'application/json',
-          'auth-cookie': authCookie,
+          'auth-cookie': authCookie ?? '',
         },
       );
 
       final responseBody = json.decode(response.body);
       if (response.statusCode == 200 && responseBody['success'] == true) {
-        // Cache the data
+        // Cache user profile data
         await _secureStorage.write(
           key: 'cached_user_profile',
-          value: json.encode(responseBody['user'])
-        );
-        await _secureStorage.write(
-          key: 'last_profile_sync',
-          value: DateTime.now().toIso8601String()
+          value: json.encode(responseBody['user']),
         );
 
-        setState(() {
-          userData = responseBody['user'];
-          errorMessage = '';
-        });
-      } else {
-        throw Exception(responseBody['error'] ?? 'Failed to fetch user data');
+        // Cache data in respective services
+        if (responseBody['activity'] != null) {
+          await ProfileService.cacheUserResponse(responseBody);
+
+          // Cache products
+          if (responseBody['activity']['products'] != null) {
+            for (var product in responseBody['activity']['products']) {
+              await ProductCacheService.cacheProduct(product['_id'], product);
+            }
+          }
+
+          // Cache donations
+          if (responseBody['activity']['donations'] != null) {
+            for (var donation in responseBody['activity']['donations']) {
+              await DonationCacheService.cacheDonation(donation['_id'], donation);
+            }
+          }
+
+          // Cache lost items
+          if (responseBody['activity']['lost_items'] != null) {
+            for (var item in responseBody['activity']['lost_items']) {
+              await LostFoundCacheService.cacheItem(item['_id'], item);
+            }
+          }
+        }
+
+        if (mounted) {
+          setState(() {
+            userData = responseBody['user'];
+            errorMessage = '';
+          });
+        }
       }
     } catch (e) {
-      setState(() => errorMessage = e.toString());
-    } finally {
-      setState(() => isLoading = false);
+      if (mounted) {
+        setState(() => errorMessage = e.toString());
+      }
+    }
+
+    await _loadProfileImage();
+  }
+
+  Future<void> _loadProfileImage() async {
+    try {
+      if (_hasLoadedProfileImage || userData == null || 
+          userData!['profilePicture'] == null) return;
+
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      final response = await http.get(
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/me/profile-picture'),
+        headers: {
+          'Content-Type': 'application/json',  
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] && data['image'] != null) {
+          setState(() {
+            _profileImageBytes = base64Decode(data['image']['data']);
+            _hasLoadedProfileImage = true;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading profile image: $e');
     }
   }
 
@@ -318,7 +363,7 @@ class _ProfileTabState extends State<ProfileTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: RefreshIndicator(
-        onRefresh: fetchUserData,
+        onRefresh: _loadUserData,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: isLoading
@@ -330,15 +375,10 @@ class _ProfileTabState extends State<ProfileTab> {
                     CircleAvatar(
                       radius: 50,
                       backgroundColor: Colors.grey.shade200,
-                      backgroundImage: userData != null &&
-                              userData!['profilePicture'] != null &&
-                              userData!['profilePicture']['data'] != null
-                          ? MemoryImage(
-                              base64Decode(userData!['profilePicture']['data']),
-                            )
+                      backgroundImage: _profileImageBytes != null
+                          ? MemoryImage(_profileImageBytes!)
                           : null,
-                      child: (userData == null || userData!['profilePicture'] == null || 
-                              userData!['profilePicture']['data'] == null)
+                      child: _profileImageBytes == null
                           ? const Icon(Icons.person, size: 50, color: Colors.grey)
                           : null,
                     ),
@@ -351,7 +391,7 @@ class _ProfileTabState extends State<ProfileTab> {
                           MaterialPageRoute(
                             builder: (context) => EditProfileScreen(
                               userData: userData!,
-                              onProfileUpdated: () => fetchUserData(),
+                              onProfileUpdated: () => _loadUserData(),
                             ),
                           ),
                         );

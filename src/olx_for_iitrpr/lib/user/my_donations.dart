@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../services/profile_service.dart';
+import '../services/donation_cache_service.dart';
 
 class MyDonationsPage extends StatefulWidget {
   const MyDonationsPage({super.key});
@@ -16,40 +19,124 @@ class _MyDonationsPageState extends State<MyDonationsPage> {
   bool isLoading = true;
   String errorMessage = '';
 
+  // For image caching
+  final Map<String, Uint8List> _loadedImages = {};
+  final Set<String> _loadingDonationIds = {};
+
   @override
   void initState() {
     super.initState();
-    _fetchDonations();
+    _loadMyDonations();
   }
 
-  Future<void> _fetchDonations() async {
-    try {
-      setState(() => isLoading = true);
-      final authCookie = await _secureStorage.read(key: 'authCookie');
-      if (authCookie == null) throw Exception('Not authenticated');
+  Future<void> _loadCachedImage(String itemId) async {
+    final cachedImage = await DonationCacheService.getCachedImage(itemId);
+    if (cachedImage != null && mounted) {
+      setState(() {
+        _loadedImages[itemId] = cachedImage;
+      });
+    } else {
+      _fetchDonationImage(itemId);
+    }
+  }
 
-      // Use the donations endpoint that returns the user's donations
+  Future<void> _loadMyDonations() async {
+    try {
+      // First try to get cached donation IDs
+      final activityIds = await ProfileService.activityIds;
+
+      if (activityIds != null && activityIds['donations'] != null) {
+        // Get cached donations
+        List<Map<String, dynamic>> cachedDonations = [];
+        for (String id in activityIds['donations']!) {
+          final donation = await DonationCacheService.getCachedDonation(id);
+          if (donation != null) {
+            cachedDonations.add(donation);
+          }
+        }
+
+        if (cachedDonations.isNotEmpty) {
+          setState(() {
+            donations = cachedDonations;
+            isLoading = false;
+          });
+        }
+      }
+
+      // If no cache or expired, refresh from server
+      if (donations.isEmpty || !ProfileService.hasValidActivityCache) {
+        await ProfileService.fetchAndCacheUserProfile();
+
+        // Try loading from cache again
+        final freshIds = await ProfileService.activityIds;
+        if (freshIds != null && freshIds['donations'] != null) {
+          List<Map<String, dynamic>> freshDonations = [];
+          for (String id in freshIds['donations']!) {
+            final donation = await DonationCacheService.getCachedDonation(id);
+            if (donation != null) {
+              freshDonations.add(donation);
+            }
+          }
+
+          if (mounted) {
+            setState(() {
+              donations = freshDonations;
+              isLoading = false;
+            });
+          }
+        }
+      }
+
+      // Load images for all donations
+      for (var donation in donations) {
+        if (!_loadedImages.containsKey(donation['_id'])) {
+          await _loadCachedImage(donation['_id']);
+        }
+      }
+    } catch (e) {
+      setState(() {
+        errorMessage = e.toString();
+        isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _fetchDonationImage(String donationId) async {
+    if (_loadingDonationIds.contains(donationId)) return;
+    _loadingDonationIds.add(donationId);
+
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/donations'),
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/donations/$donationId/main_image'),
         headers: {
           'Content-Type': 'application/json',
-          'auth-cookie': authCookie,
+          'auth-cookie': authCookie ?? '',
         },
       );
 
-      final responseData = json.decode(response.body);
-      if (response.statusCode == 200 && responseData['success'] == true) {
-        setState(() {
-          donations = responseData['donations'] ?? [];
-          errorMessage = '';
-        });
-      } else {
-        throw Exception(responseData['error'] ?? 'Failed to fetch donations');
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] && data['image'] != null) {
+          final image = data['image'];
+          final numImages = data['numImages'] ?? 1;
+
+          if (image != null && image['data'] != null) {
+            final bytes = base64Decode(image['data']);
+            await DonationCacheService.cacheImage(donationId, bytes, numImages);
+
+            if (mounted) {
+              setState(() {
+                _loadedImages[donationId] = bytes;
+              });
+            }
+          }
+        }
       }
     } catch (e) {
-      setState(() => errorMessage = e.toString());
+      print('Error fetching donation image: $e');
     } finally {
-      setState(() => isLoading = false);
+      _loadingDonationIds.remove(donationId);
     }
   }
 
@@ -64,7 +151,14 @@ class _MyDonationsPageState extends State<MyDonationsPage> {
         "${donationDate.day}/${donationDate.month}/${donationDate.year}";
 
     Widget imageWidget;
-    if (images.isNotEmpty && images[0]['data'] != null) {
+    if (_loadedImages.containsKey(donation['_id'])) {
+      imageWidget = Image.memory(
+        _loadedImages[donation['_id']]!,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: 200,
+      );
+    } else if (images.isNotEmpty && images[0]['data'] != null) {
       try {
         final bytes = base64Decode(images[0]['data']);
         imageWidget = Image.memory(bytes, fit: BoxFit.cover);
@@ -170,7 +264,7 @@ class _MyDonationsPageState extends State<MyDonationsPage> {
         title: const Text('My Donations'),
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchDonations,
+        onRefresh: _loadMyDonations,
         child: isLoading
             ? const Center(child: CircularProgressIndicator())
             : errorMessage.isNotEmpty
@@ -202,9 +296,15 @@ class _MyDonationsPageState extends State<MyDonationsPage> {
                         ),
                       )
                     : ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
                         itemCount: donations.length,
-                        itemBuilder: (context, index) =>
-                            _buildDonationCard(donations[index]),
+                        itemBuilder: (context, index) {
+                          // Ensure the donation at this index exists
+                          if (index >= 0 && index < donations.length) {
+                            return _buildDonationCard(donations[index]);
+                          }
+                          return const SizedBox(); // Return empty widget if index is invalid
+                        },
                       ),
       ),
     );

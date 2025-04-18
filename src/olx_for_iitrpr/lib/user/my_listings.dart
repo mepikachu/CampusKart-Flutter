@@ -3,6 +3,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../services/profile_service.dart';
+import '../services/product_cache_service.dart';
 import 'product_management.dart';
 
 class MyListingsScreen extends StatefulWidget {
@@ -18,34 +20,68 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
   bool isLoading = true;
   String errorMessage = '';
 
+  // For image caching
+  final Map<String, Uint8List> _loadedImages = {};
+  final Set<String> _loadingProductIds = {};
+
   @override
   void initState() {
     super.initState();
-    fetchMyListings();
+    _loadMyListings();
   }
 
-  Future<void> fetchMyListings() async {
+  Future<void> _loadMyListings() async {
     try {
-      final authCookie = await _secureStorage.read(key: 'authCookie');
-      if (authCookie == null) throw Exception('Not authenticated');
+      // First try to get cached product IDs
+      final activityIds = await ProfileService.activityIds;
 
-      final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/me'),
-        headers: {
-          'Content-Type': 'application/json',
-          'auth-cookie': authCookie,
-        },
-      );
+      if (activityIds != null && activityIds['products'] != null) {
+        // Get cached products
+        List<Map<String, dynamic>> cachedProducts = [];
+        for (String id in activityIds['products']!) {
+          final product = await ProductCacheService.getCachedProduct(id);
+          if (product != null) {
+            cachedProducts.add(product);
+          }
+        }
 
-      final responseBody = json.decode(response.body);
-      if (response.statusCode == 200 && responseBody['success'] == true) {
-        setState(() {
-          // Assuming the sold products are returned in user.soldProducts
-          myListings = responseBody['user']['soldProducts'] ?? [];
-          isLoading = false;
-        });
-      } else {
-        throw Exception(responseBody['error'] ?? 'Failed to fetch listings');
+        if (cachedProducts.isNotEmpty) {
+          setState(() {
+            myListings = cachedProducts;
+            isLoading = false;
+          });
+        }
+      }
+
+      // If no cache or expired, refresh from server
+      if (myListings.isEmpty || !ProfileService.hasValidActivityCache) {
+        await ProfileService.fetchAndCacheUserProfile();
+
+        // Try loading from cache again
+        final freshIds = await ProfileService.activityIds;
+        if (freshIds != null && freshIds['products'] != null) {
+          List<Map<String, dynamic>> freshProducts = [];
+          for (String id in freshIds['products']!) {
+            final product = await ProductCacheService.getCachedProduct(id);
+            if (product != null) {
+              freshProducts.add(product);
+            }
+          }
+
+          if (mounted) {
+            setState(() {
+              myListings = freshProducts;
+              isLoading = false;
+            });
+          }
+        }
+      }
+
+      // Load images for all products
+      for (var product in myListings) {
+        if (!_loadedImages.containsKey(product['_id'])) {
+          await _loadCachedImage(product['_id']);
+        }
       }
     } catch (e) {
       setState(() {
@@ -55,11 +91,114 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
     }
   }
 
+  Future<void> _loadCachedImage(String productId) async {
+    try {
+      final cachedImage = await ProductCacheService.getCachedImage(productId);
+      if (cachedImage != null && mounted) {
+        setState(() {
+          _loadedImages[productId] = cachedImage;
+        });
+      } else {
+        _fetchProductImage(productId);
+      }
+    } catch (e) {
+      print('Error loading cached image: $e');
+    }
+  }
+
+  Future<void> _fetchMyListings() async {
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      if (authCookie == null) throw Exception('Not authenticated');
+
+      final response = await http.get(
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/me'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          // Cache ALL response data
+          await ProfileService.cacheUserResponse(data);
+
+          setState(() {
+            myListings = data['activity']['products'] ?? [];
+            isLoading = false;
+          });
+
+          // Fetch images for new/updated products
+          for (var product in myListings) {
+            if (!_loadedImages.containsKey(product['_id'])) {
+              _fetchProductImage(product['_id']);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      setState(() {
+        errorMessage = e.toString();
+        isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _fetchProductImage(String productId) async {
+    if (_loadingProductIds.contains(productId)) return;
+    _loadingProductIds.add(productId);
+
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      final response = await http.get(
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/$productId/main_image'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] && data['image'] != null) {
+          final image = data['image'];
+          final numImages = data['numImages'] ?? 1;
+
+          if (image != null && image['data'] != null) {
+            final bytes = base64Decode(image['data']);
+
+            // Cache the image
+            await ProductCacheService.cacheImage(productId, bytes, numImages);
+
+            if (mounted) {
+              setState(() {
+                _loadedImages[productId] = bytes;
+              });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error fetching product image: $e');
+    } finally {
+      _loadingProductIds.remove(productId);
+    }
+  }
+
   Widget buildProductCard(dynamic product, int index) {
     List<dynamic> imagesList = product['images'] ?? [];
     Widget imageWidget;
 
-    if (imagesList.isNotEmpty &&
+    if (_loadedImages.containsKey(product['_id'])) {
+      imageWidget = Image.memory(
+        _loadedImages[product['_id']]!,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: 200,
+      );
+    } else if (imagesList.isNotEmpty &&
         imagesList[0] is Map &&
         imagesList[0]['data'] != null) {
       try {
@@ -180,7 +319,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
               : myListings.isEmpty
                   ? const Center(child: Text('No listings yet'))
                   : RefreshIndicator(
-                      onRefresh: fetchMyListings,
+                      onRefresh: _fetchMyListings,
                       child: ListView.builder(
                         physics: const AlwaysScrollableScrollPhysics(),
                         itemCount: myListings.length,

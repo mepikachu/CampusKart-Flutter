@@ -266,7 +266,6 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   Timer? _notificationTimer;
   Timer? _notificationBackgroundTimer;
-  Timer? _profileUpdateTimer;
   String? _lastNotificationId;
 
   // List of four tabs displayed in the home screen
@@ -287,7 +286,6 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
     _chatRefreshService.initialize();
     _loadLastNotificationId();
     _startNotificationRefresh();
-    _startProfileRefresh();
     
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 300),
@@ -397,51 +395,6 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
     }
   }
 
-  void _startProfileRefresh() {
-    // Cancel existing timer
-    _profileUpdateTimer?.cancel();
-
-    // Start profile refresh (every 30 seconds)
-    _profileUpdateTimer = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) => _refreshProfile()
-    );
-  }
-
-  Future<void> _refreshProfile() async {
-    try {
-      final authCookie = await _secureStorage.read(key: 'authCookie');
-      if (authCookie == null) return;
-
-      final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/me'),
-        headers: {
-          'Content-Type': 'application/json',
-          'auth-cookie': authCookie,
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success']) {
-          // Save to secure storage for tab_profile.dart to use
-          await _secureStorage.write(
-            key: 'cached_user_profile',
-            value: json.encode(data['user'])
-          );
-          
-          // Update last sync time
-          await _secureStorage.write(
-            key: 'last_profile_sync',
-            value: DateTime.now().toIso8601String()
-          );
-        }
-      }
-    } catch (e) {
-      print('Error refreshing profile: $e');
-    }
-  }
-
   void _toggleFab() {
     setState(() {
       _isFabExpanded = !_isFabExpanded;
@@ -468,7 +421,6 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
 
   @override
   void dispose() {
-    _profileUpdateTimer?.cancel();
     _animationController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _chatRefreshService.dispose();
@@ -490,7 +442,7 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          "OLX-IITRPR",
+          "IITRPR MarketPlace",
           style: TextStyle(color: Colors.black87),
         ),
         centerTitle: false,

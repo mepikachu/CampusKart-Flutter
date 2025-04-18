@@ -12,7 +12,13 @@ import '../services/product_cache_service.dart';
 
 class ProductDetailsScreen extends StatefulWidget {
   final dynamic product;
-  const ProductDetailsScreen({super.key, required this.product});
+  final bool showOfferButton;
+
+  const ProductDetailsScreen({
+    super.key,
+    required this.product,
+    this.showOfferButton = true, // Set default value to true
+  });
 
   @override
   State<ProductDetailsScreen> createState() => _ProductDetailsScreenState();
@@ -23,21 +29,21 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   String currentUserName = '';
   String currentUserId = '';
   int _currentImageIndex = 0;
-  
+
   // Use the correct carousel controller
   final CarouselSliderController _carouselController = CarouselSliderController();
-  
+
   bool hasOffer = false;
   double? currentOfferAmount;
   bool isCheckingOffer = true;
   Map<String, dynamic>? productDetails;
   bool isLoading = true;
   bool isLoadingAllImages = false;
-  
+
   // Store images
   List<Uint8List> productImages = [];
   int totalNumImages = 1;
-  
+
   // For threading
   ReceivePort? _receivePort;
   Isolate? _isolate;
@@ -48,26 +54,26 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     _loadCurrentUser();
     _setupImageLoading();
     _loadProductDetails();
-    
+
     if (widget.product != null && widget.product['_id'] != null) {
       _checkExistingOffer();
     }
   }
-  
+
   @override
   void dispose() {
     _isolate?.kill(priority: Isolate.immediate);
     _receivePort?.close();
     super.dispose();
   }
-  
+
   void _setupImageLoading() {
     _receivePort = ReceivePort();
     _receivePort!.listen((message) {
       if (message is Map && message.containsKey('type')) {
         if (message['type'] == 'imageLoaded' && message.containsKey('images')) {
           final List<Uint8List> loadedImages = List<Uint8List>.from(message['images']);
-          
+
           if (mounted) {
             setState(() {
               productImages = loadedImages;
@@ -95,13 +101,13 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     setState(() {
       productDetails = widget.product;
       isLoading = false;
-      
+
       // Use imageData if passed from products tab
       if (widget.product['imageData'] != null) {
         productImages = [widget.product['imageData']];
       }
     });
-    
+
     // Check for cached product
     final cachedProduct = await ProductCacheService.getCachedProduct(widget.product['_id']);
     if (cachedProduct != null) {
@@ -109,7 +115,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         productDetails = cachedProduct;
       });
     }
-    
+
     // Check for cached images
     final cachedImages = await ProductCacheService.getCachedAllImages(widget.product['_id']);
     if (cachedImages != null && cachedImages.isNotEmpty) {
@@ -122,16 +128,16 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         productImages = [widget.product['imageData']];
       });
     }
-    
+
     // Get cached number of images
     final numImages = await ProductCacheService.getCachedNumImages(widget.product['_id']);
     if (numImages != null) {
       totalNumImages = numImages;
     }
-    
+
     // Fetch fresh product data
     _fetchProductDetails();
-    
+
     // Fetch all images if needed
     if (productImages.isEmpty || productImages.length < totalNumImages) {
       _fetchAllProductImages();
@@ -148,23 +154,23 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           'auth-cookie': authCookie ?? '',
         },
       );
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success']) {
           // Cache the product data
           await ProductCacheService.cacheProduct(widget.product['_id'], data['product']);
-          
+
           if (mounted) {
             setState(() {
               productDetails = data['product'];
             });
           }
-          
+
           // Check if we need to update images
           final lastUpdated = await ProductCacheService.getProductLastUpdated(widget.product['_id']);
           final lastCached = await ProductCacheService.getImageCacheTimestamp(widget.product['_id']);
-          
+
           if (lastCached == null || (lastUpdated != null && lastUpdated.isAfter(lastCached))) {
             _fetchAllProductImages();
           }
@@ -177,15 +183,15 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
   Future<void> _fetchAllProductImages() async {
     if (isLoadingAllImages) return;
-    
+
     setState(() {
       isLoadingAllImages = true;
     });
-    
+
     try {
       // Kill previous isolate if exists
       _isolate?.kill(priority: Isolate.immediate);
-      
+
       // Spawn a new isolate
       _isolate = await Isolate.spawn(
         _isolateImagesFetcher,
@@ -193,14 +199,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           'productId': widget.product['_id'],
           'sendPort': _receivePort!.sendPort,
           'authCookie': await _secureStorage.read(key: 'authCookie'),
-        }
+        },
       );
     } catch (e) {
       print('Error setting up isolate: $e');
       _fetchAllProductImagesDirect();
     }
   }
-  
+
   // Direct image fetching without isolate (fallback)
   Future<void> _fetchAllProductImagesDirect() async {
     try {
@@ -212,13 +218,13 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           'auth-cookie': authCookie ?? '',
         },
       );
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success']) {
           List<Uint8List> loadedImages = [];
           final images = data['images'];
-          
+
           for (var image in images) {
             if (image != null && image['data'] != null) {
               final String base64Str = image['data'];
@@ -226,11 +232,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               loadedImages.add(bytes);
             }
           }
-          
+
           // Cache images and number of images
           await ProductCacheService.cacheAllImages(widget.product['_id'], loadedImages);
           await ProductCacheService.cacheNumImages(widget.product['_id'], loadedImages.length);
-          
+
           if (mounted) {
             setState(() {
               productImages = loadedImages;
@@ -249,13 +255,13 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       }
     }
   }
-  
+
   // Static method for isolate
   static void _isolateImagesFetcher(Map<String, dynamic> data) async {
     final String productId = data['productId'];
     final SendPort sendPort = data['sendPort'];
     final String? authCookie = data['authCookie'];
-    
+
     try {
       final response = await http.get(
         Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/$productId/images'),
@@ -264,13 +270,13 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           'auth-cookie': authCookie ?? '',
         },
       );
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success']) {
           List<Uint8List> loadedImages = [];
           final images = data['images'];
-          
+
           for (var image in images) {
             if (image != null && image['data'] != null) {
               final String base64Str = image['data'];
@@ -278,7 +284,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               loadedImages.add(bytes);
             }
           }
-          
+
           // Tell the main isolate about our loaded images
           sendPort.send({
             'type': 'imageLoaded',
@@ -309,7 +315,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           'auth-cookie': authCookie ?? '',
         },
       );
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (mounted) {
@@ -333,10 +339,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
   void _startChat() async {
     if (widget.product['seller']?['_id'] == null) return;
-    
+
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
-      
+
       // First, get or create the conversation
       final conversationResponse = await http.post(
         Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations'),
@@ -348,17 +354,17 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           'participantId': widget.product['seller']['_id'],
         }),
       );
-      
+
       if (conversationResponse.statusCode == 200) {
         final conversationData = json.decode(conversationResponse.body);
         final conversationId = conversationData['conversation']['_id'];
-        
+
         // Get product image for the chat
         String? imageData;
         if (productImages.isNotEmpty) {
           imageData = base64Encode(productImages[0]);
         }
-        
+
         // Create the product data to initialize the reply
         final initialProduct = {
           'productId': widget.product['_id'],
@@ -366,7 +372,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           'price': widget.product['price'],
           'image': imageData,
         };
-        
+
         // Navigate to the chat screen with the product data
         Navigator.push(
           context,
@@ -375,7 +381,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               conversationId: conversationId,
               partnerNames: widget.product['seller']['userName'],
               partnerId: widget.product['seller']['_id'],
-              initialProduct: initialProduct, 
+              initialProduct: initialProduct,
             ),
           ),
         );
@@ -395,7 +401,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         height: 300,
         color: Colors.grey[200],
         child: Center(
-          child: isLoadingAllImages 
+          child: isLoadingAllImages
               ? CircularProgressIndicator()
               : Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -456,7 +462,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             },
           ),
         ),
-        
+
         // Loading indicator if we're still loading more images
         if (isLoadingAllImages)
           Positioned(
@@ -478,7 +484,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               ),
             ),
           ),
-        
+
         // Image indicators
         if (imageWidgets.length > 1)
           Positioned(
@@ -516,7 +522,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   Future<void> _showReportDialog() async {
     final reasonController = TextEditingController();
     final descriptionController = TextEditingController();
-    
+
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -582,7 +588,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       'description': descriptionController.text,
                     }),
                   );
-                  
+
                   if (response.statusCode == 201) {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -631,7 +637,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     }
 
     final product = productDetails ?? widget.product;
-    
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -656,7 +662,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 children: [
                   // Image carousel
                   _buildImageCarousel(),
-                  
+
                   // Product details section
                   Padding(
                     padding: const EdgeInsets.all(16.0),
@@ -688,9 +694,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             ),
                           ],
                         ),
-                        
+
                         const SizedBox(height: 16),
-                        
+
                         // Category and Status
                         Row(
                           children: [
@@ -727,9 +733,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             ),
                           ],
                         ),
-                        
+
                         const SizedBox(height: 24),
-                        
+
                         // Seller info
                         Row(
                           children: [
@@ -760,9 +766,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             ),
                           ],
                         ),
-                        
+
                         const SizedBox(height: 24),
-                        
+
                         // Description section
                         const Text(
                           'Description',
@@ -779,7 +785,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             height: 1.5,
                           ),
                         ),
-                        
+
                         // Sold Information section if product is sold
                         if (product['status'] == 'sold') ...[
                           const SizedBox(height: 24),
@@ -820,9 +826,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             ),
                           ),
                         ],
-                        
+
                         const SizedBox(height: 24),
-                        
+
                         // Last updated info
                         Row(
                           children: [
@@ -841,155 +847,86 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               ),
             ),
           ),
-          
-          // Bottom action buttons
-          if (product['seller']?['_id'] == currentUserId)
-            _buildSellerActions()
-          else if (product['status'] == 'available')
-            _buildBottomActions(),
         ],
       ),
-    );
-  }
+      bottomNavigationBar: widget.product['status'] == 'sold' || widget.product['user']?['_id'] == currentUserId
+          ? null
+          : widget.showOfferButton // Only show if showOfferButton is true
+              ? Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.2),
+                        spreadRadius: 1,
+                        blurRadius: 5,
+                        offset: const Offset(0, -3),
+                      ),
+                    ],
+                  ),
+                  child: ElevatedButton(
+                    onPressed: isLoading ? null : () async {
+                      try {
+                        final offerPrice = await _showOfferDialog(
+                          initialValue: currentOfferAmount,
+                        );
 
-  Widget _buildSellerActions() {
-    return Container(
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 5,
-            offset: const Offset(0, -3),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: ElevatedButton(
-              onPressed: () {
-                // Navigate to edit product or manage offers screen
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 0,
-              ),
-              child: const Text(
-                'Manage Listing',
-                style: TextStyle(fontSize: 16, color: Colors.white),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+                        if (offerPrice != null) {
+                          final authCookie = await _secureStorage.read(key: 'authCookie');
 
-  Widget _buildBottomActions() {
-    return Container(
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
-            spreadRadius: 1,
-            blurRadius: 5,
-            offset: const Offset(0, -3),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: ElevatedButton(
-              onPressed: isCheckingOffer ? null : () async {
-                try {
-                  final offerPrice = await _showOfferDialog(
-                    initialValue: currentOfferAmount,
-                  );
-                  
-                  if (offerPrice != null) {
-                    final authCookie = await _secureStorage.read(key: 'authCookie');
-                    
-                    final response = await http.post(
-                      Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${widget.product['_id']}/offers'),
-                      headers: {
-                        'Content-Type': 'application/json',
-                        'auth-cookie': authCookie ?? '',
-                      },
-                      body: json.encode({
-                        'offerPrice': offerPrice,
-                      }),
-                    );
-                    
-                    if (response.statusCode == 200) {
-                      setState(() {
-                        hasOffer = true;
-                        currentOfferAmount = offerPrice;
-                      });
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Offer ${hasOffer ? 'updated' : 'sent'} successfully'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                    } else {
-                      final errorData = json.decode(response.body);
-                      throw Exception(errorData['error'] ?? 'Failed to send offer');
-                    }
-                  }
-                } catch (e) {
-                  print('Error making offer: $e');
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Error: Unable to make offer. Please try again.'),
-                      backgroundColor: Colors.red,
+                          final response = await http.post(
+                            Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${widget.product['_id']}/offers'),
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'auth-cookie': authCookie ?? '',
+                            },
+                            body: json.encode({
+                              'offerPrice': offerPrice,
+                            }),
+                          );
+
+                          if (response.statusCode == 200) {
+                            setState(() {
+                              hasOffer = true;
+                              currentOfferAmount = offerPrice;
+                            });
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Offer ${hasOffer ? 'updated' : 'sent'} successfully'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          } else {
+                            final errorData = json.decode(response.body);
+                            throw Exception(errorData['error'] ?? 'Failed to send offer');
+                          }
+                        }
+                      } catch (e) {
+                        print('Error making offer: $e');
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error: Unable to make offer. Please try again.'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: hasOffer ? Colors.orange : Colors.green,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
                     ),
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: hasOffer ? Colors.orange : Colors.green,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 0,
-              ),
-              child: Text(
-                hasOffer ? 'Edit Offer (₹${currentOfferAmount?.toStringAsFixed(0)})' : 'Make Offer',
-                style: const TextStyle(fontSize: 16, color: Colors.white),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: ElevatedButton(
-              onPressed: _startChat,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: Colors.blue,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 0,
-              ),
-              child: const Text(
-                'Chat with Seller',
-                style: TextStyle(fontSize: 16, color: Colors.white),
-              ),
-            ),
-          ),
-        ],
-      ),
+                    child: Text(
+                      hasOffer ? 'Edit Offer (₹${currentOfferAmount?.toStringAsFixed(0)})' : 'Make Offer',
+                      style: const TextStyle(fontSize: 16, color: Colors.white),
+                    ),
+                  ),
+                )
+              : null,
     );
   }
 
@@ -1028,7 +965,7 @@ class OfferDialog extends StatefulWidget {
 
 class _OfferDialogState extends State<OfferDialog> {
   final TextEditingController _controller = TextEditingController();
-  
+
   @override
   void initState() {
     super.initState();
