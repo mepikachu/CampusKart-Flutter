@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../config/api_config.dart';
 
 /// AdminDashboard widget that displays comprehensive analytics data
 /// for IITRPR MarketPlace administrators
@@ -66,7 +67,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       // Fetch dashboard overview data
       final response = await http.get(
         Uri.parse(
-          'https://olx-for-iitrpr-backend.onrender.com/api/admin/dashboard?startDate=${timeRange['startDate']}&endDate=${timeRange['endDate']}'
+          '${ApiConfig.baseUrl}/api/admin/dashboard?startDate=${timeRange['startDate']}&endDate=${timeRange['endDate']}'
         ),
         headers: {
           'Content-Type': 'application/json',
@@ -128,7 +129,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     try {
       final response = await http.get(
         Uri.parse(
-          'https://olx-for-iitrpr-backend.onrender.com/api/admin/$endpoint?startDate=${timeRange['startDate']}&endDate=${timeRange['endDate']}'
+          '${ApiConfig.baseUrl}/api/admin/$endpoint?startDate=${timeRange['startDate']}&endDate=${timeRange['endDate']}'
         ),
         headers: {
           'Content-Type': 'application/json',
@@ -2335,27 +2336,26 @@ class _DetailPageState extends State<DetailPage> {
       final authCookie = await widget.authCookie;
       
       // Build API endpoint based on section
-      String endpoint = 'https://olx-for-iitrpr-backend.onrender.com/api/admin';
+      String endpoint = ApiConfig.adminUsersUrl;
       
       switch (widget.section) {
         case 'users':
-          endpoint += '/users';
+          endpoint = ApiConfig.adminUsersUrl;
           break;
         case 'products':
-          endpoint += '/products';
+          endpoint = '${ApiConfig.baseUrl}/api/admin/products';
           break;
         case 'donations':
-          endpoint += '/donations';
+          endpoint = '${ApiConfig.baseUrl}/api/admin/donations'; 
           break;
         case 'volunteers':
-          // For volunteers, we'll use the users endpoint with role filter
-          endpoint += '/users?role=volunteer';
+          endpoint = '${ApiConfig.adminUsersUrl}?role=volunteer';
           break;
         case 'reports':
-          endpoint += '/reports';
+          endpoint = '${ApiConfig.baseUrl}/api/admin/reports';
           break;
         default:
-          endpoint += '/${widget.section}';
+          endpoint = '${ApiConfig.baseUrl}/api/admin/${widget.section}';
       }
       
       // Add common query params
@@ -3661,7 +3661,7 @@ class _DetailPageState extends State<DetailPage> {
       
       final response = await http.patch(
         Uri.parse(
-          'https://olx-for-iitrpr-backend.onrender.com/api/admin/users/$userId'
+          '${ApiConfig.adminUsersUrl}/$userId'
         ),
         headers: {
           'Content-Type': 'application/json',
@@ -3710,7 +3710,7 @@ class _DetailPageState extends State<DetailPage> {
       
       final response = await http.patch(
         Uri.parse(
-          'https://olx-for-iitrpr-backend.onrender.com/api/admin/products/$productId'
+          '${ApiConfig.baseUrl}/api/admin/products/$productId'
         ),
         headers: {
           'Content-Type': 'application/json',
@@ -3759,7 +3759,7 @@ class _DetailPageState extends State<DetailPage> {
       
       final response = await http.patch(
         Uri.parse(
-          'https://olx-for-iitrpr-backend.onrender.com/api/admin/donations/$donationId'
+          '${ApiConfig.baseUrl}/api/admin/donations/$donationId'
         ),
         headers: {
           'Content-Type': 'application/json',
@@ -3808,7 +3808,7 @@ class _DetailPageState extends State<DetailPage> {
       
       final response = await http.patch(
         Uri.parse(
-          'https://olx-for-iitrpr-backend.onrender.com/api/admin/reports/$reportId'
+          '${ApiConfig.baseUrl}/api/admin/reports/$reportId'
         ),
         headers: {
           'Content-Type': 'application/json',
@@ -3857,7 +3857,7 @@ class _DetailPageState extends State<DetailPage> {
       
       final response = await http.delete(
         Uri.parse(
-          'https://olx-for-iitrpr-backend.onrender.com/api/admin/$section/$itemId'
+          '${ApiConfig.baseUrl}/api/admin/$section/$itemId'
         ),
         headers: {
           'Content-Type': 'application/json',

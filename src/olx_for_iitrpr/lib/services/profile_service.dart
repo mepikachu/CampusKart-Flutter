@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'product_cache_service.dart';
 import 'donation_cache_service.dart';
 import 'lost_found_cache_service.dart';
+import '../config/api_config.dart';
 
 class ProfileService {
   static final ProfileService _instance = ProfileService._internal();
@@ -125,7 +126,7 @@ class ProfileService {
       if (authCookie == null) return false;
 
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/me'),
+        Uri.parse(ApiConfig.userProfileUrl),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie,
@@ -152,7 +153,7 @@ class ProfileService {
       if (authCookie == null) return false;
 
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/me'),
+        Uri.parse(ApiConfig.userProfileUrl),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie,

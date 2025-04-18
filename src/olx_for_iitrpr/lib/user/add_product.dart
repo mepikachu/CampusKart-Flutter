@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http_parser/http_parser.dart';
+import '../config/api_config.dart';
 
 class SellTab extends StatefulWidget {
   const SellTab({super.key});
@@ -72,7 +73,7 @@ class _SellTabState extends State<SellTab> {
         );
         return;
       }
-      final uri = Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products');
+      final uri = Uri.parse(ApiConfig.productsUrl);
       var request = http.MultipartRequest('POST', uri);
       // Set auth cookie header (do not manually set Content-Type)
       request.headers['auth-cookie'] = authCookie;
@@ -136,6 +137,13 @@ class _SellTabState extends State<SellTab> {
         });
       }
     }
+  }
+
+  Future<void> _uploadProduct() async {
+    final response = await http.post(
+      Uri.parse(ApiConfig.productsUrl),
+      // ...rest of existing code...
+    );
   }
 
   @override

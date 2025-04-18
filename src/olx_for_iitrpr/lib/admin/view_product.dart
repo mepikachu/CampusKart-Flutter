@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:carousel_slider/carousel_slider.dart';
+import '../config/api_config.dart';
 
 class AdminProductView extends StatefulWidget {
   final String productId;
@@ -30,7 +31,7 @@ class _AdminProductViewState extends State<AdminProductView> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${widget.productId}'),
+        Uri.parse(ApiConfig.getProductUrl(widget.productId)),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',

@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
+import '../config/api_config.dart';
 
 class AdminProfileTab extends StatefulWidget {
   const AdminProfileTab({super.key});
@@ -54,7 +55,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
       }
 
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/me'),
+        Uri.parse(ApiConfig.userProfileUrl),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie,
@@ -101,7 +102,7 @@ class _AdminProfileTabState extends State<AdminProfileTab> {
     if (authCookie != null) {
       try {
         await http.post(
-          Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/logout'),
+          Uri.parse(ApiConfig.logoutUrl),
           headers: {
             'Content-Type': 'application/json',
             'auth-cookie': authCookie,

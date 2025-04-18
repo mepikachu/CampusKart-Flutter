@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'chat_screen.dart';
 import '../services/product_cache_service.dart';
+import '../config/api_config.dart';
 
 class ProductDetailsScreen extends StatefulWidget {
   final dynamic product;
@@ -148,7 +149,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${widget.product['_id']}'),
+        Uri.parse(ApiConfig.getProductUrl(widget.product['_id'])),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -212,7 +213,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${widget.product['_id']}/images'),
+        Uri.parse(ApiConfig.getProductImagesUrl(widget.product['_id'])),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -264,7 +265,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
     try {
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/$productId/images'),
+        Uri.parse(ApiConfig.getProductImagesUrl(productId)),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -309,7 +310,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${widget.product['_id']}/check-offer'),
+        Uri.parse(ApiConfig.getProductUrl('${widget.product['_id']}/check-offer')),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -345,7 +346,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
       // First, get or create the conversation
       final conversationResponse = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations'),
+        Uri.parse(ApiConfig.conversationsUrl),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -577,7 +578,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 try {
                   final authCookie = await _secureStorage.read(key: 'authCookie');
                   final response = await http.post(
-                    Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/reports/product'),
+                    Uri.parse(ApiConfig.productsUrl),
                     headers: {
                       'Content-Type': 'application/json',
                       'auth-cookie': authCookie ?? '',
@@ -876,7 +877,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           final authCookie = await _secureStorage.read(key: 'authCookie');
 
                           final response = await http.post(
-                            Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${widget.product['_id']}/offers'),
+                            Uri.parse(ApiConfig.getProductUrl('${widget.product['_id']}/offers')),
                             headers: {
                               'Content-Type': 'application/json',
                               'auth-cookie': authCookie ?? '',

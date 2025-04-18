@@ -15,6 +15,7 @@ import 'product_management.dart';
 import 'home.dart';
 import 'report_user.dart';
 import 'lost_item_description.dart';
+import '../config/api_config.dart';
 
 class ChatScreen extends StatefulWidget {
   final String conversationId;
@@ -282,7 +283,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       // If not in cache, fetch from server
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/profile-picture/${widget.partnerId}'),
+        Uri.parse(ApiConfig.getUserProfilePictureUrl(widget.partnerId)),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -820,7 +821,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   Future<void> _fetchMessages() async {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
-      String url = 'https://olx-for-iitrpr-backend.onrender.com/api/conversations/${widget.conversationId}/messages';
+      String url = ApiConfig.getConversationMessagesUrl(widget.conversationId);
       
       // Use last message ID for efficient fetching
       if (_lastFetchedMessageId != null) {
@@ -939,7 +940,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       if (_lastFetchedMessageId == null) return;
       
       final authCookie = await _secureStorage.read(key: 'authCookie');
-      String url = 'https://olx-for-iitrpr-backend.onrender.com/api/conversations/${widget.conversationId}/messages?lastId=$_lastFetchedMessageId';
+      String url = '${ApiConfig.getConversationMessagesUrl(widget.conversationId)}?lastId=$_lastFetchedMessageId';
       
       final response = await http.get(
         Uri.parse(url),
@@ -1501,7 +1502,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     
     try {
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/$productId'),
+        Uri.parse(ApiConfig.getProductUrl(productId)),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -1529,7 +1530,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
       // If not found as product, try fetching as lost item
       final lostItemResponse = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/lost-items/$productId'),
+        Uri.parse(ApiConfig.getLostItemUrl(productId)),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',

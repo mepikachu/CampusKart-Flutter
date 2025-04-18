@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/api_config.dart';
 
 class LoginScreen extends StatefulWidget {
   final String? errorMessage;
@@ -85,7 +86,7 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       final response = await http
           .post(
-            Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/login'),
+            Uri.parse(ApiConfig.loginUrl),
             headers: {'Content-Type': 'application/json'},
             body: json.encode({
               'identifier': _identifierController.text.trim(),
