@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'my_purchases.dart';
 import 'product_description.dart';
-import 'product_management.dart';  // Add this import
+import 'product_management.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -24,7 +24,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     {'value': 'all', 'label': 'All Notifications'},
     {'value': 'offer_accepted', 'label': 'Accepted Offers'},
     {'value': 'offer_rejected', 'label': 'Rejected Offers'},
-    {'value': 'new_offer', 'label': 'New Offers'},  // Changed label and value
+    {'value': 'new_offer', 'label': 'New Offers'},
     {'value': 'product_updated', 'label': 'Product Updates'},
   ];
 
@@ -32,9 +32,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (selectedFilter == 'all') return notifications;
     if (selectedFilter == 'new_offer') {
       return notifications.where((notification) => 
-        notification['type'] == 'offer_received' || // Check for offer_received
-        notification['type'] == 'received_offer' || // Check for received_offer
-        notification['type'] == 'new_offer'         // Check for new_offer
+        notification['type'] == 'offer_received' ||
+        notification['type'] == 'received_offer' ||
+        notification['type'] == 'new_offer'
       ).toList();
     }
     return notifications.where((notification) => 
@@ -49,66 +49,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _loadNotifications() async {
-    if (!mounted) return;
-    
-    setState(() {
-      isLoading = true;
-      error = null;
-    });
-
     try {
-      final authCookie = await _secureStorage.read(key: 'authCookie');
-      if (authCookie == null) {
-        if (mounted) {
-          setState(() {
-            error = 'Please log in to view notifications';
-            isLoading = false;
-          });
-        }
-        return;
-      }
-
-      print('Auth Cookie: $authCookie'); // Debug print
-
-      final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/notifications'),
-        headers: {
-          'Content-Type': 'application/json',
-          'auth-cookie': authCookie,
-        },
-      );
-
-      print('Response Status: ${response.statusCode}'); // Debug print
-      print('Response Body: ${response.body}'); // Debug print
-
-      if (!mounted) return;
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] == true) {
-          setState(() {
-            notifications = data['notifications'];
-            isLoading = false;
-          });
-        } else {
-          throw Exception(data['error'] ?? 'Failed to load notifications');
-        }
-      } else if (response.statusCode == 401) {
-        // Handle authentication error
+      final notificationsJson = await _secureStorage.read(key: 'notifications');
+      
+      if (mounted) {
         setState(() {
-          error = 'Session expired. Please log in again.';
+          if (notificationsJson != null) {
+            notifications = json.decode(notificationsJson);
+          }
           isLoading = false;
         });
-      } else {
-        throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      if (!mounted) return;
       setState(() {
         error = e.toString();
         isLoading = false;
       });
-      print('Error loading notifications: $e');
     }
   }
 

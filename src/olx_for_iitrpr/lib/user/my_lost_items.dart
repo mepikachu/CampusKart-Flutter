@@ -1,7 +1,10 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../services/profile_service.dart';
+import '../services/lost_found_cache_service.dart';
 import 'lost_item_management.dart';
 
 class MyLostItemsPage extends StatefulWidget {
@@ -13,63 +16,141 @@ class MyLostItemsPage extends StatefulWidget {
 
 class _MyLostItemsPageState extends State<MyLostItemsPage> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  List<dynamic> lostItems = [];
+  List<dynamic> myLostItems = [];
   bool isLoading = true;
   String errorMessage = '';
+
+  final Map<String, Uint8List> _loadedImages = {};
+  final Set<String> _loadingItemIds = {};
 
   @override
   void initState() {
     super.initState();
-    _fetchLostItems();
+    _loadMyLostItems();
   }
 
-  Future<void> _fetchLostItems() async {
-    try {
-      setState(() => isLoading = true);
-      final authCookie = await _secureStorage.read(key: 'authCookie');
-      if (authCookie == null) throw Exception('Not authenticated');
+  Future<void> _loadCachedImage(String itemId) async {
+    final cachedImage = await LostFoundCacheService.getCachedImage(itemId);
+    if (cachedImage != null && mounted) {
+      setState(() {
+        _loadedImages[itemId] = cachedImage;
+      });
+    } else {
+      _fetchItemImage(itemId);
+    }
+  }
 
+  Future<void> _loadMyLostItems() async {
+    try {
+      // First try to get cached lost item IDs
+      final activityIds = await ProfileService.activityIds;
+      
+      if (activityIds != null && activityIds['lost_items'] != null) {
+        // Get cached items
+        List<Map<String, dynamic>> cachedItems = [];
+        for (String id in activityIds['lost_items']!) {
+          final item = await LostFoundCacheService.getCachedItem(id);
+          if (item != null) {
+            cachedItems.add(item);
+          }
+        }
+
+        if (cachedItems.isNotEmpty) {
+          setState(() {
+            myLostItems = cachedItems;
+            isLoading = false;
+          });
+        }
+      }
+
+      // If no cache or expired, refresh from server
+      if (myLostItems.isEmpty || !ProfileService.hasValidActivityCache) {
+        await ProfileService.fetchAndCacheUserProfile();
+        
+        // Try loading from cache again
+        final freshIds = await ProfileService.activityIds;
+        if (freshIds != null && freshIds['lost_items'] != null) {
+          List<Map<String, dynamic>> freshItems = [];
+          for (String id in freshIds['lost_items']!) {
+            final item = await LostFoundCacheService.getCachedItem(id);
+            if (item != null) {
+              freshItems.add(item);
+            }
+          }
+
+          if (mounted) {
+            setState(() {
+              myLostItems = freshItems;
+              isLoading = false;
+            });
+          }
+        }
+      }
+
+      // Load images for all items
+      for (var item in myLostItems) {
+        if (!_loadedImages.containsKey(item['_id'])) {
+          await _loadCachedImage(item['_id']);
+        }
+      }
+    } catch (e) {
+      setState(() {
+        errorMessage = e.toString();
+        isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _fetchItemImage(String itemId) async {
+    if (_loadingItemIds.contains(itemId)) return;
+    _loadingItemIds.add(itemId);
+
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/lost-items/my-items'),
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/lost-items/$itemId/main_image'),
         headers: {
           'Content-Type': 'application/json',
-          'auth-cookie': authCookie,
+          'auth-cookie': authCookie ?? '',
         },
       );
 
-      final responseData = json.decode(response.body);
-      if (response.statusCode == 200 && responseData['success'] == true) {
-        setState(() {
-          lostItems = responseData['items'] ?? [];
-          errorMessage = '';
-        });
-      } else {
-        throw Exception(responseData['error'] ?? 'Failed to fetch lost items');
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] && data['image'] != null) {
+          final image = data['image'];
+          final numImages = data['numImages'] ?? 1;
+          
+          if (image != null && image['data'] != null) {
+            final String base64Str = image['data'];
+            final Uint8List bytes = base64Decode(base64Str);
+            
+            // Cache the image and number of images
+            await LostFoundCacheService.cacheImage(itemId, bytes, numImages);
+            
+            if (mounted) {
+              setState(() {
+                _loadedImages[itemId] = bytes;
+              });
+            }
+          }
+        }
       }
     } catch (e) {
-      setState(() => errorMessage = e.toString());
+      print('Error fetching image: $e');
     } finally {
-      setState(() => isLoading = false);
+      _loadingItemIds.remove(itemId);
     }
   }
 
   Widget _buildLostItemCard(dynamic item) {
-    final List<dynamic> images = item['images'] ?? [];
     final status = item['status'] ?? 'lost';
     final datePosted = DateTime.parse(item['createdAt']);
     final formattedDate = "${datePosted.day}/${datePosted.month}/${datePosted.year}";
 
     Widget imageWidget;
-    if (images.isNotEmpty && images[0]['data'] != null) {
-      try {
-        final bytes = base64Decode(images[0]['data']);
-        imageWidget = Image.memory(bytes, fit: BoxFit.cover);
-      } catch (e) {
-        imageWidget = Container(
-          color: Colors.grey[300],
-          child: const Icon(Icons.image_not_supported, size: 50),
-        );
-      }
+    if (_loadedImages.containsKey(item['_id'])) {
+      imageWidget = Image.memory(_loadedImages[item['_id']]!, fit: BoxFit.cover);
     } else {
       imageWidget = Container(
         color: Colors.grey[300],
@@ -89,7 +170,7 @@ class _MyLostItemsPageState extends State<MyLostItemsPage> {
           ),
         ).then((result) {
           if (result == true) {
-            _fetchLostItems(); // Refresh list if item was updated
+            _loadMyLostItems(); // Refresh list if item was updated
           }
         });
       },
@@ -176,7 +257,7 @@ class _MyLostItemsPageState extends State<MyLostItemsPage> {
         title: const Text('My Lost Items'),
       ),
       body: RefreshIndicator(
-        onRefresh: _fetchLostItems,
+        onRefresh: _loadMyLostItems,
         child: isLoading
             ? const Center(child: CircularProgressIndicator())
             : errorMessage.isNotEmpty
@@ -186,7 +267,7 @@ class _MyLostItemsPageState extends State<MyLostItemsPage> {
                       style: const TextStyle(color: Colors.red),
                     ),
                   )
-                : lostItems.isEmpty
+                : myLostItems.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -208,9 +289,9 @@ class _MyLostItemsPageState extends State<MyLostItemsPage> {
                         ),
                       )
                     : ListView.builder(
-                        itemCount: lostItems.length,
+                        itemCount: myLostItems.length,
                         itemBuilder: (context, index) =>
-                            _buildLostItemCard(lostItems[index]),
+                            _buildLostItemCard(myLostItems[index]),
                       ),
       ),
     );

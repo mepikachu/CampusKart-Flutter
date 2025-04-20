@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'edit_product_screen.dart';
+import '../services/product_cache_service.dart';
 
 class SellerOfferManagementScreen extends StatefulWidget {
   final Map<String, dynamic> product;
@@ -19,10 +21,16 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
   bool isLoading = true;
   String errorMessage = '';
 
+  // Add image caching fields
+  final Map<String, List<Uint8List>> _imageCache = {};
+  final Set<String> _loadingImages = {};
+  bool _hasLoadedImages = false;
+
   @override
   void initState() {
     super.initState();
     fetchOffers();
+    _loadCachedImages();
   }
 
   Future<void> fetchOffers() async {
@@ -56,7 +64,6 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
   Future<void> _handleOfferAction(String offerId, String action) async {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
-      // Fix the URL to match backend routes
       final response = await http.post(
         Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/offers/$offerId/$action'),
         headers: {
@@ -95,6 +102,22 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: ${e.toString()}')),
       );
+    }
+  }
+
+  Future<void> _loadCachedImages() async {
+    if (_hasLoadedImages) return;
+
+    try {
+      final cachedImages = await ProductCacheService.getCachedAllImages(widget.product['_id']);
+      if (cachedImages != null) {
+        setState(() {
+          _imageCache[widget.product['_id']] = cachedImages;
+          _hasLoadedImages = true;
+        });
+      }
+    } catch (e) {
+      print('Error loading cached images: $e');
     }
   }
 
@@ -137,22 +160,25 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
 
   Widget _buildProductDetails() {
     List<Widget> imageSlides = [];
-    if (widget.product['images'] != null) {
-      imageSlides = widget.product['images'].map<Widget>((image) {
-        if (image != null && image['data'] != null) {
-          try {
-            final imageBytes = base64Decode(image['data']);
-            return Image.memory(
-              imageBytes,
-              fit: BoxFit.cover,
-              width: double.infinity,
-            );
-          } catch (e) {
-            return const Center(child: Icon(Icons.error));
-          }
-        }
-        return const Center(child: Icon(Icons.image_not_supported));
-      }).toList();
+    if (_imageCache.containsKey(widget.product['_id'])) {
+      imageSlides = List.generate(_imageCache[widget.product['_id']]!.length, (index) {
+        return Image.memory(
+          _imageCache[widget.product['_id']]![index],
+          fit: BoxFit.cover,
+          width: double.infinity,
+        );
+      });
+    } else {
+      imageSlides = [
+        Container(
+          color: Colors.grey[200],
+          child: Center(
+            child: _loadingImages.contains(widget.product['_id'])
+                ? const CircularProgressIndicator()
+                : const Icon(Icons.image_not_supported),
+          ),
+        ),
+      ];
     }
 
     return SingleChildScrollView(
@@ -160,63 +186,139 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (imageSlides.isNotEmpty)
-            CarouselSlider(
-              items: imageSlides,
-              options: CarouselOptions(
-                height: 300,
-                viewportFraction: 1.0,
-                enableInfiniteScroll: false,
-              ),
+            Stack(
+              children: [
+                CarouselSlider(
+                  items: imageSlides,
+                  options: CarouselOptions(
+                    height: 300,
+                    viewportFraction: 1.0,
+                    enableInfiniteScroll: false,
+                    autoPlay: imageSlides.length > 1,
+                    autoPlayInterval: const Duration(seconds: 3),
+                  ),
+                ),
+              ],
             ),
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  widget.product['name'] ?? 'Unknown Product',
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.product['name'] ?? 'Unknown Product',
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: widget.product['status'] == 'sold' 
+                            ? Colors.red.withOpacity(0.1) 
+                            : Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        widget.product['status']?.toUpperCase() ?? 'AVAILABLE',
+                        style: TextStyle(
+                          color: widget.product['status'] == 'sold' 
+                              ? Colors.red 
+                              : Colors.green,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 Text(
                   '₹${widget.product['price']?.toString() ?? '0'}',
                   style: const TextStyle(
-                    fontSize: 20,
+                    fontSize: 24,
                     color: Colors.green,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 16),
+                // Category
+                if (widget.product['category'] != null) ...[
+                  const Text(
+                    'Category:',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    widget.product['category'].toString(),
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                // Description
                 const Text(
                   'Description:',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
                 Text(
                   widget.product['description'] ?? 'No description available',
                   style: const TextStyle(fontSize: 16),
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  'Status: ${widget.product['status']?.toUpperCase() ?? 'AVAILABLE'}',
+                // Additional details
+                const Text(
+                  'Additional Details:',
                   style: TextStyle(
                     fontSize: 16,
-                    color: widget.product['status'] == 'sold' ? Colors.red : Colors.green,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+                const SizedBox(height: 8),
+                ListTile(
+                  leading: const Icon(Icons.calendar_today),
+                  title: const Text('Posted Date'),
+                  subtitle: Text(_formatDate(widget.product['createdAt'])),
+                ),
+                if (widget.product['lastUpdatedAt'] != null)
+                  ListTile(
+                    leading: const Icon(Icons.update),
+                    title: const Text('Last Updated'),
+                    subtitle: Text(_formatDate(widget.product['lastUpdatedAt'])),
+                  ),
+                if (widget.product['status'] == 'sold')
+                  ListTile(
+                    leading: const Icon(Icons.sell),
+                    title: const Text('Sold Date'),
+                    subtitle: Text(_formatDate(widget.product['soldDate'])),
+                  ),
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  String _formatDate(String? dateStr) {
+    if (dateStr == null) return 'N/A';
+    try {
+      final date = DateTime.parse(dateStr);
+      return '${date.day}/${date.month}/${date.year}';
+    } catch (e) {
+      return 'Invalid date';
+    }
   }
 
   Widget _buildOffersList() {
