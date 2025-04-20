@@ -23,6 +23,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> fetchNotifications() async {
+    setState(() => isLoading = true);
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
@@ -35,13 +36,52 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
+        if (data['success'] == true) {
+          setState(() {
+            notifications = data['notifications'];
+            isLoading = false;
+          });
+        } else {
+          throw Exception(data['error'] ?? 'Failed to load notifications');
+        }
+      } else {
+        throw Exception('Server error: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error fetching notifications: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> markAsRead(String notificationId) async {
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      final response = await http.put(
+        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/notifications/$notificationId/read'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+
+      if (response.statusCode == 200) {
         setState(() {
-          notifications = data['notifications'];
-          isLoading = false;
+          final index = notifications.indexWhere((n) => n['_id'] == notificationId);
+          if (index != -1) {
+            notifications[index]['read'] = true;
+          }
         });
       }
     } catch (e) {
-      setState(() => isLoading = false);
+      print('Error marking notification as read: $e');
     }
   }
 
@@ -111,28 +151,48 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           tileColor:
                               notification['read'] ? null : Colors.blue.shade50,
                           onTap: () async {
-                            // Mark as read and navigate to product
                             if (!notification['read']) {
-                              final authCookie = await _secureStorage.read(
-                                  key: 'authCookie');
-                              await http.put(
-                                Uri.parse(
-                                    'https://olx-for-iitrpr-backend.onrender.com/api/notifications/${notification['_id']}/read'),
-                                headers: {
-                                  'Content-Type': 'application/json',
-                                  'auth-cookie': authCookie ?? '',
-                                },
-                              );
+                              await markAsRead(notification['_id']);
                             }
-                            if (mounted) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ProductDetailsScreen(
-                                    product: notification['productId'],
-                                  ),
-                                ),
-                              );
+                            
+                            if (notification['productId'] != null && mounted) {
+                              try {
+                                final authCookie = await _secureStorage.read(key: 'authCookie');
+                                final response = await http.get(
+                                  Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${notification['productId']}'),
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    'auth-cookie': authCookie ?? '',
+                                  },
+                                );
+
+                                if (response.statusCode == 200) {
+                                  final data = json.decode(response.body);
+                                  if (data['success'] && mounted) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => ProductDetailsScreen(
+                                          product: data['product'],
+                                        ),
+                                      ),
+                                    );
+                                  } else {
+                                    throw Exception('Product not found');
+                                  }
+                                } else {
+                                  throw Exception('Failed to load product');
+                                }
+                              } catch (e) {
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Error: ${e.toString()}'),
+                                      backgroundColor: Colors.red,
+                                    ),
+                                  );
+                                }
+                              }
                             }
                           },
                         ),
