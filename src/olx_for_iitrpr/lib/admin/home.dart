@@ -9,6 +9,7 @@ import 'tab_volunteer_approval.dart';
 import 'tab_reports.dart';
 import 'tab_profile.dart';
 import 'view_all_users.dart';
+import 'server.dart';
 
 // Application theme with black color scheme instead of blue
 final ThemeData appTheme = ThemeData(
@@ -72,7 +73,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     }
 
     final response = await http.get(
-      Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/me'),
+      Uri.parse('$serverUrl/api/me'),
       headers: {
         'Content-Type': 'application/json',
         'auth-cookie': authCookie,
@@ -101,7 +102,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     if (authCookie != null) {
       try {
         await http.post(
-          Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/logout'),
+          Uri.parse('$serverUrl/api/logout'),
           headers: {
             'Content-Type': 'application/json',
             'auth-cookie': authCookie,

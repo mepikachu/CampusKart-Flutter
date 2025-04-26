@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/profile_service.dart';
 import '../services/donation_cache_service.dart';
+import 'server.dart';
 
 class MyDonationsPage extends StatefulWidget {
   const MyDonationsPage({super.key});
@@ -108,7 +109,7 @@ class _MyDonationsPageState extends State<MyDonationsPage> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/donations/$donationId/main_image'),
+        Uri.parse('$serverUrl/api/donations/$donationId/main_image'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',

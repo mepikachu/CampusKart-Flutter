@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
+import 'server.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final Map<String, dynamic> userData;
@@ -82,7 +83,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       }
 
       final response = await http.put(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/me'), // Fixed URL
+        Uri.parse('$serverUrl/api/users/me'), // Fixed URL
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie,

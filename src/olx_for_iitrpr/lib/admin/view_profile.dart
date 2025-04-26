@@ -8,7 +8,7 @@ import 'view_product.dart';
 import 'view_donation.dart';
 import 'view_user_items.dart';
 import 'package:shimmer/shimmer.dart';
-
+import 'server.dart';
 class AdminProfileView extends StatefulWidget {
   final String userId;
 
@@ -84,7 +84,7 @@ class _AdminProfileViewState extends State<AdminProfileView> {
       final authCookie = await _secureStorage.read(key: 'authCookie');
 
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/admin/users/${widget.userId}'),
+        Uri.parse('$serverUrl/api/admin/users/${widget.userId}'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -143,7 +143,7 @@ class _AdminProfileViewState extends State<AdminProfileView> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/profile-picture/${widget.userId}'),
+        Uri.parse('$serverUrl/api/users/profile-picture/${widget.userId}'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -177,7 +177,7 @@ class _AdminProfileViewState extends State<AdminProfileView> {
       
       try {
         final response = await http.get(
-          Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${product['_id']}/main_image'),
+          Uri.parse('$serverUrl/api/products/${product['_id']}/main_image'),
           headers: {
             'Content-Type': 'application/json',
             'auth-cookie': authCookie ?? '',
@@ -211,7 +211,7 @@ class _AdminProfileViewState extends State<AdminProfileView> {
       
       try {
         final response = await http.get(
-          Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${product['_id']}/main_image'),
+          Uri.parse('$serverUrl/api/products/${product['_id']}/main_image'),
           headers: {
             'Content-Type': 'application/json',
             'auth-cookie': authCookie ?? '',
@@ -245,7 +245,7 @@ class _AdminProfileViewState extends State<AdminProfileView> {
       
       try {
         final response = await http.get(
-          Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/donations/${donation['_id']}/main_image'),
+          Uri.parse('$serverUrl/api/donations/${donation['_id']}/main_image'),
           headers: {
             'Content-Type': 'application/json',
             'auth-cookie': authCookie ?? '',

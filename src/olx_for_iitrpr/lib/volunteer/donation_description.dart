@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
-
+import 'server.dart';
 class DonationDescriptionScreen extends StatefulWidget {
   final Map<String, dynamic> donation;
   const DonationDescriptionScreen({super.key, required this.donation});
@@ -25,7 +25,7 @@ class _DonationDescriptionScreenState extends State<DonationDescriptionScreen> {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final donationId = widget.donation['_id'];
       final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/donations/$donationId/collect'),
+        Uri.parse('$serverUrl/api/donations/$donationId/collect'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',

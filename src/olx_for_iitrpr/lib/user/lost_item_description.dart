@@ -6,6 +6,7 @@ import 'package:carousel_slider/carousel_slider.dart';
 import 'package:http/http.dart' as http;
 import 'chat_screen.dart';
 import '../services/lost_found_cache_service.dart';
+import 'server.dart';
 
 class LostItemDetailsScreen extends StatefulWidget {
   final dynamic item;
@@ -104,7 +105,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/lost-items/${widget.item['_id']}'),
+        Uri.parse('$serverUrl/api/lost-items/${widget.item['_id']}'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -134,7 +135,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/lost-items/${widget.item['_id']}/images'),
+        Uri.parse('$serverUrl/api/lost-items/${widget.item['_id']}/images'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -192,7 +193,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
       
       // First, get or create the conversation
       final conversationResponse = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations'),
+        Uri.parse('$serverUrl/api/conversations'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'server.dart';
+import '../utils/image_processor.dart';
 
 class AddDonationScreen extends StatefulWidget {
   const AddDonationScreen({super.key});
@@ -49,15 +51,18 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     setState(() => _isLoading = true);
 
     try {
+      // Compress images before upload
+      final compressedImages = await ImageProcessor.compressImages(_images);
+      
       final authCookie = await _secureStorage.read(key: 'authCookie');
-      final uri = Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/donations');
+      final uri = Uri.parse('$serverUrl/api/donations');
       var request = http.MultipartRequest('POST', uri)
         ..headers['auth-cookie'] = authCookie ?? '';
 
       request.fields['name'] = _nameController.text.trim();
       request.fields['description'] = _descriptionController.text.trim();
 
-      for (File image in _images) {
+      for (File image in compressedImages) {
         request.files.add(await http.MultipartFile.fromPath('images', image.path));
       }
 

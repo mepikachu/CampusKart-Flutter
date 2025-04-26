@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/profile_service.dart';
 import '../services/lost_found_cache_service.dart';
 import 'lost_item_management.dart';
+import 'server.dart';
 
 class MyLostItemsPage extends StatefulWidget {
   const MyLostItemsPage({super.key});
@@ -108,7 +109,7 @@ class _MyLostItemsPageState extends State<MyLostItemsPage> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/lost-items/$itemId/main_image'),
+        Uri.parse('$serverUrl/api/lost-items/$itemId/main_image'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',

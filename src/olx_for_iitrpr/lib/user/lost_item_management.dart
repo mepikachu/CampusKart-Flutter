@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:http/http.dart' as http;
 import '../services/lost_found_cache_service.dart';
+import 'server.dart';
 
 class LostItemDetailsScreen extends StatefulWidget {
   final dynamic item;
@@ -60,7 +61,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
       if (authCookie == null) throw Exception('Not authenticated');
 
       final response = await http.patch(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/lost-items/${widget.item['_id']}/status'),
+        Uri.parse('$serverUrl/api/lost-items/${widget.item['_id']}/status'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',

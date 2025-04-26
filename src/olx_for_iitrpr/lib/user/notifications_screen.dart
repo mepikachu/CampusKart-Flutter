@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'my_purchases.dart';
 import 'product_description.dart';
 import 'product_management.dart';
+import 'server.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -185,7 +186,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                               
                                               // First, check if the offer is still valid
                                               final offerResponse = await http.get(
-                                                Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/offers/${notification['offerId']}'),
+                                                Uri.parse('$serverUrl/api/offers/${notification['offerId']}'),
                                                 headers: {
                                                   'Content-Type': 'application/json',
                                                   'auth-cookie': authCookie ?? '',
@@ -207,7 +208,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
                                                 // Then check the product status
                                                 final productResponse = await http.get(
-                                                  Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${notification['productId']}'),
+                                                  Uri.parse('$serverUrl/api/products/${notification['productId']}'),
                                                   headers: {
                                                     'Content-Type': 'application/json',
                                                     'auth-cookie': authCookie ?? '',
@@ -256,7 +257,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                             try {
                                               final authCookie = await _secureStorage.read(key: 'authCookie');
                                               final response = await http.get(
-                                                Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${notification['productId']}'),
+                                                Uri.parse('$serverUrl/api/products/${notification['productId']}'),
                                                 headers: {
                                                   'Content-Type': 'application/json',
                                                   'auth-cookie': authCookie ?? '',

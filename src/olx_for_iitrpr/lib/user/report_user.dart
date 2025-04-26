@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'server.dart';
 
 class ReportDialog extends StatefulWidget {
   final String userId;
@@ -54,7 +55,7 @@ class _ReportDialogState extends State<ReportDialog> {
       print('conversationId: ${_includeChat ? widget.conversationId : null}');
 
       final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/reports/user'),
+        Uri.parse('$serverUrl/api/reports/user'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie,

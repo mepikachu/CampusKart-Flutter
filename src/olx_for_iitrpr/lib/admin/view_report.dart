@@ -7,7 +7,7 @@ import 'package:shimmer/shimmer.dart';
 import 'view_chat.dart';
 import 'view_profile.dart';
 import 'view_product.dart';
-
+import 'server.dart';
 class ReportDetailScreen extends StatefulWidget {
   final String reportId;
   final String reportType;
@@ -94,7 +94,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/admin/reports/${widget.reportId}?type=${widget.reportType}'),
+        Uri.parse('$serverUrl/api/admin/reports/${widget.reportId}?type=${widget.reportType}'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -148,7 +148,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       try {
         final reporterId = _reportData!['reporter']['_id'];
         final response = await http.get(
-          Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/profile-picture/$reporterId'),
+          Uri.parse('$serverUrl/api/users/profile-picture/$reporterId'),
           headers: {
             'Content-Type': 'application/json',
             'auth-cookie': authCookie ?? '',
@@ -172,7 +172,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       try {
         final reportedUserId = _reportData!['reportedUser']['_id'];
         final response = await http.get(
-          Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/profile-picture/$reportedUserId'),
+          Uri.parse('$serverUrl/api/users/profile-picture/$reportedUserId'),
           headers: {
             'Content-Type': 'application/json',
             'auth-cookie': authCookie ?? '',
@@ -200,7 +200,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       
       final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/admin/reports/${widget.reportId}/resolve/dismiss'),
+        Uri.parse('$serverUrl/api/admin/reports/${widget.reportId}/resolve/dismiss'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -242,7 +242,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       
       final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/admin/reports/${widget.reportId}/resolve/block-user'),
+        Uri.parse('$serverUrl/api/admin/reports/${widget.reportId}/resolve/block-user'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -288,7 +288,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       
       final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/admin/reports/${widget.reportId}/resolve/issue-warning'),
+        Uri.parse('$serverUrl/api/admin/reports/${widget.reportId}/resolve/issue-warning'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -334,7 +334,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       
       final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/admin/reports/${widget.reportId}/resolve/delete-product'),
+        Uri.parse('$serverUrl/api/admin/reports/${widget.reportId}/resolve/delete-product'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -713,8 +713,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       
       // Use the appropriate endpoint based on status
       final String endpoint = newStatus == 'dismissed' 
-          ? 'https://olx-for-iitrpr-backend.onrender.com/api/admin/reports/${widget.reportId}/resolve/dismiss'
-          : 'https://olx-for-iitrpr-backend.onrender.com/api/admin/reports/${widget.reportId}/resolve/no-action';
+          ? '$serverUrl/api/admin/reports/${widget.reportId}/resolve/dismiss'
+          : '$serverUrl/api/admin/reports/${widget.reportId}/resolve/no-action';
       
       final response = await http.post(
         Uri.parse(endpoint),

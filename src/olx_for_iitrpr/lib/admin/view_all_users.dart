@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'view_profile.dart';
+import 'server.dart';
 
 class AllUsersScreen extends StatefulWidget {
   const AllUsersScreen({Key? key}) : super(key: key);
@@ -50,7 +51,7 @@ class _AllUsersScreenState extends State<AllUsersScreen> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/admin/users/'),
+        Uri.parse('$serverUrl/api/admin/users/'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -142,7 +143,7 @@ class _AllUsersScreenState extends State<AllUsersScreen> {
       };
       
       final response = await http.patch(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/admin/users/${user.id}'),
+        Uri.parse('$serverUrl/api/admin/users/${user.id}'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',

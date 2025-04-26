@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shimmer/shimmer.dart';
 import 'view_profile.dart';
+import 'server.dart';
 
 class UserListScreen extends StatefulWidget {
   const UserListScreen({super.key});
@@ -35,7 +36,7 @@ class _UserListScreenState extends State<UserListScreen> {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/admin/users/'),
+        Uri.parse('$serverUrl/api/admin/users/'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -64,7 +65,7 @@ class _UserListScreenState extends State<UserListScreen> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/admin/users/$userId/${currentBlockStatus ? 'unblock' : 'block'}'),
+        Uri.parse('$serverUrl/api/admin/users/$userId/${currentBlockStatus ? 'unblock' : 'block'}'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',

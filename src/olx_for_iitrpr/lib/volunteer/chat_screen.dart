@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
 import 'view_profile.dart';
-
+import 'server.dart';
 class ChatScreen extends StatefulWidget {
   final String conversationId;
   final String partnerNames;
@@ -129,7 +129,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       // If not in cache, fetch from server
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/profile-picture/${widget.partnerId}'),
+        Uri.parse('$serverUrl/api/users/profile-picture/${widget.partnerId}'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -253,7 +253,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       if (id == null || id.isEmpty) {
         final authCookie = await _secureStorage.read(key: 'authCookie');
         final response = await http.get(
-          Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/me'),
+          Uri.parse('$serverUrl/api/users/me'),
           headers: {
             'Content-Type': 'application/json',
             'auth-cookie': authCookie ?? '',
@@ -289,7 +289,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/blocked'),
+        Uri.parse('$serverUrl/api/users/blocked'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -447,7 +447,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations/${widget.conversationId}'),
+        Uri.parse('$serverUrl/api/conversations/${widget.conversationId}'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -525,7 +525,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   Future<void> _fetchNewMessages() async {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
-      String url = 'https://olx-for-iitrpr-backend.onrender.com/api/conversations/${widget.conversationId}/messages';
+      String url = '$serverUrl/api/conversations/${widget.conversationId}/messages';
       
       // Add since parameter for incremental loading
       final latestMessageId = _getLatestMessageId();
@@ -619,7 +619,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations/${widget.conversationId}/messages'),
+        Uri.parse('$serverUrl/api/conversations/${widget.conversationId}/messages'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -720,7 +720,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations/${widget.conversationId}/messages'),
+        Uri.parse('$serverUrl/api/conversations/${widget.conversationId}/messages'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -873,7 +873,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/block/${widget.partnerId}'),
+        Uri.parse('$serverUrl/api/users/block/${widget.partnerId}'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -932,7 +932,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.delete(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/unblock/${widget.partnerId}'),
+        Uri.parse('$serverUrl/api/users/unblock/${widget.partnerId}'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -1081,7 +1081,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/report-user'),
+        Uri.parse('$serverUrl/api/users/report-user'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',

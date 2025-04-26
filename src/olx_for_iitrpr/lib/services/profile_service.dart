@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'product_cache_service.dart';
 import 'donation_cache_service.dart';
 import 'lost_found_cache_service.dart';
-
+import 'server.dart';
 class ProfileService {
   static final ProfileService _instance = ProfileService._internal();
   static const _storage = FlutterSecureStorage();
@@ -125,7 +125,7 @@ class ProfileService {
       if (authCookie == null) return false;
 
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/me'),
+        Uri.parse('$serverUrl/api/users/me'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie,

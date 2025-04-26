@@ -6,6 +6,7 @@ import 'dart:isolate';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'product_description.dart';
 import '../services/product_cache_service.dart';
+import 'server.dart';
 
 class ProductsTab extends StatefulWidget {
   const ProductsTab({super.key});
@@ -84,7 +85,7 @@ class _ProductsTabState extends State<ProductsTab> with AutomaticKeepAliveClient
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products'),
+        Uri.parse('$serverUrl/api/products'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -141,7 +142,7 @@ class _ProductsTabState extends State<ProductsTab> with AutomaticKeepAliveClient
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/$productId/main_image'),
+        Uri.parse('$serverUrl/api/products/$productId/main_image'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -185,7 +186,7 @@ class _ProductsTabState extends State<ProductsTab> with AutomaticKeepAliveClient
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/$productId/main_image'),
+        Uri.parse('$serverUrl/api/products/$productId/main_image'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -230,7 +231,7 @@ class _ProductsTabState extends State<ProductsTab> with AutomaticKeepAliveClient
     
     try {
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/$productId/main_image'),
+        Uri.parse('$serverUrl/api/products/$productId/main_image'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -376,39 +377,51 @@ class _ProductsTabState extends State<ProductsTab> with AutomaticKeepAliveClient
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // Add this line when using AutomaticKeepAliveClientMixin
-    if (isLoading && products.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    
-    if (errorMessage != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
-            const SizedBox(height: 16),
-            Text('Error: $errorMessage'),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => fetchProducts(forceRefresh: true),
-              child: const Text('Retry'),
-            ),
-          ],
+    super.build(context);
+    return Theme(
+      data: ThemeData(
+        primaryColor: Colors.black,
+        scaffoldBackgroundColor: Colors.white,
+        colorScheme: ColorScheme.light(
+          primary: Colors.black,
+          secondary: const Color(0xFF4CAF50),
+          background: Colors.white,
+          surface: Colors.white,
         ),
-      );
-    }
-
-    if (products.isEmpty) {
-      return const Center(child: Text('No products available'));
-    }
-
-    return RefreshIndicator(
-      onRefresh: () => fetchProducts(forceRefresh: true),
-      child: ListView.builder(
-        physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: products.length,
-        itemBuilder: (context, index) => buildProductCard(products[index]),
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: isLoading && products.isEmpty
+            ? const Center(child: CircularProgressIndicator(color: Colors.black))
+            : errorMessage != null
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline, size: 64, color: Colors.black),
+                        const SizedBox(height: 16),
+                        Text('Error: $errorMessage'),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.black,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () => fetchProducts(forceRefresh: true),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  )
+                : RefreshIndicator(
+                    color: Colors.black,
+                    onRefresh: () => fetchProducts(forceRefresh: true),
+                    child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: products.length,
+                      itemBuilder: (context, index) => buildProductCard(products[index]),
+                    ),
+                  ),
       ),
     );
   }

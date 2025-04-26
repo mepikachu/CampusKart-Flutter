@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-
+import 'server.dart';
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
 
@@ -169,7 +169,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/send-reset-otp'),
+        Uri.parse('$serverUrl/api/send-reset-otp'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'identifier': _identifierController.text}),
       ).timeout(const Duration(seconds: 15));
@@ -223,7 +223,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/verify-otp'),
+        Uri.parse('$serverUrl/api/verify-otp'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'otp': otp,
@@ -267,7 +267,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/reset-password'),
+        Uri.parse('$serverUrl/api/reset-password'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'identifier': _email,

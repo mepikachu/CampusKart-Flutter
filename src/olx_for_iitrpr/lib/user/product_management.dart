@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'edit_product_screen.dart';
 import '../services/product_cache_service.dart';
+import 'server.dart';
 
 class SellerOfferManagementScreen extends StatefulWidget {
   final Map<String, dynamic> product;
@@ -37,7 +38,7 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${widget.product['_id']}/offers'),
+        Uri.parse('$serverUrl/api/products/${widget.product['_id']}/offers'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -65,7 +66,7 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/offers/$offerId/$action'),
+        Uri.parse('$serverUrl/api/products/offers/$offerId/$action'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',

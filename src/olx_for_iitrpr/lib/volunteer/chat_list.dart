@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
 import 'chat_screen.dart';
-
+import 'server.dart';
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
 
@@ -57,7 +57,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       if (id == null || name == null) {
         final authCookie = await _secureStorage.read(key: 'authCookie');
         final response = await http.get(
-          Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/me'),
+          Uri.parse('$serverUrl/api/users/me'),
           headers: {
             'Content-Type': 'application/json',
             'auth-cookie': authCookie ?? '',
@@ -265,7 +265,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations'),
+        Uri.parse('$serverUrl/api/conversations'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -351,7 +351,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
           // If not, fetch from server
           final authCookie = await _secureStorage.read(key: 'authCookie');
           final response = await http.get(
-            Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/profile-picture/$partnerId'),
+            Uri.parse('$serverUrl/api/users/profile-picture/$partnerId'),
             headers: {
               'Content-Type': 'application/json',
               'auth-cookie': authCookie ?? '',

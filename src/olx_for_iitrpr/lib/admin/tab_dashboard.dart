@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:math' as math;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'server.dart';
 
 /// AdminDashboard widget that displays comprehensive analytics data
 /// for IITRPR MarketPlace administrators
@@ -66,7 +67,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       // Fetch dashboard overview data
       final response = await http.get(
         Uri.parse(
-          'https://olx-for-iitrpr-backend.onrender.com/api/admin/dashboard?startDate=${timeRange['startDate']}&endDate=${timeRange['endDate']}'
+          '$serverUrl/api/admin/dashboard?startDate=${timeRange['startDate']}&endDate=${timeRange['endDate']}'
         ),
         headers: {
           'Content-Type': 'application/json',
@@ -128,7 +129,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     try {
       final response = await http.get(
         Uri.parse(
-          'https://olx-for-iitrpr-backend.onrender.com/api/admin/$endpoint?startDate=${timeRange['startDate']}&endDate=${timeRange['endDate']}'
+          '$serverUrl/api/admin/$endpoint?startDate=${timeRange['startDate']}&endDate=${timeRange['endDate']}'
         ),
         headers: {
           'Content-Type': 'application/json',
@@ -2335,7 +2336,7 @@ class _DetailPageState extends State<DetailPage> {
       final authCookie = await widget.authCookie;
       
       // Build API endpoint based on section
-      String endpoint = 'https://olx-for-iitrpr-backend.onrender.com/api/admin';
+      String endpoint = '$serverUrl/api/admin';
       
       switch (widget.section) {
         case 'users':
@@ -3661,7 +3662,7 @@ class _DetailPageState extends State<DetailPage> {
       
       final response = await http.patch(
         Uri.parse(
-          'https://olx-for-iitrpr-backend.onrender.com/api/admin/users/$userId'
+          '$serverUrl/api/admin/users/$userId'
         ),
         headers: {
           'Content-Type': 'application/json',
@@ -3710,7 +3711,7 @@ class _DetailPageState extends State<DetailPage> {
       
       final response = await http.patch(
         Uri.parse(
-          'https://olx-for-iitrpr-backend.onrender.com/api/admin/products/$productId'
+          '$serverUrl/api/admin/products/$productId'
         ),
         headers: {
           'Content-Type': 'application/json',
@@ -3759,7 +3760,7 @@ class _DetailPageState extends State<DetailPage> {
       
       final response = await http.patch(
         Uri.parse(
-          'https://olx-for-iitrpr-backend.onrender.com/api/admin/donations/$donationId'
+          '$serverUrl/api/admin/donations/$donationId'
         ),
         headers: {
           'Content-Type': 'application/json',
@@ -3808,7 +3809,7 @@ class _DetailPageState extends State<DetailPage> {
       
       final response = await http.patch(
         Uri.parse(
-          'https://olx-for-iitrpr-backend.onrender.com/api/admin/reports/$reportId'
+          '$serverUrl/api/admin/reports/$reportId'
         ),
         headers: {
           'Content-Type': 'application/json',
@@ -3857,7 +3858,7 @@ class _DetailPageState extends State<DetailPage> {
       
       final response = await http.delete(
         Uri.parse(
-          'https://olx-for-iitrpr-backend.onrender.com/api/admin/$section/$itemId'
+          '$serverUrl/api/admin/$section/$itemId'
         ),
         headers: {
           'Content-Type': 'application/json',

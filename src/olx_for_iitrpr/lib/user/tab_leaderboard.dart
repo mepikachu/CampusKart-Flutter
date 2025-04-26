@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'view_profile.dart';
+import 'server.dart';
 
 class LeaderboardTab extends StatefulWidget {
   const LeaderboardTab({super.key});
@@ -28,7 +29,7 @@ class _LeaderboardTabState extends State<LeaderboardTab> with AutomaticKeepAlive
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/donations/leaderboard'),
+        Uri.parse('$serverUrl/api/donations/leaderboard'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -128,22 +129,62 @@ class _LeaderboardTabState extends State<LeaderboardTab> with AutomaticKeepAlive
   Widget build(BuildContext context) {
     super.build(context);
     if (_isLoadingLeaderboard) {
-      return const Center(child: CircularProgressIndicator());
+      return Theme(
+        data: ThemeData(
+          primaryColor: Colors.black,
+          scaffoldBackgroundColor: Colors.white,
+          colorScheme: ColorScheme.light(
+            primary: Colors.black,
+            secondary: const Color(0xFF4CAF50),
+            background: Colors.white,
+            surface: Colors.white,
+          ),
+        ),
+        child: Scaffold(
+          backgroundColor: Colors.white,
+          body: const Center(child: CircularProgressIndicator(color: Colors.black)),
+        ),
+      );
     }
 
     if (_errorMessage.isNotEmpty) {
-      return Center(child: Text('Error: $_errorMessage'));
+      return Theme(
+        data: ThemeData(
+          primaryColor: Colors.black,
+          scaffoldBackgroundColor: Colors.white,
+        ),
+        child: Scaffold(
+          backgroundColor: Colors.white,
+          body: Center(child: Text('Error: $_errorMessage')),
+        ),
+      );
     }
 
-    return RefreshIndicator(
-      onRefresh: _fetchLeaderboard,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _buildLeaderboardSection('Top Donors', _donorsLeaderboard, Colors.blue[700]!),
-          const SizedBox(height: 24),
-          _buildLeaderboardSection('Top Volunteers', _volunteersLeaderboard, Colors.green[700]!),
-        ],
+    return Theme(
+      data: ThemeData(
+        primaryColor: Colors.black,
+        scaffoldBackgroundColor: Colors.white,
+        colorScheme: ColorScheme.light(
+          primary: Colors.black,
+          secondary: const Color(0xFF4CAF50),
+          background: Colors.white,
+          surface: Colors.white,
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: RefreshIndicator(
+          color: Colors.black,
+          onRefresh: _fetchLeaderboard,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _buildLeaderboardSection('Top Donors', _donorsLeaderboard, Colors.black),
+              const SizedBox(height: 24),
+              _buildLeaderboardSection('Top Volunteers', _volunteersLeaderboard, const Color(0xFF4CAF50)),
+            ],
+          ),
+        ),
       ),
     );
   }

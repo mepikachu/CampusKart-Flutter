@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'lost_item_description.dart';
 import '../services/lost_found_cache_service.dart';
+import 'server.dart';
 
 class LostFoundTab extends StatefulWidget {
   const LostFoundTab({super.key});
@@ -84,7 +85,7 @@ class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClie
       final authCookie = await _secureStorage.read(key: 'authCookie');
       
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/lost-items'),
+        Uri.parse('$serverUrl/api/lost-items'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -148,7 +149,7 @@ class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClie
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/lost-items/$itemId/main_image'),
+        Uri.parse('$serverUrl/api/lost-items/$itemId/main_image'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -327,50 +328,50 @@ class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClie
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    if (isLoading && lostItems.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    
-    if (errorMessage != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
-            const SizedBox(height: 16),
-            Text('Error: $errorMessage'),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: fetchLostItems,
-              child: const Text('Retry'),
-            ),
-          ],
+    return Theme(
+      data: ThemeData(
+        primaryColor: Colors.black,
+        scaffoldBackgroundColor: Colors.white,
+        colorScheme: ColorScheme.light(
+          primary: Colors.black,
+          secondary: const Color(0xFF4CAF50),
+          background: Colors.white,
+          surface: Colors.white,
         ),
-      );
-    }
-
-    if (lostItems.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              'No lost items reported',
-              style: TextStyle(color: Colors.grey[600], fontSize: 16),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: fetchLostItems,
-      child: ListView.builder(
-        physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: lostItems.length,
-        itemBuilder: (context, index) => buildLostItemCard(lostItems[index]),
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: isLoading && lostItems.isEmpty
+            ? const Center(child: CircularProgressIndicator(color: Colors.black))
+            : errorMessage != null
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline, size: 64, color: Colors.black),
+                        const SizedBox(height: 16),
+                        Text('Error: $errorMessage'),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.black,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: fetchLostItems,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  )
+                : RefreshIndicator(
+                    color: Colors.black,
+                    onRefresh: fetchLostItems,
+                    child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: lostItems.length,
+                      itemBuilder: (context, index) => buildLostItemCard(lostItems[index]),
+                    ),
+                  ),
       ),
     );
   }

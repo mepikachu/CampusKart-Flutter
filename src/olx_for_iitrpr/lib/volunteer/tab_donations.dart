@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'donation_description.dart';
-
+import 'server.dart';
 enum SortOption {
   nameAsc,
   nameDesc,
@@ -39,7 +39,7 @@ class _VolunteerDonationsPageState extends State<VolunteerDonationsPage> {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
         Uri.parse(
-            'https://olx-for-iitrpr-backend.onrender.com/api/donations?status=available'),
+            '$serverUrl/api/donations?status=available'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',

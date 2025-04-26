@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import 'chat_screen.dart';
 import 'home.dart';
+import 'server.dart';
 
 class ViewProfileScreen extends StatefulWidget {
   final String userId;
@@ -65,7 +66,7 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/profile/${widget.userId}'),
+        Uri.parse('$serverUrl/api/users/profile/${widget.userId}'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -114,7 +115,7 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/profile-picture/${widget.userId}'),
+        Uri.parse('$serverUrl/api/users/profile-picture/${widget.userId}'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -143,7 +144,7 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations'),
+        Uri.parse('$serverUrl/api/conversations'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',

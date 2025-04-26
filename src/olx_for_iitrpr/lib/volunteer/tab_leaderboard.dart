@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
+import 'server.dart';
 // Add these color constants to match tab_donations.dart
 const outlineColor = Color(0xFFE1E3E6);
 const textPrimaryColor = Color(0xFF202124);
@@ -83,7 +83,7 @@ class _VolunteerLeaderboardTabState extends State<VolunteerLeaderboardTab> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/donations/leaderboard'),
+        Uri.parse('$serverUrl/api/donations/leaderboard'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',

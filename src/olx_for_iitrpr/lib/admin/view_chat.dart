@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'server.dart';
 
 class AdminChatHistoryView extends StatefulWidget {
   final String reportId;
@@ -62,7 +63,7 @@ class _AdminChatHistoryViewState extends State<AdminChatHistoryView> {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/admin/reports/${widget.reportId}/messages'),
+        Uri.parse('$serverUrl/api/admin/reports/${widget.reportId}/messages'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',

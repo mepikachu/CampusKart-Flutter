@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'view_product.dart';
 import 'view_donation.dart';
-
+import 'server.dart';
 class UserItemsView extends StatefulWidget {
   final String userId;
   final String type; // 'products' or 'donations'
@@ -37,7 +37,7 @@ class _UserItemsViewState extends State<UserItemsView> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/admin/users/${widget.userId}/${widget.type}'),
+        Uri.parse('$serverUrl/api/admin/users/${widget.userId}/${widget.type}'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',

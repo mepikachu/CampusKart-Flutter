@@ -14,6 +14,7 @@ import '../services/product_cache_service.dart';
 import '../services/donation_cache_service.dart';
 import '../services/lost_found_cache_service.dart';
 import '../services/profile_service.dart';
+import 'server.dart';
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -52,7 +53,7 @@ class _ProfileTabState extends State<ProfileTab> {
       // Then fetch fresh data
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/me'),
+        Uri.parse('$serverUrl/api/users/me'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -116,7 +117,7 @@ class _ProfileTabState extends State<ProfileTab> {
 
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/users/me/profile-picture'),
+        Uri.parse('$serverUrl/api/users/me/profile-picture'),
         headers: {
           'Content-Type': 'application/json',  
           'auth-cookie': authCookie ?? '',
@@ -162,7 +163,7 @@ class _ProfileTabState extends State<ProfileTab> {
     if (authCookie != null) {
       try {
         await http.post(
-          Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/logout'),
+          Uri.parse('$serverUrl/api/logout'),
           headers: {
             'Content-Type': 'application/json',
             'auth-cookie': authCookie,
@@ -362,6 +363,7 @@ class _ProfileTabState extends State<ProfileTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: RefreshIndicator(
         onRefresh: _loadUserData,
         child: SingleChildScrollView(

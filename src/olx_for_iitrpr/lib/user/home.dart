@@ -14,6 +14,7 @@ import 'notifications_screen.dart';
 import 'tab_leaderboard.dart';
 import 'tab_lost&found.dart';
 import 'add_lost_item.dart';
+import 'server.dart';
 
 // Chat refresh service to manage periodic updates
 class ChatRefreshService {
@@ -118,7 +119,7 @@ class ChatRefreshService {
       if (authCookie == null) return;
       
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/conversations'),
+        Uri.parse('$serverUrl/api/conversations'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie,
@@ -154,7 +155,7 @@ class ChatRefreshService {
       
       // Get the last message ID
       final lastId = await _secureStorage.read(key: 'last_message_id_$conversationId');
-      String url = 'https://olx-for-iitrpr-backend.onrender.com/api/conversations/$conversationId/messages';
+      String url = '$serverUrl/api/conversations/$conversationId/messages';
       
       if (lastId != null) {
         url += '?lastId=$lastId';
@@ -332,9 +333,9 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
       final authCookie = await _secureStorage.read(key: 'authCookie');
       if (authCookie == null) return;
 
-      String url = 'https://olx-for-iitrpr-backend.onrender.com/api/notifications';
+      String url = '$serverUrl/api/notifications';
       if (_lastNotificationId != null) {
-        url = 'https://olx-for-iitrpr-backend.onrender.com/api/notifications/after/$_lastNotificationId';
+        url = '$serverUrl/api/notifications/after/$_lastNotificationId';
       }
 
       final response = await http.get(
@@ -439,164 +440,185 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          "IITRPR MarketPlace",
-          style: TextStyle(color: Colors.black87),
+    return Theme(
+      data: ThemeData(
+        primaryColor: Colors.black,
+        scaffoldBackgroundColor: Colors.white,
+        colorScheme: ColorScheme.light(
+          primary: Colors.black,
+          secondary: const Color(0xFF4CAF50),
+          background: Colors.white,
+          surface: Colors.white,
         ),
-        centerTitle: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications, color: Colors.black87),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-              );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.chat_bubble, color: Colors.black87),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ChatListScreen()),
-              );
-            },
-          ),
-        ],
       ),
-      body: _tabs[_selectedIndex],
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat, // Change this
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 16), // Add padding to match tab height
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ScaleTransition(
-              scale: _animation,
-              child: Column(
-                children: [
-                  if (_isFabExpanded) ...[
-                    FloatingActionButton.extended(
-                      heroTag: 'lost',
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const AddLostItemScreen()),
-                        ).then((success) {
-                          if (success == true) {
-                            // Refresh lost items tab if needed
-                            setState(() {});
-                          }
-                        });
-                      },
-                      backgroundColor: Colors.orange[600],
-                      label: const Text(
-                        'Report Lost Item',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      icon: const Icon(Icons.search),
-                    ),
-                    const SizedBox(height: 12),
-                    FloatingActionButton.extended(
-                      heroTag: 'donate',
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const AddDonationScreen()),
-                        );
-                      },
-                      backgroundColor: Colors.green[600],
-                      label: const Text(
-                        'Add Donation',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      icon: const Icon(Icons.volunteer_activism),
-                    ),
-                    const SizedBox(height: 12),
-                    FloatingActionButton.extended(
-                      heroTag: 'sell',
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const SellTab()),
-                        );
-                      },
-                      backgroundColor: Colors.blue[600],
-                      label: const Text(
-                        'Sell Product',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      icon: const Icon(Icons.sell),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                ],
-              ),
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          title: const Text(
+            'IITRPR MarketPlace',
+            style: TextStyle(
+              color: Colors.black,
+              fontWeight: FontWeight.bold
             ),
-            Container(
-              height: 56,
-              width: 56,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    _isFabExpanded ? Colors.red : Colors.blue[700]!,
-                    _isFabExpanded ? Colors.redAccent : Colors.blue[500]!,
-                  ],
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: AnimatedRotation(
-                duration: const Duration(milliseconds: 300),
-                turns: _isFabExpanded ? 0.125 : 0,
-                child: MaterialButton(
-                  onPressed: _toggleFab,
-                  shape: const CircleBorder(),
-                  padding: EdgeInsets.zero,
-                  child: Icon(
-                    Icons.add,
-                    color: Colors.white,
-                    size: 32,
-                  ),
-                ),
-              ),
+          ),
+          centerTitle: false,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.notifications, color: Colors.black),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                );
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.chat_bubble, color: Colors.black),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ChatListScreen()),
+                );
+              },
             ),
           ],
         ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) => setState(() { _selectedIndex = index; }),
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: "Products",
+        body: _tabs[_selectedIndex],
+        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+        floatingActionButton: Padding(
+          padding: const EdgeInsets.only(bottom: 16), // Add padding to match tab height
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ScaleTransition(
+                scale: _animation,
+                child: Column(
+                  children: [
+                    if (_isFabExpanded) ...[
+                      FloatingActionButton.extended(
+                        heroTag: 'lost',
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const AddLostItemScreen()),
+                          ).then((success) {
+                            if (success == true) {
+                              // Refresh lost items tab if needed
+                              setState(() {});
+                            }
+                          });
+                        },
+                        backgroundColor: Colors.orange[600],
+                        label: const Text(
+                          'Report Lost Item',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        icon: const Icon(Icons.search),
+                      ),
+                      const SizedBox(height: 12),
+                      FloatingActionButton.extended(
+                        heroTag: 'donate',
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const AddDonationScreen()),
+                          );
+                        },
+                        backgroundColor: Colors.green[600],
+                        label: const Text(
+                          'Add Donation',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        icon: const Icon(Icons.volunteer_activism),
+                      ),
+                      const SizedBox(height: 12),
+                      FloatingActionButton.extended(
+                        heroTag: 'sell',
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => const SellTab()),
+                          );
+                        },
+                        backgroundColor: Colors.blue[600],
+                        label: const Text(
+                          'Sell Product',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        icon: const Icon(Icons.sell),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  ],
+                ),
+              ),
+              Container(
+                height: 56,
+                width: 56,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      _isFabExpanded ? Colors.red : Colors.blue[700]!,
+                      _isFabExpanded ? Colors.redAccent : Colors.blue[500]!,
+                    ],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: AnimatedRotation(
+                  duration: const Duration(milliseconds: 300),
+                  turns: _isFabExpanded ? 0.125 : 0,
+                  child: MaterialButton(
+                    onPressed: _toggleFab,
+                    shape: const CircleBorder(),
+                    padding: EdgeInsets.zero,
+                    child: Icon(
+                      Icons.add,
+                      color: Colors.white,
+                      size: 32,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.find_in_page),
-            label: "Lost & Found",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.leaderboard),
-            label: "Leaderboard",
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: "Profile",
-          ),
-        ],
+        ),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _selectedIndex,
+          onTap: (index) => setState(() { _selectedIndex = index; }),
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.white,
+          selectedItemColor: Colors.black,
+          unselectedItemColor: Colors.grey,
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home),
+              label: "Products",
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.find_in_page),
+              label: "Lost & Found",
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.leaderboard),
+              label: "Leaderboard",
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person),
+              label: "Profile",
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -6,7 +6,7 @@ import 'tab_donations.dart';
 import 'tab_leaderboard.dart';
 import 'tab_profile.dart';
 import 'chat_list.dart';
-
+import 'server.dart';
 class VolunteerHomeScreen extends StatefulWidget {
   const VolunteerHomeScreen({super.key});
 
@@ -38,7 +38,7 @@ class _VolunteerHomeScreenState extends State<VolunteerHomeScreen> {
       return;
     }
     final response = await http.get(
-      Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/me'),
+      Uri.parse('$serverUrl/api/me'),
       headers: {
         'Content-Type': 'application/json',
         'auth-cookie': authCookie,

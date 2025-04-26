@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'server.dart';
+import '../utils/image_processor.dart';
 
 class AddLostItemScreen extends StatefulWidget {
   const AddLostItemScreen({super.key});
@@ -57,8 +59,10 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
     setState(() => _isLoading = true);
 
     try {
+      final compressedImages = await ImageProcessor.compressImages(_images);
+      
       final authCookie = await _secureStorage.read(key: 'authCookie');
-      final uri = Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/lost-items');
+      final uri = Uri.parse('$serverUrl/api/lost-items');
       var request = http.MultipartRequest('POST', uri)
         ..headers['auth-cookie'] = authCookie ?? '';
 
@@ -66,7 +70,7 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
       request.fields['description'] = _descriptionController.text.trim();
       request.fields['lastSeenLocation'] = _lastSeenLocationController.text.trim();
 
-      for (File image in _images) {
+      for (File image in compressedImages) {
         request.files.add(await http.MultipartFile.fromPath('images', image.path));
       }
 
@@ -120,7 +124,7 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          const Text(
             'Item Images',
             style: TextStyle(
               fontSize: 18,
@@ -129,7 +133,7 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
+          const Text(
             'Add up to 5 images',
             style: TextStyle(
               fontSize: 14,
@@ -153,130 +157,117 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
               },
               itemBuilder: (context, index) {
                 if (index == _images.length) {
-                  return Container(
-                    key: const ValueKey('add_image'),
-                    width: 120,
-                    margin: const EdgeInsets.only(right: 12),
-                    decoration: BoxDecoration(
-                      color: backgroundColor,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: outlineColor),
-                    ),
-                    child: InkWell(
-                      onTap: _pickImages,
-                      borderRadius: BorderRadius.circular(12),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: const BoxDecoration(
-                              color: surfaceColor,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.add_photo_alternate_rounded,
-                              color: primaryColor,
-                              size: 28,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Add Image',
-                            style: TextStyle(
-                              color: primaryColor,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
+                  return _buildAddImageButton();
                 }
-                return Container(
-                  key: ValueKey(_images[index]),
-                  width: 120,
-                  margin: const EdgeInsets.only(right: 12),
-                  child: Stack(
-                    children: [
-                      Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.file(
-                            _images[index],
-                            height: 120,
-                            width: 120,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.6),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: InkWell(
-                              onTap: () => setState(() => _images.removeAt(index)),
-                              customBorder: const CircleBorder(),
-                              child: const Padding(
-                                padding: EdgeInsets.all(6),
-                                child: Icon(
-                                  Icons.close_rounded,
-                                  color: Colors.white,
-                                  size: 16,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (index == 0)
-                        Positioned(
-                          bottom: 8,
-                          left: 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: primaryColor,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Text(
-                              'MAIN',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                );
+                return _buildImagePreview(index);
               },
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildAddImageButton() {
+    return Container(
+      key: const ValueKey('add_image'),
+      width: 120,
+      margin: const EdgeInsets.only(right: 12),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: outlineColor),
+      ),
+      child: InkWell(
+        onTap: _pickImages,
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Icon(
+              Icons.add_photo_alternate_rounded,
+              color: primaryColor,
+              size: 28,
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Add Image',
+              style: TextStyle(
+                color: primaryColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildImagePreview(int index) {
+    return Container(
+      key: ValueKey(_images[index]),
+      width: 120,
+      margin: const EdgeInsets.only(right: 12),
+      child: Stack(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.file(
+              _images[index],
+              height: 120,
+              width: 120,
+              fit: BoxFit.cover,
+            ),
+          ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: _buildDeleteButton(index),
+          ),
+          if (index == 0) _buildMainLabel(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDeleteButton(int index) {
+    return InkWell(
+      onTap: () => setState(() => _images.removeAt(index)),
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.6),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(
+          Icons.close,
+          color: Colors.white,
+          size: 16,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMainLabel() {
+    return Positioned(
+      bottom: 8,
+      left: 8,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: primaryColor,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Text(
+          'MAIN',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
       ),
     );
   }
@@ -296,72 +287,87 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
             children: [
               _buildImagePreviews(),
               const SizedBox(height: 24),
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Item Name',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) =>
-                    value?.isEmpty ?? true ? "Enter item name" : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _lastSeenLocationController,
-                decoration: const InputDecoration(
-                  labelText: 'Last Seen Location',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) =>
-                    value?.isEmpty ?? true ? "Enter last seen location" : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
-                validator: (value) =>
-                    value?.isEmpty ?? true ? "Enter description" : null,
-              ),
+              _buildFormFields(),
               const SizedBox(height: 32),
-              SizedBox(
-                height: 54,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _submitLostItem,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2E7D32),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 24,
-                          width: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Text(
-                          'Report Lost Item',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                ),
-              ),
+              _buildSubmitButton(),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildFormFields() {
+    return Column(
+      children: [
+        TextFormField(
+          controller: _nameController,
+          decoration: InputDecoration(
+            labelText: 'Item Name',
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: outlineColor),
+            ),
+          ),
+          validator: (value) =>
+              value?.isEmpty ?? true ? "Enter item name" : null,
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _lastSeenLocationController,
+          decoration: InputDecoration(
+            labelText: 'Last Seen Location',
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: outlineColor),
+            ),
+          ),
+          validator: (value) =>
+              value?.isEmpty ?? true ? "Enter last seen location" : null,
+        ),
+        const SizedBox(height: 16),
+        TextFormField(
+          controller: _descriptionController,
+          decoration: InputDecoration(
+            labelText: 'Description',
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: outlineColor),
+            ),
+          ),
+          maxLines: 3,
+          validator: (value) =>
+              value?.isEmpty ?? true ? "Enter description" : null,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSubmitButton() {
+    return SizedBox(
+      height: 54,
+      child: ElevatedButton(
+        onPressed: _isLoading ? null : _submitLostItem,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF2E7D32),
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          elevation: 0,
+        ),
+        child: _isLoading
+            ? const CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              )
+            : const Text(
+                'Report Lost Item',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
+                ),
+              ),
       ),
     );
   }

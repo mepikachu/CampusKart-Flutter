@@ -1,6 +1,8 @@
+import 'server.dart';
+
 class ApiConfig {
   // Base URL for the backend API
-  static const String baseUrl = 'https://olx-for-iitrpr-backend.onrender.com';
+  static const String baseUrl = '$serverUrl ';
 
   // API endpoints
   static String get loginUrl => '$baseUrl/api/login';

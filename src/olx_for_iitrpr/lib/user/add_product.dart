@@ -5,7 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http_parser/http_parser.dart';
-
+import 'server.dart';
+import '../utils/image_processor.dart';
 class SellTab extends StatefulWidget {
   const SellTab({super.key});
 
@@ -65,6 +66,9 @@ class _SellTabState extends State<SellTab> {
     });
 
     try {
+      // Compress images before upload
+      final compressedImages = await ImageProcessor.compressImages(_images);
+      
       final authCookie = await _secureStorage.read(key: 'authCookie');
       if (authCookie == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -72,19 +76,16 @@ class _SellTabState extends State<SellTab> {
         );
         return;
       }
-      final uri = Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products');
+      final uri = Uri.parse('$serverUrl/api/products');
       var request = http.MultipartRequest('POST', uri);
-      // Set auth cookie header (do not manually set Content-Type)
       request.headers['auth-cookie'] = authCookie;
 
-      // Add form fields
       request.fields['name'] = _nameController.text.trim();
       request.fields['description'] = _descriptionController.text.trim();
       request.fields['price'] = _priceController.text.trim();
       request.fields['category'] = _selectedCategory;
 
-      // Attach images
-      for (File image in _images) {
+      for (File image in compressedImages) {
         var stream = http.ByteStream(image.openRead());
         var length = await image.length();
         var multipartFile = http.MultipartFile(
@@ -92,7 +93,7 @@ class _SellTabState extends State<SellTab> {
           stream,
           length,
           filename: image.path.split('/').last,
-          contentType: MediaType('image', 'jpeg'), // update if needed
+          contentType: MediaType('image', 'jpeg'),
         );
         request.files.add(multipartFile);
       }

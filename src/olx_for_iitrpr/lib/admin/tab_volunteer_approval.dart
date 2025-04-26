@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'server.dart';
 
 class VolunteerRequestsScreen extends StatefulWidget {
   const VolunteerRequestsScreen({super.key});
@@ -26,7 +27,7 @@ class _VolunteerRequestsScreenState extends State<VolunteerRequestsScreen> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/volunteer-requests'),
+        Uri.parse('$serverUrl/api/volunteer-requests'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -56,7 +57,7 @@ class _VolunteerRequestsScreenState extends State<VolunteerRequestsScreen> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.post(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/volunteer-requests/$userId/$action'),
+        Uri.parse('$serverUrl/api/volunteer-requests/$userId/$action'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',

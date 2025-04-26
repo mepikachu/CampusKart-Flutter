@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'product_description.dart';
+import 'server.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -27,7 +28,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/notifications'),
+        Uri.parse('$serverUrl/api/notifications'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -65,7 +66,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.put(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/notifications/$notificationId/read'),
+        Uri.parse('$serverUrl/api/notifications/$notificationId/read'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -159,7 +160,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                               try {
                                 final authCookie = await _secureStorage.read(key: 'authCookie');
                                 final response = await http.get(
-                                  Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/products/${notification['productId']}'),
+                                  Uri.parse('$serverUrl/api/products/${notification['productId']}'),
                                   headers: {
                                     'Content-Type': 'application/json',
                                     'auth-cookie': authCookie ?? '',

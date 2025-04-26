@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shimmer/shimmer.dart';
-
+import 'server.dart';
 class VolunteerProfileTab extends StatefulWidget {
   const VolunteerProfileTab({super.key});
 
@@ -54,7 +54,7 @@ class _VolunteerProfileTabState extends State<VolunteerProfileTab> {
       }
 
       final response = await http.get(
-        Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/me'),
+        Uri.parse('$serverUrl/api/me'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie,
@@ -104,7 +104,7 @@ class _VolunteerProfileTabState extends State<VolunteerProfileTab> {
     if (authCookie != null) {
       try {
         await http.post(
-          Uri.parse('https://olx-for-iitrpr-backend.onrender.com/api/logout'),
+          Uri.parse('$serverUrl/api/logout'),
           headers: {
             'Content-Type': 'application/json',
             'auth-cookie': authCookie,
