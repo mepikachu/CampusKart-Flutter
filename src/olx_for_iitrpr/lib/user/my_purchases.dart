@@ -240,46 +240,57 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Purchases'),
+    return Theme(
+      data: ThemeData(
+        primaryColor: Colors.black,
+        scaffoldBackgroundColor: Colors.white,
+        colorScheme: ColorScheme.light(
+          primary: Colors.black,
+          secondary: const Color(0xFF4CAF50),
+          background: Colors.white,
+          surface: Colors.white,
+        ),
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadMyPurchases,
-        child: isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : errorMessage.isNotEmpty
-                ? Center(
-                    child: Text('Error: $errorMessage',
-                        style: const TextStyle(color: Colors.red)),
-                  )
-                : myPurchases.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.shopping_bag,
-                              size: 64,
-                              color: Colors.grey[400],
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          title: const Text('My Purchases'),
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+        ),
+        body: RefreshIndicator(
+          color: Colors.black,
+          onRefresh: _loadMyPurchases,
+          child: isLoading
+              ? const Center(child: CircularProgressIndicator(color: Colors.black))
+              : errorMessage.isNotEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.error_outline, size: 64, color: Colors.black),
+                          const SizedBox(height: 16),
+                          Text('Error: $errorMessage'),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black,
+                              foregroundColor: Colors.white,
                             ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No purchases yet',
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.builder(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        itemCount: myPurchases.length,
-                        itemBuilder: (context, index) =>
-                            _buildPurchaseCard(myPurchases[index]),
+                            onPressed: () => _loadMyPurchases(),
+                            child: const Text('Retry'),
+                          ),
+                        ],
                       ),
+                    )
+                  : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: myPurchases.length,
+                      itemBuilder: (context, index) =>
+                          _buildPurchaseCard(myPurchases[index]),
+                    ),
+        ),
       ),
     );
   }

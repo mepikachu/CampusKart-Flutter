@@ -260,53 +260,61 @@ class _MyDonationsPageState extends State<MyDonationsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Donations'),
+    return Theme(
+      data: ThemeData(
+        primaryColor: Colors.black,
+        scaffoldBackgroundColor: Colors.white,
+        colorScheme: ColorScheme.light(
+          primary: Colors.black,
+          secondary: const Color(0xFF4CAF50),
+          background: Colors.white,
+          surface: Colors.white,
+        ),
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadMyDonations,
-        child: isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : errorMessage.isNotEmpty
-                ? Center(
-                    child: Text(
-                      'Error: $errorMessage',
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                  )
-                : donations.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.volunteer_activism,
-                              size: 64,
-                              color: Colors.grey[400],
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          title: const Text('My Donations'),
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+        ),
+        body: RefreshIndicator(
+          color: Colors.black,
+          onRefresh: _loadMyDonations,
+          child: isLoading
+              ? const Center(child: CircularProgressIndicator(color: Colors.black))
+              : errorMessage.isNotEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.error_outline, size: 64, color: Colors.black),
+                          const SizedBox(height: 16),
+                          Text('Error: $errorMessage'),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black,
+                              foregroundColor: Colors.white,
                             ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No donations yet',
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.builder(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        itemCount: donations.length,
-                        itemBuilder: (context, index) {
-                          // Ensure the donation at this index exists
-                          if (index >= 0 && index < donations.length) {
-                            return _buildDonationCard(donations[index]);
-                          }
-                          return const SizedBox(); // Return empty widget if index is invalid
-                        },
+                            onPressed: () => _loadMyDonations(),
+                            child: const Text('Retry'),
+                          ),
+                        ],
                       ),
+                    )
+                  : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: donations.length,
+                      itemBuilder: (context, index) {
+                        if (index >= 0 && index < donations.length) {
+                          return _buildDonationCard(donations[index]);
+                        }
+                        return const SizedBox();
+                      },
+                    ),
+        ),
       ),
     );
   }

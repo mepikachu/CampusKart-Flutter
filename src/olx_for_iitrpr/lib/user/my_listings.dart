@@ -311,23 +311,58 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('My Listings')),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : errorMessage.isNotEmpty
-              ? Center(child: Text('Error: $errorMessage'))
-              : myListings.isEmpty
-                  ? const Center(child: Text('No listings yet'))
-                  : RefreshIndicator(
-                      onRefresh: _fetchMyListings,
-                      child: ListView.builder(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        itemCount: myListings.length,
-                        itemBuilder: (context, index) =>
-                            buildProductCard(myListings[index], index),
-                      ),
+    return Theme(
+      data: ThemeData(
+        primaryColor: Colors.black,
+        scaffoldBackgroundColor: Colors.white,
+        colorScheme: ColorScheme.light(
+          primary: Colors.black,
+          secondary: const Color(0xFF4CAF50),
+          background: Colors.white,
+          surface: Colors.white,
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          title: const Text('My Listings'),
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+        ),
+        body: isLoading
+            ? const Center(child: CircularProgressIndicator(color: Colors.black))
+            : errorMessage.isNotEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline, size: 64, color: Colors.black),
+                        const SizedBox(height: 16),
+                        Text('Error: $errorMessage'),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.black,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () => _loadMyListings(),
+                          child: const Text('Retry'),
+                        ),
+                      ],
                     ),
+                  )
+                : RefreshIndicator(
+                    color: Colors.black,
+                    onRefresh: _loadMyListings,
+                    child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: myListings.length,
+                      itemBuilder: (context, index) =>
+                          buildProductCard(myListings[index], index),
+                    ),
+                  ),
+      ),
     );
   }
 }

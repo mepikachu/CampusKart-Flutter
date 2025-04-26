@@ -660,6 +660,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: _isSelectionMode
           ? AppBar(
               title: Text('${_selectedConversationIds.length} selected'),

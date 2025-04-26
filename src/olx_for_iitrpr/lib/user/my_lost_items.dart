@@ -253,47 +253,78 @@ class _MyLostItemsPageState extends State<MyLostItemsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Lost Items'),
+    return Theme(
+      data: ThemeData(
+        primaryColor: Colors.black,
+        scaffoldBackgroundColor: Colors.white,
+        colorScheme: ColorScheme.light(
+          primary: Colors.black,
+          secondary: const Color(0xFF4CAF50),
+          background: Colors.white,
+          surface: Colors.white,
+        ),
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadMyLostItems,
-        child: isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : errorMessage.isNotEmpty
-                ? Center(
-                    child: Text(
-                      'Error: $errorMessage',
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                  )
-                : myLostItems.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.search_off,
-                              size: 64,
-                              color: Colors.grey[400],
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          title: const Text('My Lost Items'),
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+        ),
+        body: RefreshIndicator(
+          color: Colors.black,
+          onRefresh: _loadMyLostItems,
+          child: isLoading
+              ? const Center(child: CircularProgressIndicator(color: Colors.black))
+              : errorMessage.isNotEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.error_outline, size: 64, color: Colors.black),
+                          const SizedBox(height: 16),
+                          Text('Error: $errorMessage'),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black,
+                              foregroundColor: Colors.white,
                             ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'No lost items reported',
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: myLostItems.length,
-                        itemBuilder: (context, index) =>
-                            _buildLostItemCard(myLostItems[index]),
+                            onPressed: () => _loadMyLostItems(),
+                            child: const Text('Retry'),
+                          ),
+                        ],
                       ),
+                    )
+                  : myLostItems.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.search_off,
+                                size: 64,
+                                color: Colors.grey[400],
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No lost items reported',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          itemCount: myLostItems.length,
+                          itemBuilder: (context, index) =>
+                              _buildLostItemCard(myLostItems[index]),
+                        ),
+        ),
       ),
     );
   }
