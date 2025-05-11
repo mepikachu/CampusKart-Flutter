@@ -140,20 +140,34 @@ class _ChatListScreenState extends State<ChatListScreen> {
     // Show confirmation dialog
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete ${_selectedConversationIds.length} ${_selectedConversationIds.length == 1 ? 'conversation' : 'conversations'}?'),
-        content: Text('This will remove ${_selectedConversationIds.length == 1 ? 'this conversation' : 'these conversations'} from your device. This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+      builder: (context) => Theme(
+        data: Theme.of(context).copyWith(
+          dialogTheme: DialogTheme(
+            backgroundColor: Colors.white,
+            elevation: 2,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
+        ),
+        child: AlertDialog(
+          backgroundColor: Colors.white,
+          title: Text('Delete ${_selectedConversationIds.length} ${_selectedConversationIds.length == 1 ? 'conversation' : 'conversations'}?'),
+          content: Text('This will remove ${_selectedConversationIds.length == 1 ? 'this conversation' : 'these conversations'} from your device. This action cannot be undone.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.red,
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
       ),
     ) ?? false;
 
@@ -657,30 +671,80 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }
   }
 
-  @override
+  @override 
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: _isSelectionMode
+    return Theme(
+      data: Theme.of(context).copyWith(
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+          scrolledUnderElevation: 0, // Prevents color change on scroll
+        ),
+        dialogTheme: DialogTheme(
+          backgroundColor: Colors.white,
+          elevation: 4,
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        extendBodyBehindAppBar: false, // Prevents AppBar color change
+        appBar: _isSelectionMode
           ? AppBar(
-              title: Text('${_selectedConversationIds.length} selected'),
-              leading: IconButton(
-                icon: Icon(Icons.close),
-                onPressed: _cancelSelection,
+              backgroundColor: Colors.white,
+              elevation: 0,
+              title: Text(
+                '${_selectedConversationIds.length} selected',
+                style: TextStyle(color: Colors.black),
+              ),
+              leading: Container(
+                margin: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  icon: Icon(Icons.close, color: Colors.black),
+                  padding: EdgeInsets.zero,
+                  onPressed: _cancelSelection,
+                ),
               ),
               actions: [
-                IconButton(
-                  icon: Icon(Icons.delete),
-                  onPressed: _selectedConversationIds.isNotEmpty 
-                      ? _deleteSelectedConversations 
-                      : null,
+                Container(
+                  margin: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: Icon(Icons.delete, color: Colors.black),
+                    padding: EdgeInsets.zero,
+                    onPressed: _selectedConversationIds.isNotEmpty ? _deleteSelectedConversations : null,
+                  ),
                 ),
               ],
             )
           : AppBar(
-              title: const Text('Chats'),
+              backgroundColor: Colors.white,
+              elevation: 0,
+              title: Text(
+                'Chats',
+                style: TextStyle(color: Colors.black),
+              ),
+              leading: Container(
+                margin: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  icon: Icon(Icons.arrow_back, color: Colors.black),
+                  padding: EdgeInsets.zero,
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
             ),
-      body: isLoading
+        body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : errorMessage.isNotEmpty && conversations.isEmpty
               ? Center(
@@ -858,7 +922,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
                           );
                         },
                       ),
-                    ),
+        ),
+      ),
     );
   }
 }
