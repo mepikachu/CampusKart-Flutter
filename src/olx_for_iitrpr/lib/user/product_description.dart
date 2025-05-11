@@ -6,6 +6,7 @@ import 'package:carousel_slider/carousel_slider.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'chat_screen.dart';
+import 'view_profile.dart';
 import '../services/product_cache_service.dart';
 import 'server.dart';
 
@@ -40,6 +41,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   // Store images
   List<Uint8List> productImages = [];
   int totalNumImages = 1;
+
+  // Add these variables to track seller details
+  Map<String, dynamic>? sellerDetails;
+  Map<String, dynamic>? sellerProfile;
 
   @override
   void initState() {
@@ -445,16 +450,27 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     return showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Report Product'),
+        backgroundColor: Colors.white,
+        title: const Text(
+          'Report Product',
+          style: TextStyle(fontSize: 16),
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Text(
+                'What is wrong with this product?',
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Reason',
                   border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  filled: true,
+                  fillColor: Colors.grey[50],
                 ),
                 items: [
                   'Inappropriate Content',
@@ -474,11 +490,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               const SizedBox(height: 16),
               TextField(
                 controller: descriptionController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Description',
-                  hintText: 'Please provide more details',
                   border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  filled: true,
+                  fillColor: Colors.grey[50],
                 ),
                 maxLines: 3,
               ),
@@ -488,7 +504,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text('Cancel', style: TextStyle(color: Colors.grey[600])),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -530,10 +546,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
+              backgroundColor: Colors.red,
               foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
-            child: const Text('Submit'),
+            child: const Text('Report'),
           ),
         ],
       ),
@@ -560,10 +580,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(product['name'] ?? 'Product Details'),
+        title: Text(product['name'] ?? 'Product Details', 
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)
+        ),
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
-        elevation: 0,
+        elevation: 1,
         actions: [
           IconButton(
             icon: const Icon(Icons.flag),
@@ -581,102 +603,73 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 children: [
                   // Image carousel
                   _buildImageCarousel(),
-                  
-                  // Product details section
+
+                  // Main content section
                   Padding(
-                    padding: const EdgeInsets.all(16.0),
+                    padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Name and Price section
+                        // Product name and status
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
                               child: Text(
                                 product['name'] ?? 'Unknown Product',
                                 style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 16),
-                            Text(
-                              '₹${product['price']?.toString() ?? '0'}',
-                              style: const TextStyle(
-                                fontSize: 22,
-                                color: Colors.green,
-                                fontWeight: FontWeight.bold,
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                '${product['status']?.toUpperCase() ?? "AVAILABLE"}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.green,
+                                ),
                               ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 16),
-                        
-                        // Category and Status
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Text(
-                                product['category']?.toString().toUpperCase() ?? 'UNKNOWN',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.blue,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: _getStatusColor(product['status']).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Text(
-                                product['status']?.toUpperCase() ?? 'UNKNOWN',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: _getStatusColor(product['status']),
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
+
+                        // Category tags
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              _buildTag('${product['category']?.toUpperCase() ?? "UNCATEGORIZED"} • ...'),
+                              _buildTag('${product['location']?.toUpperCase() ?? "CAMPUS"} • ...'),
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 24),
-                        
-                        // Seller info
-                        Row(
+
+                        // Price section
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            CircleAvatar(
-                              radius: 20,
-                              backgroundColor: Colors.grey[200],
-                              child: Icon(Icons.person, color: Colors.grey[400]),
-                            ),
-                            const SizedBox(width: 12),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            Row(
                               children: [
                                 Text(
-                                  'Seller',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey[600],
-                                  ),
+                                  'Price: ',
+                                  style: TextStyle(fontSize: 16),
                                 ),
                                 Text(
-                                  product['seller']?['userName'] ?? 'Unknown',
-                                  style: const TextStyle(
+                                  '₹${product['price']?.toString() ?? "0"}',
+                                  style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
+                                    color: Colors.green,
                                   ),
                                 ),
                               ],
@@ -684,77 +677,111 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           ],
                         ),
                         const SizedBox(height: 24),
-                        
-                        // Description section
-                        const Text(
-                          'Description',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          product['description'] ?? 'No description available',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            height: 1.5,
-                          ),
-                        ),
-                        
-                        // Sold Information section if product is sold
-                        if (product['status'] == 'sold') ...[
-                          const SizedBox(height: 24),
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.orange.withOpacity(0.3)),
+
+                        // Seller details section with API data
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Seller Details',
+                              style: TextStyle(fontSize: 16),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
+                            const SizedBox(height: 8),
+                            InkWell(
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ViewProfileScreen(
+                                    userId: product['seller']?['_id'] ?? '',
+                                  ),
+                                ),
+                              ),
+                              child: Container(
+                                padding: EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[50],
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.grey[200]!),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Icon(Icons.sell, color: Colors.orange[700], size: 20),
-                                    const SizedBox(width: 8),
-                                    const Text(
-                                      'Sold Information',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                    Row(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 20,
+                                          backgroundColor: Colors.grey[200],
+                                          child: Icon(Icons.person, color: Colors.grey[400]),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              product['seller']?['userName'] ?? 'Unknown',
+                                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                                            ),
+                                            if (sellerProfile != null) ...[
+                                              Text(
+                                                'Last online: ${_formatDateTime(sellerProfile!['lastSeen'])}',
+                                                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                              ),
+                                              Text(
+                                                'Member since: ${_formatDateTime(sellerProfile!['createdAt'])}',
+                                                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                              ),
+                                              if (sellerProfile!['address'] != null)
+                                                Text(
+                                                  'Address: ${sellerProfile!['address']}',
+                                                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                                ),
+                                            ],
+                                          ],
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  'Sold Price: ₹${product['transactionPrice']?.toString() ?? product['price']?.toString() ?? '0'}',
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Sold Date: ${_formatDate(product['transactionDate'])}',
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                        
-                        const SizedBox(height: 24),
-                        
-                        // Last updated info
-                        Row(
-                          children: [
-                            Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Last Updated: ${_formatDate(product['lastUpdatedAt'])}',
-                              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                              ),
                             ),
                           ],
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Product timestamps
+                        Container(
+                          padding: EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.blue.withOpacity(0.1)),
+                          ),
+                          child: Column(
+                            children: [
+                              _buildTimeDetail('Posted on', _formatDateTime(product['createdAt'])),
+                              const SizedBox(height: 8),
+                              _buildTimeDetail('Last updated', _formatDateTime(product['lastUpdatedAt'])),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Description section
+                        Text(
+                          'About this item',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[800],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          product['description'] ?? 'No description available',
+                          style: TextStyle(
+                            fontSize: 15,
+                            height: 1.5,
+                            color: Colors.grey[800],
+                          ),
                         ),
                       ],
                     ),
@@ -769,106 +796,179 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           widget.product['seller']?['_id'] == currentUserId ||
                           !widget.showOfferButton
           ? null
-          : Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.2),
-                    spreadRadius: 1,
-                    blurRadius: 5,
-                    offset: const Offset(0, -3),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  // Chat button
-                  Expanded(
-                    flex: 1,
-                    child: ElevatedButton.icon(
-                      onPressed: _startChat,
-                      icon: const Icon(Icons.chat, color: Colors.white),
-                      label: const Text('Chat', style: TextStyle(color: Colors.white)),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Colors.blue,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+          : SafeArea(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _startChat,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
-                        elevation: 0,
+                        child: const Text(
+                          'Chat with Seller',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.white,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  // Offer button
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton(
-                      onPressed: isLoading ? null : () async {
-                        try {
-                          final offerPrice = await _showOfferDialog(
-                            initialValue: currentOfferAmount,
-                          );
-                          
-                          if (offerPrice != null) {
-                            final authCookie = await _secureStorage.read(key: 'authCookie');
-                            final response = await http.post(
-                              Uri.parse('$serverUrl/api/products/${widget.product['_id']}/offers'),
-                              headers: {
-                                'Content-Type': 'application/json',
-                                'auth-cookie': authCookie ?? '',
-                              },
-                              body: json.encode({
-                                'offerPrice': offerPrice,
-                              }),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          try {
+                            final offerPrice = await _showOfferDialog(
+                              initialValue: currentOfferAmount,
                             );
                             
-                            if (response.statusCode == 200) {
-                              setState(() {
-                                hasOffer = true;
-                                currentOfferAmount = offerPrice;
-                              });
-                              
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Offer ${hasOffer ? 'updated' : 'sent'} successfully'),
-                                  backgroundColor: Colors.green,
-                                ),
+                            if (offerPrice != null) {
+                              final authCookie = await _secureStorage.read(key: 'authCookie');
+                              final response = await http.post(
+                                Uri.parse('$serverUrl/api/products/${widget.product['_id']}/offers'),
+                                headers: {
+                                  'Content-Type': 'application/json',
+                                  'auth-cookie': authCookie ?? '',
+                                },
+                                body: json.encode({
+                                  'offerPrice': offerPrice,
+                                }),
                               );
-                            } else {
-                              final errorData = json.decode(response.body);
-                              throw Exception(errorData['error'] ?? 'Failed to send offer');
+                              
+                              if (response.statusCode == 200) {
+                                setState(() {
+                                  hasOffer = true;
+                                  currentOfferAmount = offerPrice;
+                                });
+                                
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Offer ${hasOffer ? 'updated' : 'sent'} successfully'),
+                                    backgroundColor: Colors.green,
+                                  ),
+                                );
+                              } else {
+                                final errorData = json.decode(response.body);
+                                throw Exception(errorData['error'] ?? 'Failed to send offer');
+                              }
                             }
+                          } catch (e) {
+                            print('Error making offer: $e');
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Error: Unable to make offer. Please try again.'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
                           }
-                        } catch (e) {
-                          print('Error making offer: $e');
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Error: Unable to make offer. Please try again.'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: hasOffer ? Colors.orange : Colors.green,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: hasOffer ? Colors.orange : Colors.green,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                         ),
-                        elevation: 0,
-                      ),
-                      child: Text(
-                        hasOffer ? 'Edit Offer (₹${currentOfferAmount?.toStringAsFixed(0)})' : 'Make Offer',
-                        style: const TextStyle(fontSize: 16, color: Colors.white),
+                        child: Text(
+                          hasOffer ? 'Update Offer' : 'Make Offer',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            color: Colors.white,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
+    );
+  }
+
+  Widget _buildTag(String text) {
+    return Container(
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: Colors.grey[800],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSellerDetail(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Text(
+            '$label: ',
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey[600],
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimeDetail(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey[600],
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -892,6 +992,41 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       return DateFormat('MMM d, yyyy').format(dateTime);
     } catch (e) {
       return 'N/A';
+    }
+  }
+
+  // Update helper method to include time
+  String _formatDateTime(dynamic dateTime) {
+    if (dateTime == null) return 'N/A';
+    try {
+      final DateTime date = DateTime.parse(dateTime.toString());
+      return DateFormat('MMM d, yyyy • h:mm a').format(date);
+    } catch (e) {
+      return 'N/A';
+    }
+  }
+
+  Future<void> _loadSellerProfile() async {
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      final response = await http.get(
+        Uri.parse('$serverUrl/api/users/profile/${widget.product['seller']['_id']}'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (mounted) {
+          setState(() {
+            sellerProfile = data['user'];
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading seller profile: $e');
     }
   }
 }

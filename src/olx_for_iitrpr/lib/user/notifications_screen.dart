@@ -92,10 +92,26 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Notifications'),
         backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        elevation: 0,
+        title: const Text(
+          'Notifications',
+          style: TextStyle(color: Colors.black),
+        ),
+        leading: Container(
+          margin: EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.grey.shade100,
+          ),
+          child: IconButton(
+            icon: Icon(Icons.arrow_back, color: Colors.black),
+            padding: EdgeInsets.zero,
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
       ),
       body: Column(
         children: [
@@ -109,7 +125,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     child: FilterChip(
                       selected: selectedFilter == filter['value'],
-                      label: Text(filter['label']),
+                      selectedColor: Colors.blue.withOpacity(0.15),
+                      backgroundColor: Colors.white,
+                      label: Text(
+                        filter['label'],
+                        style: TextStyle(
+                          color: selectedFilter == filter['value'] ? Colors.blue : Colors.black87,
+                          fontSize: 13,
+                        ),
+                      ),
+                      shape: StadiumBorder(
+                        side: BorderSide(
+                          color: selectedFilter == filter['value'] ? Colors.blue.withOpacity(0.5) : Colors.grey.shade300,
+                        ),
+                      ),
                       onSelected: (bool selected) {
                         setState(() {
                           selectedFilter = filter['value'];

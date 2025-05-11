@@ -275,10 +275,23 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white, // Pure white background
       appBar: AppBar(
-        title: const Text('Add Donation'),
         backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        elevation: 0,
+        title: const Text('Add Donation', style: TextStyle(color: Colors.black)),
+        leading: Container(
+          margin: EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.grey.shade100,
+          ),
+          child: IconButton(
+            icon: Icon(Icons.arrow_back, color: Colors.black),
+            padding: EdgeInsets.zero,
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
       ),
       body: SingleChildScrollView(
         child: Padding(

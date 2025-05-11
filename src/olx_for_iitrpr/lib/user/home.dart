@@ -277,7 +277,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObse
   final List<Widget> _tabs = const [
     ProductsTab(),
     LostFoundTab(),
-    SizedBox(), // Placeholder for Add button
     LeaderboardTab(),
     ProfileTab(),
   ];
@@ -515,7 +514,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObse
             ],
           ),
           child: BottomNavigationBar(
-            currentIndex: _selectedIndex == 2 ? 2 : _selectedIndex,
+            currentIndex: _selectedIndex,
             type: BottomNavigationBarType.fixed,
             backgroundColor: Colors.white,
             selectedItemColor: Colors.black,
@@ -560,86 +559,111 @@ class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObse
   void _showAddOptions() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16))
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20))
       ),
       builder: (context) => Container(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildAddOptionCard(
-              'Sell Product',
-              Icons.sell,
-              Colors.blue,
-              () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SellTab()),
-                );
-              },
+            Text(
+              'Add New',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
             ),
-            const SizedBox(height: 12),
-            _buildAddOptionCard(
-              'Report Lost',
-              Icons.search,
-              Colors.orange,
-              () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const AddLostItemScreen()),
-                );
-              },
+            const SizedBox(height: 24),
+            _buildAddOptionButton(
+              label: 'Sell Product',
+              icon: Icons.sell,
+              color: Colors.blue,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SellTab()),
+              ),
             ),
-            const SizedBox(height: 12),
-            _buildAddOptionCard(
-              'Add Donation',
-              Icons.volunteer_activism,
-              Colors.green,
-              () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const AddDonationScreen()),
-                );
-              },
+            const SizedBox(height: 16),
+            _buildAddOptionButton(
+              label: 'Report Lost Item',
+              icon: Icons.search,
+              color: Colors.orange,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const AddLostItemScreen()),
+              ),
             ),
+            const SizedBox(height: 16),
+            _buildAddOptionButton(
+              label: 'Add Donation',
+              icon: Icons.volunteer_activism,
+              color: Colors.green,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const AddDonationScreen()),
+              ),
+            ),
+            const SizedBox(height: 8),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildAddOptionCard(String label, IconData icon, Color color, VoidCallback onTap) {
+  Widget _buildAddOptionButton({
+    required String label,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           decoration: BoxDecoration(
             color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: color.withOpacity(0.3),
+              width: 1,
+            ),
           ),
           child: Row(
             children: [
-              Icon(icon, color: color, size: 24),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: color, size: 24),
+              ),
               const SizedBox(width: 16),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: color,
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
                 ),
               ),
-              const Spacer(),
-              Icon(Icons.arrow_forward_ios, color: color.withOpacity(0.5), size: 16),
+              Icon(
+                Icons.arrow_forward_ios,
+                color: color.withOpacity(0.5),
+                size: 16,
+              ),
             ],
           ),
         ),

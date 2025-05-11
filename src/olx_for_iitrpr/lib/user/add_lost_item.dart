@@ -24,8 +24,8 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
   bool _isLoading = false;
 
   static const primaryColor = Color(0xFF1A73E8);
-  static const surfaceColor = Color(0xFFFFFFFF);
-  static const backgroundColor = Color(0xFFFFFFFF);
+  static const surfaceColor = Color(0xFFFFFFFF); // Pure white
+  static const backgroundColor = Color(0xFFFFFFFF); // Pure white
   static const outlineColor = Color(0xFFE1E3E6);
   static const textPrimaryColor = Color(0xFF202124);
   static const textSecondaryColor = Color(0xFF5F6368);
@@ -275,8 +275,23 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white, // Pure white background
       appBar: AppBar(
-        title: const Text('Report Lost Item'),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: const Text('Report Lost Item', style: TextStyle(color: Colors.black)),
+        leading: Container(
+          margin: EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.grey.shade100,
+          ),
+          child: IconButton(
+            icon: Icon(Icons.arrow_back, color: Colors.black),
+            padding: EdgeInsets.zero,
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -306,8 +321,10 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
             labelText: 'Item Name',
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: outlineColor),
             ),
+            filled: true,
+            fillColor: Colors.white, // Changed to pure white
+            labelStyle: const TextStyle(color: Color(0xFF5F6368)),
           ),
           validator: (value) =>
               value?.isEmpty ?? true ? "Enter item name" : null,
@@ -319,8 +336,10 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
             labelText: 'Last Seen Location',
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: outlineColor),
             ),
+            filled: true,
+            fillColor: Colors.white, // Changed to pure white
+            labelStyle: const TextStyle(color: Color(0xFF5F6368)),
           ),
           validator: (value) =>
               value?.isEmpty ?? true ? "Enter last seen location" : null,
@@ -332,8 +351,10 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
             labelText: 'Description',
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: outlineColor),
             ),
+            filled: true,
+            fillColor: Colors.white, // Changed to pure white
+            labelStyle: const TextStyle(color: Color(0xFF5F6368)),
           ),
           maxLines: 3,
           validator: (value) =>

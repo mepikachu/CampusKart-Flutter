@@ -17,6 +17,147 @@ import 'report_user.dart';
 import 'lost_item_description.dart';
 import 'server.dart';
 
+class ChatBubblesPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final random = Random(12345);
+    final items = [
+      'envelope',
+      'phone',
+      'camera',
+      'cup',
+      'heart',
+      'music_note',
+      'star',
+      'message'
+    ];
+
+    // Paint light shapes in background
+    for (int i = 0; i < 40; i++) {
+      final item = items[random.nextInt(items.length)];
+      final x = random.nextDouble() * size.width;
+      final y = random.nextDouble() * size.height;
+      final rotation = random.nextDouble() * pi * 2;
+      final scale = random.nextDouble() * 0.5 + 0.5;
+
+      canvas.save();
+      canvas.translate(x, y);
+      canvas.rotate(rotation);
+      canvas.scale(scale);
+
+      final paint = Paint()
+        ..color = Colors.grey.withOpacity(0.03)
+        ..style = PaintingStyle.fill;
+
+      // Draw different shapes based on item type
+      switch (item) {
+        case 'envelope':
+          _drawEnvelope(canvas, paint);
+          break;
+        case 'phone':
+          _drawPhone(canvas, paint);
+          break;
+        case 'camera':
+          _drawCamera(canvas, paint);
+          break;
+        case 'cup':
+          _drawCup(canvas, paint);
+          break;
+        case 'heart':
+          _drawHeart(canvas, paint);
+          break;
+        case 'music_note':
+          _drawMusicNote(canvas, paint);
+          break;
+        case 'star':
+          _drawStar(canvas, paint);
+          break;
+        case 'message':
+          _drawMessage(canvas, paint);
+          break;
+      }
+
+      canvas.restore();
+    }
+  }
+
+  void _drawEnvelope(Canvas canvas, Paint paint) {
+    final path = Path()
+      ..moveTo(-15, -10)
+      ..lineTo(15, -10)
+      ..lineTo(15, 10)
+      ..lineTo(-15, 10)
+      ..close();
+    canvas.drawPath(path, paint);
+    
+    final flapPath = Path()
+      ..moveTo(-15, -10)
+      ..lineTo(0, 0)
+      ..lineTo(15, -10);
+    canvas.drawPath(flapPath, paint);
+  }
+
+  void _drawPhone(Canvas canvas, Paint paint) {
+    final path = Path()
+      ..addRRect(RRect.fromRectAndRadius(
+        Rect.fromLTWH(-10, -20, 20, 40),
+        Radius.circular(5),
+      ));
+    canvas.drawPath(path, paint);
+  }
+
+  void _drawCamera(Canvas canvas, Paint paint) {
+    canvas.drawCircle(Offset(0, 0), 15, paint);
+    canvas.drawCircle(Offset(0, 0), 8, paint);
+  }
+
+  void _drawCup(Canvas canvas, Paint paint) {
+    final path = Path()
+      ..moveTo(-12, -15)
+      ..lineTo(12, -15)
+      ..lineTo(10, 15)
+      ..lineTo(-10, 15)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  void _drawHeart(Canvas canvas, Paint paint) {
+    final path = Path()
+      ..moveTo(0, 10)
+      ..cubicTo(-15, -8, -15, -15, 0, -5)
+      ..cubicTo(15, -15, 15, -8, 0, 10);
+    canvas.drawPath(path, paint);
+  }
+
+  void _drawMusicNote(Canvas canvas, Paint paint) {
+    canvas.drawCircle(Offset(5, 5), 6, paint);
+    canvas.drawRect(Rect.fromLTWH(0, -15, 4, 20), paint);
+  }
+
+  void _drawStar(Canvas canvas, Paint paint) {
+    final path = Path();
+    for (var i = 0; i < 5; i++) {
+      final angle = -pi / 2 + 2 * pi * i / 5;
+      final point = Offset(cos(angle) * 15, sin(angle) * 15);
+      i == 0 ? path.moveTo(point.dx, point.dy) : path.lineTo(point.dx, point.dy);
+    }
+    path.close();
+    canvas.drawPath(path, paint);
+  }
+
+  void _drawMessage(Canvas canvas, Paint paint) {
+    final path = Path()
+      ..addRRect(RRect.fromRectAndRadius(
+        Rect.fromLTWH(-15, -10, 30, 20),
+        Radius.circular(10),
+      ));
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 class ChatScreen extends StatefulWidget {
   final String conversationId;
   final String partnerNames;
@@ -1564,425 +1705,448 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: _isInSelectionMode
-        ? _buildSelectionAppBar()
-        : isSearching
-          ? _buildSearchAppBar()
-          : _buildRegularAppBar(),
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              Expanded(
-                child: isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : messages.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.chat_bubble_outline,
-                              size: 80,
-                              color: Colors.grey.shade400,
-                            ),
-                            SizedBox(height: 16),
-                            Text(
-                              'No messages yet',
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey.shade600,
+    return Theme(
+      data: Theme.of(context).copyWith(
+        popupMenuTheme: PopupMenuThemeData(
+          color: Colors.white,
+          elevation: 4,
+        ),
+        dialogTheme: DialogTheme(
+          backgroundColor: Colors.white,
+          elevation: 4,
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.grey[50],
+        extendBodyBehindAppBar: false, // This helps prevent AppBar color change
+        appBar: _isInSelectionMode
+          ? _buildSelectionAppBar()
+          : isSearching
+            ? _buildSearchAppBar()
+            : _buildRegularAppBar(),
+        body: Stack(
+          children: [
+            // Add bubbles background
+            CustomPaint(
+              painter: ChatBubblesPainter(),
+              size: Size.infinite,
+            ),
+            Column(
+              children: [
+                Expanded(
+                  child: isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : messages.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.chat_bubble_outline,
+                                size: 80,
+                                color: Colors.grey.shade400,
                               ),
-                            ),
-                            SizedBox(height: 8),
-                            Text(
-                              'Start the conversation!',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey.shade500,
+                              SizedBox(height: 16),
+                              Text(
+                                'No messages yet',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.grey.shade600,
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.builder(
-                        controller: _scrollController,
-                        reverse: true,
-                        itemCount: filteredMessages.length,
-                        // Add findChildIndexCallback for better performance with reversed list
-                        findChildIndexCallback: (key) {
-                          if (key is ValueKey) {
-                            final String messageId = key.value;
-                            return filteredMessages.indexWhere((msg) =>
-                              msg['messageId'].toString() == messageId
-                            );
-                          }
-                          return null;
-                        },
-                        itemBuilder: (context, index) {
-                          try {
-                            final int adjustedIndex = filteredMessages.length - 1 - index;
-                            if (adjustedIndex < 0 || adjustedIndex >= filteredMessages.length) {
-                              return SizedBox.shrink();
+                              SizedBox(height: 8),
+                              Text(
+                                'Start the conversation!',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          controller: _scrollController,
+                          reverse: true,
+                          itemCount: filteredMessages.length,
+                          // Add findChildIndexCallback for better performance with reversed list
+                          findChildIndexCallback: (key) {
+                            if (key is ValueKey) {
+                              final String messageId = key.value;
+                              return filteredMessages.indexWhere((msg) =>
+                                msg['messageId'].toString() == messageId
+                              );
                             }
-                            
-                            final message = filteredMessages[adjustedIndex];
-                            final messageId = message['messageId'].toString();
-                            final bool isMe = message['sender'] == currentUserId;
-                            final double offset = _swipingMessageId == messageId ? _messageSwipeOffset : 0.0;
-                            
-                            // Show date header if needed
-                            final bool showDateHeader = _shouldShowDateHeader(adjustedIndex);
-                            final String dateHeaderText = showDateHeader
-                              ? _formatDateForHeader(DateTime.parse(message['createdAt']))
-                              : '';
-                            
-                            return Column(
-                              children: [
-                                if (showDateHeader)
-                                  _buildDateHeader(dateHeaderText),
-                                
-                                // Use a key for each message to maintain identity during rebuilds
-                                Container(
-                                  key: ValueKey(messageId),
-                                  width: double.infinity, // Full width container
-                                  child: GestureDetector(
-                                    behavior: HitTestBehavior.translucent, // Important for full width detection
-                                    onLongPress: () => _toggleMessageSelection(messageId),
-                                    onTap: () {
-                                      if (_isInSelectionMode) {
-                                        _toggleMessageSelection(messageId);
-                                      }
-                                    },
-                                    onHorizontalDragStart: (details) {
-                                      // Allow swiping for all messages in non-selection mode
-                                      if (!_isInSelectionMode) {
-                                        setState(() {
-                                          _swipingMessageId = messageId;
-                                          _messageSwipeOffset = 0.0;
-                                          _hapticFeedbackTriggered = false;
-                                          _swipeController!.reset();
-                                        });
-                                      }
-                                    },
-                                    onHorizontalDragUpdate: (details) {
-                                      if (_swipingMessageId == messageId) {
-                                        setState(() {
-                                          _messageSwipeOffset += details.delta.dx;
-                                          
-                                          if (_messageSwipeOffset > 100) {
-                                            _messageSwipeOffset = 100;
-                                          } else if (_messageSwipeOffset < 0) {
-                                            _messageSwipeOffset = 0;
-                                          }
-                                          
-                                          // Update animation value based on swipe offset
-                                          _swipeController!.value = _messageSwipeOffset / 100;
-                                          
-                                          // Add haptic feedback when crossing the reply threshold
-                                          if (_messageSwipeOffset >= _replyThreshold && !_hapticFeedbackTriggered) {
-                                            HapticFeedback.mediumImpact();
-                                            _hapticFeedbackTriggered = true;
-                                          }
-                                        });
-                                      }
-                                    },
-                                    onHorizontalDragEnd: (details) {
-                                      if (_swipingMessageId == messageId) {
-                                        if (_messageSwipeOffset >= _replyThreshold) {
-                                          _handleReply(message);
+                            return null;
+                          },
+                          itemBuilder: (context, index) {
+                            try {
+                              final int adjustedIndex = filteredMessages.length - 1 - index;
+                              if (adjustedIndex < 0 || adjustedIndex >= filteredMessages.length) {
+                                return SizedBox.shrink();
+                              }
+                              
+                              final message = filteredMessages[adjustedIndex];
+                              final messageId = message['messageId'].toString();
+                              final bool isMe = message['sender'] == currentUserId;
+                              final double offset = _swipingMessageId == messageId ? _messageSwipeOffset : 0.0;
+                              
+                              // Show date header if needed
+                              final bool showDateHeader = _shouldShowDateHeader(adjustedIndex);
+                              final String dateHeaderText = showDateHeader
+                                ? _formatDateForHeader(DateTime.parse(message['createdAt']))
+                                : '';
+                              
+                              return Column(
+                                children: [
+                                  if (showDateHeader)
+                                    _buildDateHeader(dateHeaderText),
+                                  
+                                  // Use a key for each message to maintain identity during rebuilds
+                                  Container(
+                                    key: ValueKey(messageId),
+                                    width: double.infinity, // Full width container
+                                    child: GestureDetector(
+                                      behavior: HitTestBehavior.translucent, // Important for full width detection
+                                      onLongPress: () => _toggleMessageSelection(messageId),
+                                      onTap: () {
+                                        if (_isInSelectionMode) {
+                                          _toggleMessageSelection(messageId);
                                         }
-                                        _resetSwipe();
-                                      }
-                                    },
-                                    onHorizontalDragCancel: () {
-                                      if (_swipingMessageId == messageId) {
-                                        _resetSwipe();
-                                      }
-                                    },
-                                    child: Stack(
-                                      children: [
-                                        // Message alignment
-                                        Row(
-                                          mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
-                                          children: [
-                                            AnimatedContainer(
-                                              duration: const Duration(milliseconds: 50),
-                                              transform: Matrix4.translationValues(offset, 0, 0),
-                                              child: _buildMessageItem(message, isMe),
-                                            ),
-                                          ],
-                                        ),
-                                        // Swipe arrow indicator with animation
-                                        if (_swipingMessageId == messageId && offset > 0)
-                                          Positioned(
-                                            left: 10,
-                                            top: 0,
-                                            bottom: 0,
-                                            child: FadeTransition(
-                                              opacity: _swipeAnimation as Animation<double>,
-                                              child: Center(
-                                                child: Container(
-                                                  padding: EdgeInsets.all(8),
-                                                  decoration: BoxDecoration(
-                                                    shape: BoxShape.circle,
-                                                    color: Colors.blue.withOpacity(_swipeController!.value * 0.2),
-                                                  ),
-                                                  child: Transform.scale(
-                                                    scale: 0.5 + (_swipeController!.value * 0.5),
-                                                    child: const Icon(
-                                                      Icons.reply,
-                                                      color: Colors.blue,
-                                                      size: 20,
+                                      },
+                                      onHorizontalDragStart: (details) {
+                                        // Allow swiping for all messages in non-selection mode
+                                        if (!_isInSelectionMode) {
+                                          setState(() {
+                                            _swipingMessageId = messageId;
+                                            _messageSwipeOffset = 0.0;
+                                            _hapticFeedbackTriggered = false;
+                                            _swipeController!.reset();
+                                          });
+                                        }
+                                      },
+                                      onHorizontalDragUpdate: (details) {
+                                        if (_swipingMessageId == messageId) {
+                                          setState(() {
+                                            _messageSwipeOffset += details.delta.dx;
+                                            
+                                            if (_messageSwipeOffset > 100) {
+                                              _messageSwipeOffset = 100;
+                                            } else if (_messageSwipeOffset < 0) {
+                                              _messageSwipeOffset = 0;
+                                            }
+                                            
+                                            // Update animation value based on swipe offset
+                                            _swipeController!.value = _messageSwipeOffset / 100;
+                                            
+                                            // Add haptic feedback when crossing the reply threshold
+                                            if (_messageSwipeOffset >= _replyThreshold && !_hapticFeedbackTriggered) {
+                                              HapticFeedback.mediumImpact();
+                                              _hapticFeedbackTriggered = true;
+                                            }
+                                          });
+                                        }
+                                      },
+                                      onHorizontalDragEnd: (details) {
+                                        if (_swipingMessageId == messageId) {
+                                          if (_messageSwipeOffset >= _replyThreshold) {
+                                            _handleReply(message);
+                                          }
+                                          _resetSwipe();
+                                        }
+                                      },
+                                      onHorizontalDragCancel: () {
+                                        if (_swipingMessageId == messageId) {
+                                          _resetSwipe();
+                                        }
+                                      },
+                                      child: Stack(
+                                        children: [
+                                          // Message alignment
+                                          Row(
+                                            mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+                                            children: [
+                                              AnimatedContainer(
+                                                duration: const Duration(milliseconds: 50),
+                                                transform: Matrix4.translationValues(offset, 0, 0),
+                                                child: _buildMessageItem(message, isMe),
+                                              ),
+                                            ],
+                                          ),
+                                          // Swipe arrow indicator with animation
+                                          if (_swipingMessageId == messageId && offset > 0)
+                                            Positioned(
+                                              left: 10,
+                                              top: 0,
+                                              bottom: 0,
+                                              child: FadeTransition(
+                                                opacity: _swipeAnimation as Animation<double>,
+                                                child: Center(
+                                                  child: Container(
+                                                    padding: EdgeInsets.all(8),
+                                                    decoration: BoxDecoration(
+                                                      shape: BoxShape.circle,
+                                                      color: Colors.blue.withOpacity(_swipeController!.value * 0.2),
+                                                    ),
+                                                    child: Transform.scale(
+                                                      scale: 0.5 + (_swipeController!.value * 0.5),
+                                                      child: const Icon(
+                                                        Icons.reply,
+                                                        color: Colors.blue,
+                                                        size: 20,
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
                                               ),
                                             ),
-                                          ),
-                                        // Selection indicator
-                                        if (_isInSelectionMode)
-                                          Positioned(
-                                            top: 0,
-                                            left: isMe ? null : 0,
-                                            right: isMe ? 0 : null,
-                                            child: Container(
-                                              padding: EdgeInsets.all(2),
-                                              decoration: BoxDecoration(
-                                                color: _selectedMessageIds.contains(messageId)
-                                                  ? Colors.blue
-                                                  : Colors.white,
-                                                shape: BoxShape.circle,
-                                                border: Border.all(color: Colors.blue),
-                                              ),
-                                              child: Icon(
-                                                Icons.check,
-                                                size: 16,
-                                                color: _selectedMessageIds.contains(messageId)
-                                                  ? Colors.white
-                                                  : Colors.transparent,
+                                          // Selection indicator
+                                          if (_isInSelectionMode)
+                                            Positioned(
+                                              top: 0,
+                                              left: isMe ? null : 0,
+                                              right: isMe ? 0 : null,
+                                              child: Container(
+                                                padding: EdgeInsets.all(2),
+                                                decoration: BoxDecoration(
+                                                  color: _selectedMessageIds.contains(messageId)
+                                                    ? Colors.blue
+                                                    : Colors.white,
+                                                  shape: BoxShape.circle,
+                                                  border: Border.all(color: Colors.blue),
+                                                ),
+                                                child: Icon(
+                                                  Icons.check,
+                                                  size: 16,
+                                                  color: _selectedMessageIds.contains(messageId)
+                                                    ? Colors.white
+                                                    : Colors.transparent,
+                                                ),
                                               ),
                                             ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            } catch (e) {
+                              print('Error building message at index $index: $e');
+                              return Container(height: 0);
+                            }
+                          },
+                        ),
+                ),
+                if (isBlocked)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _unblockUser,
+                      child: Text('Unblock User'),
+                      style: ElevatedButton.styleFrom(
+                        padding: EdgeInsets.symmetric(vertical: 16),
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.only(left: 8, right: 8, top: 0, bottom: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(25.0),
+                              color: Colors.white,
+                              border: Border.all(
+                                color: Colors.black,
+                                width: 1,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.white.withOpacity(0.2),
+                                  spreadRadius: 1,
+                                  blurRadius: 3,
+                                  offset: Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (_replyingTo != null)
+                                  Container(
+                                    width: double.infinity,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.only(
+                                        topLeft: Radius.circular(25.0),
+                                        topRight: Radius.circular(25.0),
+                                      ),
+                                      color: Colors.white,
+                                    ),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.only(left: 16, right: 4, top: 4, bottom: 0),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.only(
+                                              topLeft: Radius.circular(25.0),
+                                              topRight: Radius.circular(25.0),
+                                            ),
                                           ),
+                                          child: Row(
+                                            children: [
+                                              Container(
+                                                width: 3,
+                                                height: 36,
+                                                decoration: BoxDecoration(
+                                                  color: _replyingTo!['type'] == 'product' ? Colors.green : Colors.blue,
+                                                  borderRadius: BorderRadius.circular(2),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    // Show "Product" instead of sender name for product replies
+                                                    Text(
+                                                      _replyingTo!['type'] == 'product' ? 'Product' : _getSenderNameForReply(),
+                                                      style: TextStyle(
+                                                        color: _replyingTo!['type'] == 'product' ? Colors.green : Colors.blue,
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 13,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 2),
+                                                    // For product replies, display the product details
+                                                    if (_replyingTo!['type'] == 'product')
+                                                      _buildProductReplyContent(_replyingTo!['id'])
+                                                    else
+                                                      Text(
+                                                        _replyingTo!['text'] ?? "",
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          color: Colors.black,
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(Icons.close, size: 16),
+                                                onPressed: () {
+                                                  setState(() {
+                                                    _replyingTo = null;
+                                                  });
+                                                },
+                                                padding: EdgeInsets.zero,
+                                                constraints: BoxConstraints(maxWidth: 24, maxHeight: 24),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 0.0),
+                                  child: TextField(
+                                    controller: _messageController,
+                                    focusNode: _messageInputFocusNode,
+                                    decoration: InputDecoration(
+                                      hintText: 'Type a message...',
+                                      border: InputBorder.none,
+                                      contentPadding: const EdgeInsets.only(left: 8, right: 8, top: 0, bottom: 0),
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                    ),
+                                    onSubmitted: (_) => _sendMessage(),
+                                    maxLines: null,
+                                  ),
                                 ),
                               ],
-                            );
-                          } catch (e) {
-                            print('Error building message at index $index: $e');
-                            return Container(height: 0);
-                          }
-                        },
-                      ),
-              ),
-              if (isBlocked)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _unblockUser,
-                    child: Text('Unblock User'),
-                    style: ElevatedButton.styleFrom(
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                    ),
-                  ),
-                )
-              else
-                Container(
-                  padding: const EdgeInsets.only(left: 8, right: 8, top: 0, bottom: 8),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Expanded(
-                        child: Container(
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Container(
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(25.0),
-                            color: const Color.fromARGB(255, 255, 255, 255),
+                            shape: BoxShape.circle,
+                            color: Colors.blue[600],
                             boxShadow: [
                               BoxShadow(
-                                color: const Color.fromARGB(255, 255, 255, 255).withOpacity(0.2),
+                                color: Colors.white,
                                 spreadRadius: 1,
-                                blurRadius: 3,
+                                blurRadius: 2,
                                 offset: Offset(0, 1),
                               ),
                             ],
                           ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (_replyingTo != null)
-                                Container(
-                                  width: double.infinity,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.only(
-                                      topLeft: Radius.circular(25.0),
-                                      topRight: Radius.circular(25.0),
-                                    ),
-                                    color: Colors.white,
-                                  ),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Container(
-                                        width: double.infinity,
-                                        padding: const EdgeInsets.only(left: 16, right: 4, top: 4, bottom: 0),
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.only(
-                                            topLeft: Radius.circular(25.0),
-                                            topRight: Radius.circular(25.0),
-                                          ),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Container(
-                                              width: 3,
-                                              height: 36,
-                                              decoration: BoxDecoration(
-                                                color: _replyingTo!['type'] == 'product' ? Colors.green : Colors.blue,
-                                                borderRadius: BorderRadius.circular(2),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  // Show "Product" instead of sender name for product replies
-                                                  Text(
-                                                    _replyingTo!['type'] == 'product' ? 'Product' : _getSenderNameForReply(),
-                                                    style: TextStyle(
-                                                      color: _replyingTo!['type'] == 'product' ? Colors.green : Colors.blue,
-                                                      fontWeight: FontWeight.bold,
-                                                      fontSize: 13,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 2),
-                                                  // For product replies, display the product details
-                                                  if (_replyingTo!['type'] == 'product')
-                                                    _buildProductReplyContent(_replyingTo!['id'])
-                                                  else
-                                                    Text(
-                                                      _replyingTo!['text'] ?? "",
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
-                                                      style: TextStyle(
-                                                        fontSize: 12,
-                                                        color: Colors.black,
-                                                      ),
-                                                    ),
-                                                ],
-                                              ),
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(Icons.close, size: 16),
-                                              onPressed: () {
-                                                setState(() {
-                                                  _replyingTo = null;
-                                                });
-                                              },
-                                              padding: EdgeInsets.zero,
-                                              constraints: BoxConstraints(maxWidth: 24, maxHeight: 24),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 0.0),
-                                child: TextField(
-                                  controller: _messageController,
-                                  focusNode: _messageInputFocusNode,
-                                  decoration: InputDecoration(
-                                    hintText: 'Type a message...',
-                                    border: InputBorder.none,
-                                    contentPadding: const EdgeInsets.only(left: 8, right: 8, top: 0, bottom: 0),
-                                    filled: true,
-                                    fillColor: Colors.white,
-                                  ),
-                                  onSubmitted: (_) => _sendMessage(),
-                                  maxLines: null,
-                                ),
-                              ),
-                            ],
+                          child: IconButton(
+                            icon: const Icon(Icons.send, color: Colors.white),
+                            onPressed: _sendMessage,
                           ),
                         ),
-                      ),
-                      SizedBox(width: 8),
-                      Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.blue[600],
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.white,
-                              spreadRadius: 1,
-                              blurRadius: 2,
-                              offset: Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                        child: IconButton(
-                          icon: const Icon(Icons.send, color: Colors.white),
-                          onPressed: _sendMessage,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-          // Scroll to bottom button with unread count
-          if (showScrollToBottom)
-            Positioned(
-              right: 16,
-              bottom: 80,
-              child: Stack(
-                children: [
-                  FloatingActionButton(
-                    mini: true,
-                    backgroundColor: Colors.blue.shade100,
-                    child: Icon(
-                      Icons.arrow_downward,
-                      color: Colors.blue.shade800,
+                      ],
                     ),
-                    onPressed: _scrollToBottom,
                   ),
-                  if (_newMessagesCount > 0)
-                    Positioned(
-                      right: 0,
-                      top: 0,
-                      child: Container(
-                        padding: EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                        constraints: BoxConstraints(
-                          minWidth: 20,
-                          minHeight: 20,
-                        ),
-                        child: Text(
-                          _newMessagesCount.toString(),
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+              ],
             ),
-        ],
+            // Scroll to bottom button with unread count
+            if (showScrollToBottom)
+              Positioned(
+                right: 16,
+                bottom: 80,
+                child: Stack(
+                  children: [
+                    FloatingActionButton(
+                      mini: true,
+                      backgroundColor: Colors.blue.shade100,
+                      child: Icon(
+                        Icons.arrow_downward,
+                        color: Colors.blue.shade800,
+                      ),
+                      onPressed: _scrollToBottom,
+                    ),
+                    if (_newMessagesCount > 0)
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        child: Container(
+                          padding: EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                          constraints: BoxConstraints(
+                            minWidth: 20,
+                            minHeight: 20,
+                          ),
+                          child: Text(
+                            _newMessagesCount.toString(),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -2023,15 +2187,26 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   // Build the regular app bar
   PreferredSizeWidget _buildRegularAppBar() {
     return AppBar(
-      automaticallyImplyLeading: false, // Hide default back button
-      leadingWidth: 40, // Reduced width for back button
-      leading: IconButton( // Separated back button
-        icon: Icon(Icons.arrow_back),
-        padding: EdgeInsets.only(left: 8), // Reduce left padding
-        constraints: BoxConstraints(),
-        onPressed: () => Navigator.of(context).pop(),
+      backgroundColor: Colors.white,
+      elevation: 0,
+      systemOverlayStyle: SystemUiOverlayStyle.dark,
+      automaticallyImplyLeading: false,
+      leadingWidth: 40,
+      scrolledUnderElevation: 0, // This prevents color change on scroll
+      leading: Container(
+        margin: EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          shape: BoxShape.circle,
+        ),
+        child: IconButton(
+          icon: Icon(Icons.arrow_back, color: Colors.black),
+          padding: EdgeInsets.zero,
+          constraints: BoxConstraints(),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ),
-      title: InkWell( // Separated profile section
+      title: InkWell(
         onTap: _navigateToUserProfile,
         child: Row(
           children: [
@@ -2057,6 +2232,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
+                  color: Colors.black,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -2066,100 +2242,125 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         ),
       ),
       actions: [
-        IconButton(
-          icon: Icon(Icons.search),
-          onPressed: _toggleSearchMode,
+        Container(
+          margin: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          decoration: BoxDecoration(
+            color: Colors.transparent,
+            shape: BoxShape.circle,
+          ),
+          child: IconButton(
+            icon: Icon(Icons.search, color: Colors.black),
+            onPressed: _toggleSearchMode,
+            padding: EdgeInsets.zero,
+          ),
         ),
-        PopupMenuButton(
-          onSelected: (value) {
-            switch (value) {
-              case 'report':
-                showDialog(
-                  context: context,
-                  builder: (context) => ReportDialog(
-                    userId: widget.partnerId,
-                    conversationId: widget.conversationId,
-                  ),
-                );
-                break;
-              case 'block':
-                if (isBlocked) {
-                  _unblockUser();
-                } else {
-                  _blockUser();
-                }
-                break;
-              case 'clear_chat':
-                _clearChat();
-                break;
-              case 'view_profile':
-                _navigateToUserProfile();
-                break;
-            }
-          },
-          itemBuilder: (BuildContext context) => <PopupMenuEntry>[
-            const PopupMenuItem(
-              value: 'view_profile',
-              child: Row(
-                children: [
-                  Icon(Icons.person, size: 18),
-                  SizedBox(width: 8),
-                  Text('View Profile'),
-                ],
+        Container(
+          margin: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          decoration: BoxDecoration(
+            color: Colors.transparent,
+            shape: BoxShape.circle,
+          ),
+          child: PopupMenuButton(
+            icon: Icon(Icons.more_vert, color: Colors.black),
+            onSelected: (value) {
+              switch (value) {
+                case 'report':
+                  showDialog(
+                    context: context,
+                    builder: (context) => ReportDialog(
+                      userId: widget.partnerId,
+                      conversationId: widget.conversationId,
+                    ),
+                  );
+                  break;
+                case 'block':
+                  if (isBlocked) {
+                    _unblockUser();
+                  } else {
+                    _blockUser();
+                  }
+                  break;
+                case 'clear_chat':
+                  _clearChat();
+                  break;
+                case 'view_profile':
+                  _navigateToUserProfile();
+                  break;
+              }
+            },
+            itemBuilder: (BuildContext context) => [
+              const PopupMenuItem(
+                value: 'view_profile',
+                child: Row(
+                  children: [
+                    Icon(Icons.person, size: 18),
+                    SizedBox(width: 8),
+                    Text('View Profile'),
+                  ],
+                ),
               ),
-            ),
-            PopupMenuItem(
-              value: 'report',
-              child: Row(
-                children: [
-                  Icon(Icons.report_problem, size: 18, color: Colors.red),
-                  SizedBox(width: 8),
-                  Text('Report User', style: TextStyle(color: Colors.red)),
-                ],
+              PopupMenuItem(
+                value: 'report',
+                child: Row(
+                  children: [
+                    Icon(Icons.report_problem, size: 18, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text('Report User', style: TextStyle(color: Colors.red)),
+                  ],
+                ),
               ),
-            ),
-            PopupMenuItem(
-              value: 'block',
-              child: Row(
-                children: [
-                  Icon(
-                    isBlocked ? Icons.lock_open : Icons.block,
-                    size: 18
-                  ),
-                  SizedBox(width: 8),
-                  Text(isBlocked ? 'Unblock User' : 'Block User'),
-                ],
+              PopupMenuItem(
+                value: 'block',
+                child: Row(
+                  children: [
+                    Icon(
+                      isBlocked ? Icons.lock_open : Icons.block,
+                      size: 18
+                    ),
+                    SizedBox(width: 8),
+                    Text(isBlocked ? 'Unblock User' : 'Block User'),
+                  ],
+                ),
               ),
-            ),
-            const PopupMenuItem(
-              value: 'clear_chat',
-              child: Row(
-                children: [
-                  Icon(Icons.delete_sweep, size: 18),
-                  SizedBox(width: 8),
-                  Text('Clear Chat'),
-                ],
+              const PopupMenuItem(
+                value: 'clear_chat',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_sweep, size: 18),
+                    SizedBox(width: 8),
+                    Text('Clear Chat'),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
   }
 
-  // Build the search app bar
+  // Update search AppBar 
   PreferredSizeWidget _buildSearchAppBar() {
     return AppBar(
       backgroundColor: Colors.white,
-      elevation: 1,
-      leading: IconButton(
-        icon: Icon(Icons.arrow_back, color: Colors.blue),
-        onPressed: _toggleSearchMode,
+      elevation: 0,
+      systemOverlayStyle: SystemUiOverlayStyle.dark,
+      leading: Container(
+        margin: EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          shape: BoxShape.circle,
+        ),
+        child: IconButton(
+          icon: Icon(Icons.arrow_back, color: Colors.black),
+          padding: EdgeInsets.zero,
+          onPressed: _toggleSearchMode,
+        ),
       ),
       title: Container(
         height: 40,
         decoration: BoxDecoration(
-          color: Colors.grey.shade200,
+          color: Colors.grey.shade50, // Very light grey
           borderRadius: BorderRadius.circular(20),
         ),
         padding: EdgeInsets.symmetric(horizontal: 12),
@@ -2172,7 +2373,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 8),
             isDense: true,
             filled: true,
-            fillColor: Colors.grey.shade200,
+            fillColor: Colors.grey.shade50, // Very light grey
           ),
           onChanged: _filterMessages,
         ),
@@ -2180,18 +2381,39 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     );
   }
 
-  // Build the selection app bar (shown when selecting messages)
   PreferredSizeWidget _buildSelectionAppBar() {
     return AppBar(
-      leading: IconButton(
-        icon: Icon(Icons.close),
-        onPressed: _cancelSelection,
+      backgroundColor: Colors.white,
+      elevation: 0,
+      systemOverlayStyle: SystemUiOverlayStyle.dark,
+      leading: Container(
+        margin: EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          shape: BoxShape.circle,
+        ),
+        child: IconButton(
+          icon: Icon(Icons.close, color: Colors.black),
+          padding: EdgeInsets.zero,
+          onPressed: _cancelSelection,
+        ),
       ),
-      title: Text('${_selectedMessageIds.length} selected'),
+      title: Text(
+        '${_selectedMessageIds.length} selected',
+        style: TextStyle(color: Colors.black),
+      ),
       actions: [
-        IconButton(
-          icon: Icon(Icons.delete),
-          onPressed: _selectedMessageIds.isNotEmpty ? _deleteSelectedMessages : null,
+        Container(
+          margin: EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            shape: BoxShape.circle,
+          ),
+          child: IconButton(
+            icon: Icon(Icons.delete, color: Colors.black),
+            padding: EdgeInsets.zero,
+            onPressed: _selectedMessageIds.isNotEmpty ? _deleteSelectedMessages : null,
+          ),
         ),
       ],
     );
@@ -2345,7 +2567,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             return Container(
               margin: const EdgeInsets.only(bottom: 6),
               padding: const EdgeInsets.all(6),
-              width: double.infinity,
+                           width: double.infinity,
               decoration: BoxDecoration(
                 color: Colors.black.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(8),
@@ -2445,25 +2667,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       );
     } catch (e) {
       print('Error building reply preview: $e');
-      return Container(
-        padding: const EdgeInsets.all(6),
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: Colors.grey.shade300,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: const Text(
-          'Original message not available',
-          style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-        ),
-      );
+      return SizedBox.shrink();
     }
   }
 
-  // Add this method to cache decoded images
+  // Cached image widget with decoding
   Widget _getCachedProductImage(String base64Image, double width, double height) {
-    // Create a key for this specific image
-    final String imageKey = base64Image.substring(0, min(20, base64Image.length));
+    final String imageKey = '$base64Image|$width|$height';
     
     // Check if we've already decoded this image
     if (!_decodedImageCache.containsKey(imageKey)) {
@@ -2614,14 +2824,19 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         child: Container(
           padding: EdgeInsets.symmetric(vertical: 6, horizontal: 12),
           decoration: BoxDecoration(
-            color: Colors.blue.shade50,
+            color: Colors.green.shade50,
+            border: Border.all(
+              color: Colors.green.shade200,
+              width: 1,
+            ),
             borderRadius: BorderRadius.circular(16),
           ),
           child: Text(
             text,
             style: TextStyle(
               fontSize: 13,
-              color: Colors.blue.shade800,
+              color: Colors.green.shade800,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ),

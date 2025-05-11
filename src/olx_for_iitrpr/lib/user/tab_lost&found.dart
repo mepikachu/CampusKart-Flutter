@@ -38,9 +38,12 @@ class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClie
   }
 
   void _onScroll() {
-    setState(() {
-      _showSearchBar = _scrollController.offset <= 10;
-    });
+    final show = _scrollController.offset <= 10;
+    if (show != _showSearchBar) {
+      setState(() {
+        _showSearchBar = show;
+      });
+    }
   }
 
   Future<void> fetchLostItems({bool forceRefresh = false}) async {
@@ -498,7 +501,7 @@ class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClie
                         )
                       : ListView.builder(
                           controller: _scrollController,
-                          physics: const AlwaysScrollableScrollPhysics(),
+                          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                           itemCount: filteredItems.length,
                           itemBuilder: (context, index) => buildLostItemCard(filteredItems[index]),
                         ),

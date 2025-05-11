@@ -26,10 +26,10 @@ class _SellTabState extends State<SellTab> {
 
   final List<String> _categories = ['electronics', 'furniture', 'books', 'clothing', 'others'];
 
-  // Updated Material Design 3 inspired colors
+  // Colors from tab_sell
   static const primaryColor = Color(0xFF1A73E8);
-  static const surfaceColor = Color(0xFFFFFFFF); // Changed to pure white
-  static const backgroundColor = Color(0xFFFFFFFF);
+  static const surfaceColor = Color(0xFFFFFFFF); // Pure white
+  static const backgroundColor = Color(0xFFFFFFFF); // Pure white
   static const outlineColor = Color(0xFFE1E3E6);
   static const textPrimaryColor = Color(0xFF202124);
   static const textSecondaryColor = Color(0xFF5F6368);
@@ -331,6 +331,24 @@ class _SellTabState extends State<SellTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white, // Pure white background
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: const Text('Sell Product', style: TextStyle(color: Colors.black)),
+        leading: Container(
+          margin: EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.grey.shade100,
+          ),
+          child: IconButton(
+            icon: Icon(Icons.arrow_back, color: Colors.black),
+            padding: EdgeInsets.zero,
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
+      ),
       body: SingleChildScrollView(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -341,29 +359,17 @@ class _SellTabState extends State<SellTab> {
                 key: _formKey,
                 child: Column(
                   children: [
-                    // Center the product images section
                     Center(child: _buildImagePreviews()),
                     const SizedBox(height: 24),
-                    // ... existing TextFormFields with updated decoration ...
                     TextFormField(
                       controller: _nameController,
                       decoration: InputDecoration(
                         labelText: "Product Name",
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: outlineColor),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: outlineColor),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: primaryColor, width: 2),
                         ),
                         filled: true,
-                        fillColor: surfaceColor,
-                        labelStyle: TextStyle(color: textSecondaryColor),
+                        fillColor: Colors.white, // Changed to pure white
                       ),
                       validator: (value) => 
                           (value?.isEmpty ?? true) ? "Enter product name" : null,
@@ -376,19 +382,9 @@ class _SellTabState extends State<SellTab> {
                         alignLabelWithHint: true,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: outlineColor),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: outlineColor),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: primaryColor, width: 2),
                         ),
                         filled: true,
-                        fillColor: surfaceColor,
-                        labelStyle: TextStyle(color: textSecondaryColor),
+                        fillColor: Colors.white, // Changed to pure white
                       ),
                       maxLines: null,
                       minLines: 3,
@@ -409,11 +405,9 @@ class _SellTabState extends State<SellTab> {
                               prefixText: '₹ ',
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(color: outlineColor),
                               ),
                               filled: true,
-                              fillColor: surfaceColor,
-                              labelStyle: TextStyle(color: textSecondaryColor),
+                              fillColor: Colors.white, // Changed to pure white
                             ),
                             keyboardType: TextInputType.number,
                             validator: (value) => 
@@ -429,11 +423,9 @@ class _SellTabState extends State<SellTab> {
                               labelText: "Category",
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(color: outlineColor),
                               ),
                               filled: true,
-                              fillColor: surfaceColor,
-                              labelStyle: TextStyle(color: textSecondaryColor),
+                              fillColor: Colors.white, // Changed to pure white
                             ),
                             items: _categories.map((cat) {
                               return DropdownMenuItem(

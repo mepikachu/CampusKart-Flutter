@@ -48,9 +48,12 @@ class _ProductsTabState extends State<ProductsTab> with AutomaticKeepAliveClient
   }
 
   void _onScroll() {
-    setState(() {
-      _showSearchBar = _scrollController.offset <= 10;
-    });
+    final show = _scrollController.offset <= 10;
+    if (show != _showSearchBar) {
+      setState(() {
+        _showSearchBar = show;
+      });
+    }
   }
 
   Future<void> fetchProducts({bool forceRefresh = false}) async {
@@ -575,7 +578,7 @@ class _ProductsTabState extends State<ProductsTab> with AutomaticKeepAliveClient
                         )
                       : ListView.builder(
                           controller: _scrollController,
-                          physics: const AlwaysScrollableScrollPhysics(),
+                          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                           itemCount: filteredProducts.length,
                           itemBuilder: (context, index) => _buildProductCard(filteredProducts[index]),
                         ),
