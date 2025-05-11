@@ -642,13 +642,52 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Category tags
+                        // Category tags - replace the existing tag section with this
                         SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: Row(
                             children: [
-                              _buildTag('${product['category']?.toUpperCase() ?? "UNCATEGORIZED"} • ...'),
-                              _buildTag('${product['location']?.toUpperCase() ?? "CAMPUS"} • ...'),
+                              Text(
+                                'Tags: ',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[700],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Container(
+                                margin: const EdgeInsets.only(right: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                                ),
+                                child: Text(
+                                  'Electronics',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.blue[700],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: Colors.green.withOpacity(0.2)),
+                                ),
+                                child: Text(
+                                  'Campus',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.green[700],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),

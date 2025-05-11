@@ -161,32 +161,33 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
     Widget imageWidget;
     
     if (_loadedImages.containsKey(product['_id'])) {
-      // Use cached image
       imageWidget = Image.memory(
         _loadedImages[product['_id']]!,
         fit: BoxFit.cover,
         width: double.infinity,
-        height: 200,
+        height: 150, // Reduced from 200
       );
     } else if (_loadingProductIds.contains(product['_id'])) {
-      // Show loading indicator
       imageWidget = Container(
         color: Colors.grey[200],
-        height: 200,
+        height: 150, // Reduced from 200
         child: const Center(
           child: CircularProgressIndicator(color: Colors.black),
         ),
       );
     } else {
-      // No image available
       imageWidget = Container(
         color: Colors.grey[300],
-        height: 200,
+        height: 150, // Reduced from 200
         child: const Center(
           child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
         ),
       );
     }
+
+    final status = (product['status'] ?? 'available').toString().toLowerCase();
+    final statusColor = status == 'sold' ? Colors.orange : Colors.green;
+    final statusText = status.substring(0, 1).toUpperCase() + status.substring(1);
 
     return GestureDetector(
       onTap: () {
@@ -197,71 +198,111 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
           ),
         ).then((_) => _loadMyListings());
       },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Card(
-          elevation: 4,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Image section
-              ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                child: imageWidget,
-              ),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Product name
-                    Text(
-                      product['name'] ?? 'Product ${index + 1}',
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 8),
-                    // Product description
-                    Text(
-                      product['description'] ?? 'No description provided',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                    ),
-                    const SizedBox(height: 12),
-                    // Price and offer count row
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '₹${product['price']?.toString() ?? '0'}',
+      child: Card(
+        elevation: 2,
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Image with rounded corners
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+              child: imageWidget,
+            ),
+            // Product details section
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // First row: Name and Price
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          product['name'] ?? 'Product ${index + 1}',
                           style: const TextStyle(
                             fontSize: 16,
-                            color: Colors.green,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w500,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        if (product['offerRequests'] != null &&
-                            (product['offerRequests'] as List).isNotEmpty)
-                          Text(
-                            '${(product['offerRequests'] as List).length} offers',
-                            style: const TextStyle(
-                              color: Colors.blue,
-                              fontSize: 12,
+                      ),
+                      Text(
+                        '₹${product['price']?.toString() ?? '0'}',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  // Description (2 lines)
+                  Text(
+                    product['description'] ?? 'No description provided',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey[600],
+                      height: 1.2,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  // Status and offer count
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: statusColor,
+                              shape: BoxShape.circle,
                             ),
                           ),
-                      ],
-                    ),
-                  ],
-                ),
+                          const SizedBox(width: 6),
+                          Text(
+                            statusText,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (product['offerRequests'] != null &&
+                          (product['offerRequests'] as List).isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '${(product['offerRequests'] as List).length} offers',
+                            style: TextStyle(
+                              color: Colors.blue[700],
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

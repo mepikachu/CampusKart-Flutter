@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -268,269 +269,384 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
     final item = itemDetails ?? widget.item;
     final images = _buildImageSlides();
     
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Lost Item Details'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+    return Theme(
+      data: Theme.of(context).copyWith(
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+          scrolledUnderElevation: 0, // Prevents color change on scroll
+        ),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (images.isNotEmpty)
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        CarouselSlider(
-                          carouselController: _carouselController,
-                          items: images,
-                          options: CarouselOptions(
-                            height: 300,
-                            viewportFraction: 1.0,
-                            enableInfiniteScroll: images.length > 1,
-                            onPageChanged: (index, reason) {
-                              setState(() {
-                                _currentImageIndex = index;
-                              });
-                            },
-                          ),
-                        ),
-                        
-                        if (_currentImageIndex > 0)
-                          Positioned(
-                            left: 10,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.5),
-                                borderRadius: BorderRadius.circular(24),
-                              ),
-                              child: IconButton(
-                                icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-                                onPressed: () => _carouselController.previousPage(),
-                              ),
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        extendBodyBehindAppBar: false, // Prevents AppBar color change
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          systemOverlayStyle: SystemUiOverlayStyle.dark,
+          title: Text(
+            'Lost Item Details',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.black,
+            ),
+          ),
+          leading: Container(
+            margin: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: Icon(Icons.arrow_back, color: Colors.black),
+              padding: EdgeInsets.zero,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (images.isNotEmpty)
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          CarouselSlider(
+                            carouselController: _carouselController,
+                            items: images,
+                            options: CarouselOptions(
+                              height: 300,
+                              viewportFraction: 1.0,
+                              enableInfiniteScroll: images.length > 1,
+                              onPageChanged: (index, reason) {
+                                setState(() {
+                                  _currentImageIndex = index;
+                                });
+                              },
                             ),
                           ),
                           
-                        if (_currentImageIndex < images.length - 1)
-                          Positioned(
-                            right: 10,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.5),
-                                borderRadius: BorderRadius.circular(24),
-                              ),
-                              child: IconButton(
-                                icon: const Icon(Icons.arrow_forward_ios, color: Colors.white),
-                                onPressed: () => _carouselController.nextPage(),
-                              ),
-                            ),
-                          ),
-                          
-                        if (isLoadingImages)
-                          Positioned(
-                            top: 10,
-                            right: 10,
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.5),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: const SizedBox(
-                                width: 15,
-                                height: 15,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation(Colors.white),
+                          // Navigation arrows with better styling
+                          if (_currentImageIndex > 0)
+                            Positioned(
+                              left: 16,
+                              child: Container(
+                                height: 40,
+                                width: 40,
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.5),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: IconButton(
+                                  icon: const Icon(Icons.arrow_back_ios_new, size: 18, color: Colors.white),
+                                  onPressed: () => _carouselController.previousPage(),
                                 ),
                               ),
                             ),
-                          ),
-                          
-                        // Add page indicator dots
-                        if (images.length > 1)
-                          Positioned(
-                            bottom: 10,
-                            left: 0,
-                            right: 0,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: images.asMap().entries.map((entry) {
-                                return Container(
-                                  width: 8.0,
-                                  height: 8.0,
-                                  margin: const EdgeInsets.symmetric(horizontal: 4.0),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: _currentImageIndex == entry.key
-                                        ? Colors.white
-                                        : Colors.white.withOpacity(0.4),
+                            
+                          if (_currentImageIndex < images.length - 1)
+                            Positioned(
+                              right: 16,
+                              child: Container(
+                                height: 40,
+                                width: 40,
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.5),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: IconButton(
+                                  icon: const Icon(Icons.arrow_forward_ios, size: 18, color: Colors.white),
+                                  onPressed: () => _carouselController.nextPage(),
+                                ),
+                              ),
+                            ),
+                            
+                          // Loading indicator
+                          if (isLoadingImages)
+                            Positioned(
+                              top: 16,
+                              right: 16,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.5),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation(Colors.white),
                                   ),
-                                );
-                              }).toList(),
+                                ),
+                              ),
                             ),
-                          ),
-                      ],
-                    ),
-                    
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item['name'] ?? 'Unknown Item',
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: item['status'] == 'found'
-                                ? Colors.green[100]
-                                : Colors.orange[100],
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            item['status']?.toUpperCase() ?? 'LOST',
-                            style: TextStyle(
-                              color: item['status'] == 'found'
-                                  ? Colors.green[700]
-                                  : Colors.orange[700],
-                              fontWeight: FontWeight.bold,
+                            
+                          // Image counter dots with improved style
+                          if (images.length > 1)
+                            Positioned(
+                              bottom: 16,
+                              left: 0,
+                              right: 0,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: images.asMap().entries.map((entry) {
+                                  return Container(
+                                    width: 8.0,
+                                    height: 8.0,
+                                    margin: const EdgeInsets.symmetric(horizontal: 3.0),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: _currentImageIndex == entry.key
+                                          ? Colors.white
+                                          : Colors.white.withOpacity(0.5),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
                             ),
-                          ),
-                        ),
-                        
-                        const SizedBox(height: 16),
-                        
-                        Text(
-                          'Posted by: ${item['user']?['userName'] ?? 'Unknown'}',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey,
-                          ),
-                        ),
-                        
-                        if (item['lastSeenLocation'] != null) ...[
-                          const SizedBox(height: 12),
+                        ],
+                      ),
+                      
+                    Container(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Title and status badge on same line
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              Icon(Icons.location_on, size: 18, color: Colors.grey[600]),
-                              const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
-                                  'Last seen at: ${item['lastSeenLocation']}',
+                                  item['name'] ?? 'Unknown Item',
                                   style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey[600],
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black,
+                                    height: 1.2,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: item['status'] == 'found'
+                                      ? Colors.green.shade50
+                                      : Colors.orange.shade50,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: item['status'] == 'found'
+                                        ? Colors.green.shade200
+                                        : Colors.orange.shade200,
+                                  ),
+                                ),
+                                child: Text(
+                                  item['status']?.toUpperCase() ?? 'LOST',
+                                  style: TextStyle(
+                                    color: item['status'] == 'found'
+                                        ? Colors.green.shade700
+                                        : Colors.orange.shade700,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
                                   ),
                                 ),
                               ),
                             ],
                           ),
-                        ],
-                        
-                        if (item['lostDate'] != null) ...[
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Icon(Icons.calendar_today, size: 18, color: Colors.grey[600]),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Lost on: ${_formatDate(item['lostDate'])}',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                        
-                        const SizedBox(height: 16),
-                        
-                        const Text(
-                          'Description:',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        
-                        const SizedBox(height: 8),
-                        
-                        Text(
-                          item['description'] ?? 'No description available',
-                          style: const TextStyle(fontSize: 16),
-                        ),
-                        
-                        if (item['additionalInfo'] != null && item['additionalInfo'].isNotEmpty) ...[
                           const SizedBox(height: 16),
-                          const Text(
-                            'Additional Information:',
+
+                          // Founder/Owner details (clickable)
+                          if (item['user'] != null)
+                            InkWell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ViewProfileScreen(userId: item['user']['_id']),
+                                  ),
+                                );
+                              },
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 20,
+                                    backgroundColor: Colors.grey.shade200,
+                                    child: Text(
+                                      item['user']['userName']?.substring(0, 1).toUpperCase() ?? '?',
+                                      style: TextStyle(
+                                        color: Colors.grey.shade700,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Text(
+                                              'Posted by ',
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            ),
+                                            Text(
+                                              item['user']['userName'] ?? 'Unknown',
+                                              style: const TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w600,
+                                                color: Colors.black,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 2),
+                                        if (item['lastSeenLocation'] != null)
+                                          Text(
+                                            'Last seen at: ${item['lastSeenLocation']}',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                          const SizedBox(height: 16),
+
+                          // Posted date
+                          Text(
+                            'Posted on ${_formatDate(item['createdAt'])}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+
+                          const SizedBox(height: 24),
+                          
+                          // Description section
+                          Text(
+                            'Description',
                             style: TextStyle(
                               fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black,
                             ),
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            item['additionalInfo'],
-                            style: const TextStyle(fontSize: 16),
+                            item['description'] ?? 'No description available',
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: Colors.grey.shade800,
+                              height: 1.5,
+                            ),
                           ),
                         ],
-                      ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          
-          // Only show chat button if item has a user and it's not the current user
-          if (item['user'] != null && item['user']['_id'] != currentUserId)
-            Container(
-              padding: const EdgeInsets.all(16.0),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.2),
-                    spreadRadius: 1,
-                    blurRadius: 5,
-                    offset: const Offset(0, -3),
-                  ),
-                ],
-              ),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _startChat,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: Colors.blue,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text(
-                    'Chat with Owner',
-                    style: TextStyle(fontSize: 16, color: Colors.white),
-                  ),
+                  ],
                 ),
               ),
             ),
-        ],
+            
+            // Chat button with improved styling
+            if (item['user'] != null && item['user']['_id'] != currentUserId)
+              Container(
+                padding: const EdgeInsets.all(16.0),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      offset: const Offset(0, -4),
+                      blurRadius: 8,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _startChat,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'Chat with Owner',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
+    );
+  }
+
+  // Helper method for building info rows
+  Widget _buildInfoRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          icon,
+          size: 20,
+          color: Colors.grey.shade600,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

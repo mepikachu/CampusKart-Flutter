@@ -20,7 +20,6 @@ import 'server.dart';
 class ChatBubblesPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final random = Random(12345);
     final items = [
       'envelope',
       'phone',
@@ -32,52 +31,72 @@ class ChatBubblesPainter extends CustomPainter {
       'message'
     ];
 
-    // Paint light shapes in background
-    for (int i = 0; i < 40; i++) {
-      final item = items[random.nextInt(items.length)];
-      final x = random.nextDouble() * size.width;
-      final y = random.nextDouble() * size.height;
-      final rotation = random.nextDouble() * pi * 2;
-      final scale = random.nextDouble() * 0.5 + 0.5;
+    // Calculate grid dimensions based on screen size
+    final double cellWidth = 60.0;  // Width of each grid cell
+    final double cellHeight = 60.0; // Height of each grid cell
+    
+    final int columns = (size.width / cellWidth).ceil();
+    final int rows = (size.height / cellHeight).ceil();
+    
+    // Used for consistent but random-looking rotations
+    final random = Random(12345);
+    
+    // Draw shapes in a grid pattern
+    for (int row = 0; row < rows; row++) {
+      for (int col = 0; col < columns; col++) {
+        // Add slight offset within cell to avoid perfect grid alignment
+        final offsetX = random.nextDouble() * 20 - 10;
+        final offsetY = random.nextDouble() * 20 - 10;
+        
+        final x = col * cellWidth + cellWidth / 2 + offsetX;
+        final y = row * cellHeight + cellHeight / 2 + offsetY;
+        
+        // Skip some cells randomly to create less dense areas
+        if (random.nextDouble() > 0.7) continue;
+        
+        final item = items[((row + col) * 7) % items.length]; // Deterministic item selection
+        final rotation = random.nextDouble() * pi / 4; // Limited rotation range
+        final scale = 0.3 + (random.nextDouble() * 0.2); // Smaller size range
+        
+        canvas.save();
+        canvas.translate(x, y);
+        canvas.rotate(rotation);
+        canvas.scale(scale);
 
-      canvas.save();
-      canvas.translate(x, y);
-      canvas.rotate(rotation);
-      canvas.scale(scale);
+        final paint = Paint()
+          ..color = Colors.grey.withOpacity(0.12)
+          ..style = PaintingStyle.fill;
 
-      final paint = Paint()
-        ..color = Colors.grey.withOpacity(0.03)
-        ..style = PaintingStyle.fill;
+        // Draw shape based on item type
+        switch (item) {
+          case 'envelope':
+            _drawEnvelope(canvas, paint);
+            break;
+          case 'phone':
+            _drawPhone(canvas, paint);
+            break;
+          case 'camera':
+            _drawCamera(canvas, paint);
+            break;
+          case 'cup':
+            _drawCup(canvas, paint);
+            break;
+          case 'heart':
+            _drawHeart(canvas, paint);
+            break;
+          case 'music_note':
+            _drawMusicNote(canvas, paint);
+            break;
+          case 'star':
+            _drawStar(canvas, paint);
+            break;
+          case 'message':
+            _drawMessage(canvas, paint);
+            break;
+        }
 
-      // Draw different shapes based on item type
-      switch (item) {
-        case 'envelope':
-          _drawEnvelope(canvas, paint);
-          break;
-        case 'phone':
-          _drawPhone(canvas, paint);
-          break;
-        case 'camera':
-          _drawCamera(canvas, paint);
-          break;
-        case 'cup':
-          _drawCup(canvas, paint);
-          break;
-        case 'heart':
-          _drawHeart(canvas, paint);
-          break;
-        case 'music_note':
-          _drawMusicNote(canvas, paint);
-          break;
-        case 'star':
-          _drawStar(canvas, paint);
-          break;
-        case 'message':
-          _drawMessage(canvas, paint);
-          break;
+        canvas.restore();
       }
-
-      canvas.restore();
     }
   }
 
@@ -779,6 +798,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       final confirmed = await showDialog(
         context: context,
         builder: (context) => AlertDialog(
+          backgroundColor: Colors.white,
           title: const Text('Clear Chat'),
           content: const Text('Are you sure you want to clear all messages in this chat?'),
           actions: [
@@ -1188,7 +1208,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     if (_replyingTo != null) {
       tempMessage['replyTo'] = {
         'id': _replyingTo!['id'],
-        'type': _replyingTo!['type']
+        'type': 'product',
+        'text': _replyingTo!['text'] ?? 'Product',
       };
     }
     
@@ -1468,20 +1489,17 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
+          backgroundColor: Colors.white,
           title: Text('Block User'),
           content: Text('Are you sure you want to block ${widget.partnerNames}?'),
           actions: [
             TextButton(
               child: Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop(false);
-              },
+              onPressed: () => Navigator.of(context).pop(false),
             ),
             TextButton(
               child: Text('Block'),
-              onPressed: () {
-                Navigator.of(context).pop(true);
-              },
+              onPressed: () => Navigator.of(context).pop(true),
             ),
           ],
         );
@@ -1528,20 +1546,17 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
+          backgroundColor: Colors.white,
           title: Text('Unblock User'),
           content: Text('Are you sure you want to unblock ${widget.partnerNames}?'),
           actions: [
             TextButton(
               child: Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop(false);
-              },
+              onPressed: () => Navigator.of(context).pop(false),
             ),
             TextButton(
               child: Text('Unblock'),
-              onPressed: () {
-                Navigator.of(context).pop(true);
-              },
+              onPressed: () => Navigator.of(context).pop(true),
             ),
           ],
         );
@@ -1707,12 +1722,17 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     return Theme(
       data: Theme.of(context).copyWith(
-        popupMenuTheme: PopupMenuThemeData(
-          color: Colors.white,
-          elevation: 4,
-        ),
+        // Make all dialogs white
         dialogTheme: DialogTheme(
           backgroundColor: Colors.white,
+          elevation: 4,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        // Make all popup menus white
+        popupMenuTheme: PopupMenuThemeData(
+          color: Colors.white,
           elevation: 4,
         ),
       ),
@@ -2431,7 +2451,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       final bool isHighlighted = message['messageId'] != null &&
         message['messageId'].toString() == _highlightedMessageId;
       
-      // Check if this message is replying to a product
       final bool replyingToProduct = message['replyTo'] != null &&
         message['replyTo']['type'] == 'product';
       
@@ -2443,7 +2462,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           children: [
             GestureDetector(
               onTap: () {
-                // Handle click on product reply
                 if (replyingToProduct) {
                   final productId = message['replyTo']['id'];
                   _navigateToProduct(productId);
@@ -2463,11 +2481,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Message replies
                     if (message['replyTo'] != null)
+                     
                       _buildReplyPreview(message),
                     
-                    // Message text
                     Text(message['text'] ?? ''),
                     
                     const SizedBox(height: 4),
@@ -2496,7 +2513,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 ),
               ),
             ),
-            // Only show retry button if message failed
             if (isFailed && isMe)
               TextButton.icon(
                 onPressed: () => _retryFailedMessage(message),

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -273,6 +274,15 @@ class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObse
   String? _lastNotificationId;
   bool _isInitialized = false;
 
+  // Add these variables for FAB animation
+  bool _isAddButtonExpanded = false;
+  late AnimationController _animationController;
+  late Animation<double> _expandAnimation;
+
+  // Add these new variables
+  bool hasUnreadNotifications = false;
+  bool hasUnreadChats = false;
+
   // List of tabs displayed in the home screen
   final List<Widget> _tabs = const [
     ProductsTab(),
@@ -286,6 +296,16 @@ class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObse
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initializeApp();
+    
+    // Initialize animation controller
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _expandAnimation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    );
   }
 
   Future<void> _initializeApp() async {
@@ -419,6 +439,70 @@ class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObse
     } catch (e) {
       print('Error refreshing notifications: $e');
     }
+
+    // Check unread notifications
+    _checkUnreadNotifications();
+  }
+
+  // Add these new methods
+  Future<void> _checkUnreadNotifications() async {
+    try {
+      final notificationsJson = await _secureStorage.read(key: 'notifications');
+      final lastReadTime = await _secureStorage.read(key: 'last_read_notification_time');
+      
+      if (notificationsJson != null) {
+        final notifications = json.decode(notificationsJson);
+        if (notifications.isNotEmpty) {
+          final DateTime lastRead = lastReadTime != null 
+            ? DateTime.parse(lastReadTime)
+            : DateTime.fromMillisecondsSinceEpoch(0);
+            
+          final hasUnread = notifications.any((notification) {
+            return DateTime.parse(notification['createdAt']).isAfter(lastRead);
+          });
+          
+          setState(() {
+            hasUnreadNotifications = hasUnread;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error checking unread notifications: $e');
+    }
+  }
+
+  Future<void> _checkUnreadChats() async {
+    try {
+      final conversationsJson = await _secureStorage.read(key: 'conversations');
+      final lastReadMsgIds = await _secureStorage.read(key: 'lastReadMessageIds');
+      
+      if (conversationsJson != null) {
+        final conversations = json.decode(conversationsJson);
+        final Map<String, String> readIds = lastReadMsgIds != null 
+          ? Map<String, String>.from(json.decode(lastReadMsgIds))
+          : {};
+          
+        bool hasUnread = false;
+        
+        for (var conversation in conversations) {
+          if (conversation['messages']?.isNotEmpty == true) {
+            final lastMsgId = conversation['messages'].last['messageId'].toString();
+            final lastReadId = readIds[conversation['_id']];
+            
+            if (lastReadId != lastMsgId) {
+              hasUnread = true;
+              break;
+            }
+          }
+        }
+        
+        setState(() {
+          hasUnreadChats = hasUnread;
+        });
+      }
+    } catch (e) {
+      print('Error checking unread chats: $e');
+    }
   }
 
   @override
@@ -437,12 +521,25 @@ class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObse
 
   @override
   void dispose() {
+    _animationController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _chatRefreshService.dispose();
     _notificationTimer?.cancel();
     _notificationBackgroundTimer?.cancel();
     _profileRefreshTimer?.cancel();
     super.dispose();
+  }
+
+  // Add method to toggle FAB
+  void _toggleAddButton() {
+    setState(() {
+      _isAddButtonExpanded = !_isAddButtonExpanded;
+      if (_isAddButtonExpanded) {
+        _animationController.forward();
+      } else {
+        _animationController.reverse();
+      }
+    });
   }
 
   void switchToTab(int index) {
@@ -456,14 +553,12 @@ class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObse
   @override 
   Widget build(BuildContext context) {
     return Theme(
-      data: ThemeData(
-        primaryColor: Colors.black,
-        scaffoldBackgroundColor: Colors.white,
-        colorScheme: ColorScheme.light(
-          primary: Colors.black,
-          secondary: const Color(0xFF4CAF50),
-          background: Colors.white,
-          surface: Colors.white,
+      data: Theme.of(context).copyWith(
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+          scrolledUnderElevation: 0, // Prevents color change on scroll
         ),
       ),
       child: Scaffold(
@@ -471,32 +566,73 @@ class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObse
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
-          title: const Text(
+          title: Text(
             '𝒞𝒶𝓂𝓅𝓊𝓈𝒦𝒶𝓇𝓉',
             style: TextStyle(
               color: Colors.black,
-              fontWeight: FontWeight.bold
+              fontSize: 30, // Increased from previous size
+              fontWeight: FontWeight.w400, // Reduced from bold
             ),
           ),
           centerTitle: false,
           actions: [
-            IconButton(
-              icon: const Icon(Icons.notifications, color: Colors.black),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-                );
-              },
+            Stack(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.notifications, color: Colors.black),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                    ).then((_) {
+                      _checkUnreadNotifications();
+                    });
+                  },
+                ),
+                if (hasUnreadNotifications)
+                  Positioned(
+                    right: 8,
+                    top: 8,
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: Colors.blue,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-            IconButton(
-              icon: const Icon(Icons.chat_bubble, color: Colors.black),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const ChatListScreen()),
-                );
-              },
+            Stack(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chat_bubble, color: Colors.black),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const ChatListScreen()),
+                    ).then((_) {
+                      _checkUnreadChats();
+                    });
+                  },
+                ),
+                if (hasUnreadChats)
+                  Positioned(
+                    right: 8,
+                    top: 8,
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: Colors.blue,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ],
         ),
@@ -514,7 +650,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObse
             ],
           ),
           child: BottomNavigationBar(
-            currentIndex: _selectedIndex,
+            currentIndex: _selectedIndex >= 2 ? _selectedIndex + 1 : _selectedIndex,
             type: BottomNavigationBarType.fixed,
             backgroundColor: Colors.white,
             selectedItemColor: Colors.black,
@@ -523,29 +659,41 @@ class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObse
             showUnselectedLabels: true,
             onTap: (index) {
               if (index == 2) {
-                _showAddOptions();
+                _showAddMenu(context);
+              } else if (index > 2) {
+                setState(() => _selectedIndex = index - 1);
               } else {
                 setState(() => _selectedIndex = index);
               }
             },
-            items: const [
-              BottomNavigationBarItem(
+            items: [
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.home),
                 label: "Products",
               ),
-              BottomNavigationBarItem(
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.find_in_page),
                 label: "Lost & Found",
               ),
               BottomNavigationBarItem(
-                icon: Icon(Icons.add_circle_outline),
+                icon: AnimatedBuilder(
+                  animation: _animationController,
+                  builder: (context, child) {
+                    return Transform.rotate(
+                      angle: _animationController.value * pi / 2,
+                      child: Icon(
+                        _isAddButtonExpanded ? Icons.close : Icons.add_circle_outline,
+                      ),
+                    );
+                  },
+                ),
                 label: "Add",
               ),
-              BottomNavigationBarItem(
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.leaderboard),
                 label: "Leaderboard", 
               ),
-              BottomNavigationBarItem(
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.person),
                 label: "Profile",
               ),
@@ -556,118 +704,89 @@ class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObse
     );
   }
 
-  void _showAddOptions() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20))
-      ),
-      builder: (context) => Container(
-        padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Add New',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 24),
-            _buildAddOptionButton(
-              label: 'Sell Product',
-              icon: Icons.sell,
-              color: Colors.blue,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SellTab()),
-              ),
-            ),
-            const SizedBox(height: 16),
-            _buildAddOptionButton(
-              label: 'Report Lost Item',
-              icon: Icons.search,
-              color: Colors.orange,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const AddLostItemScreen()),
-              ),
-            ),
-            const SizedBox(height: 16),
-            _buildAddOptionButton(
-              label: 'Add Donation',
-              icon: Icons.volunteer_activism,
-              color: Colors.green,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const AddDonationScreen()),
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-  }
+  void _showAddMenu(BuildContext context) {
+    setState(() => _isAddButtonExpanded = true);
+    _animationController.forward();
 
-  Widget _buildAddOptionButton({
-    required String label,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: color.withOpacity(0.3),
-              width: 1,
-            ),
-          ),
-          child: Row(
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54, // Semi-transparent black background
+      barrierDismissible: true,
+      builder: (context) => WillPopScope(
+        onWillPop: () async {
+          setState(() => _isAddButtonExpanded = false);
+          _animationController.reverse();
+          return true;
+        },
+        child: Dialog(
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          alignment: Alignment.bottomCenter,
+          insetPadding: EdgeInsets.only(bottom: 70),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: color, size: 24),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: color,
+              SizedBox(
+                width: 150, // Reduced from 170
+                child: ElevatedButton(
+                  onPressed: () {
+                    setState(() => _isAddButtonExpanded = false);
+                    _animationController.reverse();
+                    Navigator.pop(context);
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const SellTab()));
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    minimumSize: const Size(double.infinity, 35), // Reduced from 40
+                    padding: EdgeInsets.zero,
                   ),
+                  child: const Text('Sell Product', style: TextStyle(fontSize: 13)),
                 ),
               ),
-              Icon(
-                Icons.arrow_forward_ios,
-                color: color.withOpacity(0.5),
-                size: 16,
+              const SizedBox(height: 6), // Reduced from 8
+              SizedBox(
+                width: 150, // Reduced from 170
+                child: ElevatedButton(
+                  onPressed: () {
+                    setState(() => _isAddButtonExpanded = false);
+                    _animationController.reverse();
+                    Navigator.pop(context);
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const AddLostItemScreen()));
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    minimumSize: const Size(double.infinity, 35), // Reduced from 40
+                    padding: EdgeInsets.zero,
+                  ),
+                  child: const Text('Report Lost', style: TextStyle(fontSize: 13)),
+                ),
+              ),
+              const SizedBox(height: 6), // Reduced from 8
+              SizedBox(
+                width: 150, // Reduced from 170
+                child: ElevatedButton(
+                  onPressed: () {
+                    setState(() => _isAddButtonExpanded = false);
+                    _animationController.reverse();
+                    Navigator.pop(context);
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const AddDonationScreen()));
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    minimumSize: const Size(double.infinity, 35), // Reduced from 40
+                    padding: EdgeInsets.zero,
+                  ),
+                  child: const Text('Add Donation', style: TextStyle(fontSize: 13)),
+                ),
               ),
             ],
           ),
         ),
       ),
-    );
+    ).then((_) {
+      // When dialog is dismissed
+      setState(() => _isAddButtonExpanded = false);
+      _animationController.reverse();
+    });
   }
 }
