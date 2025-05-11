@@ -55,7 +55,7 @@ class _VolunteerHomeScreenState extends State<VolunteerHomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          "OLX-IITRPR",
+          "𝒞𝒶𝓂𝓅𝓊𝓈𝒦𝒶𝓇𝓉",
           style: TextStyle(color: Colors.black87),
         ),
         centerTitle: false, // This aligns the title to the left

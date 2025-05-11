@@ -17,10 +17,11 @@ class MyLostItemsPage extends StatefulWidget {
 
 class _MyLostItemsPageState extends State<MyLostItemsPage> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  List<dynamic> myLostItems = [];
+  List<Map<String, dynamic>> myLostItems = [];
   bool isLoading = true;
   String errorMessage = '';
-
+  
+  // For image caching
   final Map<String, Uint8List> _loadedImages = {};
   final Set<String> _loadingItemIds = {};
 
@@ -30,22 +31,14 @@ class _MyLostItemsPageState extends State<MyLostItemsPage> {
     _loadMyLostItems();
   }
 
-  Future<void> _loadCachedImage(String itemId) async {
-    final cachedImage = await LostFoundCacheService.getCachedImage(itemId);
-    if (cachedImage != null && mounted) {
-      setState(() {
-        _loadedImages[itemId] = cachedImage;
-      });
-    } else {
-      _fetchItemImage(itemId);
-    }
-  }
-
   Future<void> _loadMyLostItems() async {
     try {
-      // First try to get cached lost item IDs
-      final activityIds = await ProfileService.activityIds;
+      if (mounted) {
+        setState(() => isLoading = true);
+      }
       
+      // First try to get cached lost item IDs
+      final activityIds = ProfileService.activityIds;
       if (activityIds != null && activityIds['lost_items'] != null) {
         // Get cached items
         List<Map<String, dynamic>> cachedItems = [];
@@ -55,21 +48,21 @@ class _MyLostItemsPageState extends State<MyLostItemsPage> {
             cachedItems.add(item);
           }
         }
-
-        if (cachedItems.isNotEmpty) {
+        
+        if (cachedItems.isNotEmpty && mounted) {
           setState(() {
             myLostItems = cachedItems;
             isLoading = false;
           });
         }
       }
-
+      
       // If no cache or expired, refresh from server
       if (myLostItems.isEmpty || !ProfileService.hasValidActivityCache) {
-        await ProfileService.fetchAndCacheUserProfile();
+        await ProfileService.fetchAndUpdateProfile();
         
         // Try loading from cache again
-        final freshIds = await ProfileService.activityIds;
+        final freshIds = ProfileService.activityIds;
         if (freshIds != null && freshIds['lost_items'] != null) {
           List<Map<String, dynamic>> freshItems = [];
           for (String id in freshIds['lost_items']!) {
@@ -78,7 +71,7 @@ class _MyLostItemsPageState extends State<MyLostItemsPage> {
               freshItems.add(item);
             }
           }
-
+          
           if (mounted) {
             setState(() {
               myLostItems = freshItems;
@@ -87,25 +80,46 @@ class _MyLostItemsPageState extends State<MyLostItemsPage> {
           }
         }
       }
-
+      
       // Load images for all items
       for (var item in myLostItems) {
-        if (!_loadedImages.containsKey(item['_id'])) {
+        if (item['_id'] != null && !_loadedImages.containsKey(item['_id'])) {
           await _loadCachedImage(item['_id']);
         }
       }
     } catch (e) {
-      setState(() {
-        errorMessage = e.toString();
-        isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          errorMessage = e.toString();
+          isLoading = false;
+        });
+      }
+    } finally {
+      if (mounted && isLoading) {
+        setState(() => isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _loadCachedImage(String itemId) async {
+    try {
+      final cachedImage = await LostFoundCacheService.getCachedImage(itemId);
+      if (cachedImage != null && mounted) {
+        setState(() {
+          _loadedImages[itemId] = cachedImage;
+        });
+      } else {
+        await _fetchItemImage(itemId);
+      }
+    } catch (e) {
+      print('Error loading cached image: $e');
     }
   }
 
   Future<void> _fetchItemImage(String itemId) async {
     if (_loadingItemIds.contains(itemId)) return;
+    
     _loadingItemIds.add(itemId);
-
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
@@ -115,7 +129,7 @@ class _MyLostItemsPageState extends State<MyLostItemsPage> {
           'auth-cookie': authCookie ?? '',
         },
       );
-
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] && data['image'] != null) {
@@ -123,10 +137,9 @@ class _MyLostItemsPageState extends State<MyLostItemsPage> {
           final numImages = data['numImages'] ?? 1;
           
           if (image != null && image['data'] != null) {
-            final String base64Str = image['data'];
-            final Uint8List bytes = base64Decode(base64Str);
+            final bytes = base64Decode(image['data']);
             
-            // Cache the image and number of images
+            // Cache the image
             await LostFoundCacheService.cacheImage(itemId, bytes, numImages);
             
             if (mounted) {
@@ -138,24 +151,40 @@ class _MyLostItemsPageState extends State<MyLostItemsPage> {
         }
       }
     } catch (e) {
-      print('Error fetching image: $e');
+      print('Error fetching lost item image: $e');
     } finally {
       _loadingItemIds.remove(itemId);
     }
   }
 
-  Widget _buildLostItemCard(dynamic item) {
+  Widget _buildLostItemCard(Map<String, dynamic> item) {
     final status = item['status'] ?? 'lost';
     final datePosted = DateTime.parse(item['createdAt']);
     final formattedDate = "${datePosted.day}/${datePosted.month}/${datePosted.year}";
-
+    
     Widget imageWidget;
+    
     if (_loadedImages.containsKey(item['_id'])) {
-      imageWidget = Image.memory(_loadedImages[item['_id']]!, fit: BoxFit.cover);
+      // Use cached image
+      imageWidget = Image.memory(
+        _loadedImages[item['_id']]!,
+        fit: BoxFit.cover,
+      );
+    } else if (_loadingItemIds.contains(item['_id'])) {
+      // Show loading indicator
+      imageWidget = Container(
+        color: Colors.grey[200],
+        child: const Center(
+          child: CircularProgressIndicator(color: Colors.black),
+        ),
+      );
     } else {
+      // No image available
       imageWidget = Container(
         color: Colors.grey[300],
-        child: const Icon(Icons.image_not_supported, size: 50),
+        child: const Center(
+          child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
+        ),
       );
     }
 

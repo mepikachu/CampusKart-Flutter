@@ -9,9 +9,9 @@ import '../services/lost_found_cache_service.dart';
 import 'server.dart';
 
 class LostItemDetailsScreen extends StatefulWidget {
-  final dynamic item;
+  final Map<String, dynamic> item;
   final Uint8List? initialImage; // Allow passing pre-loaded image
-
+  
   const LostItemDetailsScreen({
     Key? key,
     required this.item,
@@ -25,8 +25,6 @@ class LostItemDetailsScreen extends StatefulWidget {
 class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   int _currentImageIndex = 0;
-  
-  // Fixed: Using CarouselController instead of CarouselSliderController
   final CarouselSliderController _carouselController = CarouselSliderController();
   
   String currentUserName = '';
@@ -45,11 +43,11 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
     
     // Initialize with data we already have
     setState(() {
-      itemDetails = widget.item;
+      itemDetails = Map<String, dynamic>.from(widget.item);
       
       // If initial image was passed, use it
       if (widget.initialImage != null) {
-        itemImages.add(widget.initialImage!);
+        itemImages = [widget.initialImage!];
       }
     });
     
@@ -70,7 +68,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
       });
     }
   }
-  
+
   Future<void> _checkCachedImages() async {
     try {
       // Get the expected number of images
@@ -84,7 +82,6 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
       if (cachedImages != null && cachedImages.isNotEmpty) {
         setState(() {
           itemImages = cachedImages;
-          
           // If we have all expected images, no need to fetch
           if (itemImages.length >= totalNumImages) {
             isLoadingImages = false;
@@ -115,6 +112,9 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success']) {
+          // Cache the full item data
+          await LostFoundCacheService.cacheItem(widget.item['_id'], data['item']);
+          
           if (mounted) {
             setState(() {
               itemDetails = data['item'];
@@ -126,7 +126,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
       print('Error fetching item details: $e');
     }
   }
-  
+
   Future<void> _fetchAllItemImages() async {
     setState(() {
       isLoadingImages = true;
@@ -236,14 +236,14 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
           height: 300,
           color: Colors.grey[200],
           child: Center(
-            child: isLoadingImages 
-                ? CircularProgressIndicator()
+            child: isLoadingImages
+                ? const CircularProgressIndicator()
                 : Icon(Icons.image_not_supported, color: Colors.grey[400], size: 50),
           ),
         ),
       ];
     }
-
+    
     return itemImages.map((imageBytes) {
       return Container(
         width: double.infinity,
@@ -255,7 +255,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
             return Container(
               width: double.infinity,
               color: Colors.grey[200],
-              child: Center(child: Icon(Icons.error)),
+              child: const Center(child: Icon(Icons.error)),
             );
           },
         ),
@@ -299,6 +299,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                             },
                           ),
                         ),
+                        
                         if (_currentImageIndex > 0)
                           Positioned(
                             left: 10,
@@ -313,6 +314,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                               ),
                             ),
                           ),
+                          
                         if (_currentImageIndex < images.length - 1)
                           Positioned(
                             right: 10,
@@ -327,6 +329,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                               ),
                             ),
                           ),
+                          
                         if (isLoadingImages)
                           Positioned(
                             top: 10,
@@ -342,7 +345,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                                 height: 15,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  valueColor: AlwaysStoppedAnimation(Colors.white),
                                 ),
                               ),
                             ),
@@ -373,7 +376,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                           ),
                       ],
                     ),
-                  
+                    
                   Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
@@ -387,6 +390,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
+                        
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
@@ -405,7 +409,9 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                             ),
                           ),
                         ),
+                        
                         const SizedBox(height: 16),
+                        
                         Text(
                           'Posted by: ${item['user']?['userName'] ?? 'Unknown'}',
                           style: const TextStyle(
@@ -413,7 +419,8 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                             color: Colors.grey,
                           ),
                         ),
-                        if (item['location'] != null) ...[
+                        
+                        if (item['lastSeenLocation'] != null) ...[
                           const SizedBox(height: 12),
                           Row(
                             children: [
@@ -421,7 +428,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
-                                  'Location: ${item['location']}',
+                                  'Last seen at: ${item['lastSeenLocation']}',
                                   style: TextStyle(
                                     fontSize: 14,
                                     color: Colors.grey[600],
@@ -431,6 +438,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                             ],
                           ),
                         ],
+                        
                         if (item['lostDate'] != null) ...[
                           const SizedBox(height: 12),
                           Row(
@@ -447,7 +455,9 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                             ],
                           ),
                         ],
+                        
                         const SizedBox(height: 16),
+                        
                         const Text(
                           'Description:',
                           style: TextStyle(
@@ -455,15 +465,18 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
+                        
                         const SizedBox(height: 8),
+                        
                         Text(
                           item['description'] ?? 'No description available',
                           style: const TextStyle(fontSize: 16),
                         ),
-                        if (item['contactInfo'] != null && item['contactInfo'].isNotEmpty) ...[
+                        
+                        if (item['additionalInfo'] != null && item['additionalInfo'].isNotEmpty) ...[
                           const SizedBox(height: 16),
                           const Text(
-                            'Contact Information:',
+                            'Additional Information:',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -471,7 +484,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            item['contactInfo'],
+                            item['additionalInfo'],
                             style: const TextStyle(fontSize: 16),
                           ),
                         ],
@@ -483,8 +496,8 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
             ),
           ),
           
-          // Only show chat button if item has a user
-          if (item['user'] != null)
+          // Only show chat button if item has a user and it's not the current user
+          if (item['user'] != null && item['user']['_id'] != currentUserId)
             Container(
               padding: const EdgeInsets.all(16.0),
               decoration: BoxDecoration(
@@ -494,7 +507,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                     color: Colors.grey.withOpacity(0.2),
                     spreadRadius: 1,
                     blurRadius: 5,
-                    offset: Offset(0, -3),
+                    offset: const Offset(0, -3),
                   ),
                 ],
               ),
@@ -520,7 +533,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
       ),
     );
   }
-  
+
   String _formatDate(dynamic date) {
     if (date == null) return 'N/A';
     try {

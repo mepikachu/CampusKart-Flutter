@@ -21,11 +21,12 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
   List<dynamic> offers = [];
   bool isLoading = true;
   String errorMessage = '';
-
-  // Add image caching fields
+  
+  // Image caching fields
   final Map<String, List<Uint8List>> _imageCache = {};
   final Set<String> _loadingImages = {};
-  bool _hasLoadedImages = false;
+  bool _isLoadingImages = true;
+  int _totalExpectedImages = 1;
 
   @override
   void initState() {
@@ -44,7 +45,7 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
           'auth-cookie': authCookie ?? '',
         },
       );
-
+      
       final data = json.decode(response.body);
       if (response.statusCode == 200 && data['success'] == true) {
         setState(() {
@@ -73,13 +74,20 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
         },
         body: json.encode({'productId': widget.product['_id']}),
       );
-
+      
       if (response.statusCode == 200) {
         if (action == 'accept') {
           setState(() {
             widget.product['status'] = 'sold';
             offers = []; // Clear all offers
           });
+          
+          // Update the cache with the updated product status
+          final cachedProduct = await ProductCacheService.getCachedProduct(widget.product['_id']);
+          if (cachedProduct != null) {
+            cachedProduct['status'] = 'sold';
+            await ProductCacheService.cacheProduct(widget.product['_id'], cachedProduct);
+          }
           
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Offer accepted. Product marked as sold.')),
@@ -107,18 +115,89 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
   }
 
   Future<void> _loadCachedImages() async {
-    if (_hasLoadedImages) return;
-
+    setState(() {
+      _isLoadingImages = true;
+    });
+    
     try {
+      // Check if we have cached number of images first
+      final numImages = await ProductCacheService.getCachedNumImages(widget.product['_id']);
+      if (numImages != null) {
+        _totalExpectedImages = numImages;
+      }
+      
+      // Try to get cached images
       final cachedImages = await ProductCacheService.getCachedAllImages(widget.product['_id']);
-      if (cachedImages != null) {
+      if (cachedImages != null && cachedImages.isNotEmpty) {
         setState(() {
           _imageCache[widget.product['_id']] = cachedImages;
-          _hasLoadedImages = true;
+          _isLoadingImages = false;
         });
+      } else {
+        // If no cached images or we don't have all expected images, fetch them
+        await _fetchAllProductImages();
       }
     } catch (e) {
       print('Error loading cached images: $e');
+      // Try to fetch fresh images if caching failed
+      await _fetchAllProductImages();
+    }
+  }
+  
+  Future<void> _fetchAllProductImages() async {
+    if (_loadingImages.contains(widget.product['_id'])) return;
+    
+    _loadingImages.add(widget.product['_id']);
+    setState(() => _isLoadingImages = true);
+    
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      final response = await http.get(
+        Uri.parse('$serverUrl/api/products/${widget.product['_id']}/images'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] && data['images'] != null) {
+          final images = data['images'] as List;
+          final List<Uint8List> imagesList = [];
+          
+          for (var image in images) {
+            if (image != null && image['data'] != null) {
+              final imageBytes = base64Decode(image['data']);
+              imagesList.add(imageBytes);
+            }
+          }
+          
+          // Cache the images
+          if (imagesList.isNotEmpty) {
+            await ProductCacheService.cacheAllImages(widget.product['_id'], imagesList);
+            await ProductCacheService.cacheNumImages(widget.product['_id'], imagesList.length);
+            
+            if (mounted) {
+              setState(() {
+                _imageCache[widget.product['_id']] = imagesList;
+                _totalExpectedImages = imagesList.length;
+                _isLoadingImages = false;
+              });
+            }
+          } else {
+            // If no images were found, set loading to false
+            setState(() => _isLoadingImages = false);
+          }
+        }
+      } else {
+        throw Exception('Failed to load images');
+      }
+    } catch (e) {
+      print('Error fetching all product images: $e');
+      setState(() => _isLoadingImages = false);
+    } finally {
+      _loadingImages.remove(widget.product['_id']);
     }
   }
 
@@ -161,20 +240,23 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
 
   Widget _buildProductDetails() {
     List<Widget> imageSlides = [];
+    
     if (_imageCache.containsKey(widget.product['_id'])) {
-      imageSlides = List.generate(_imageCache[widget.product['_id']]!.length, (index) {
+      final images = _imageCache[widget.product['_id']]!;
+      imageSlides = List.generate(images.length, (index) {
         return Image.memory(
-          _imageCache[widget.product['_id']]![index],
+          images[index],
           fit: BoxFit.cover,
           width: double.infinity,
         );
       });
     } else {
+      // Show placeholder with loading indicator
       imageSlides = [
         Container(
           color: Colors.grey[200],
           child: Center(
-            child: _loadingImages.contains(widget.product['_id'])
+            child: _isLoadingImages
                 ? const CircularProgressIndicator()
                 : const Icon(Icons.image_not_supported),
           ),
@@ -194,11 +276,31 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
                   options: CarouselOptions(
                     height: 300,
                     viewportFraction: 1.0,
-                    enableInfiniteScroll: false,
+                    enableInfiniteScroll: imageSlides.length > 1,
                     autoPlay: imageSlides.length > 1,
                     autoPlayInterval: const Duration(seconds: 3),
                   ),
                 ),
+                if (_isLoadingImages)
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation(Colors.white),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           Padding(
@@ -221,16 +323,16 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: widget.product['status'] == 'sold' 
-                            ? Colors.red.withOpacity(0.1) 
+                        color: widget.product['status'] == 'sold'
+                            ? Colors.red.withOpacity(0.1)
                             : Colors.green.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
                         widget.product['status']?.toUpperCase() ?? 'AVAILABLE',
                         style: TextStyle(
-                          color: widget.product['status'] == 'sold' 
-                              ? Colors.red 
+                          color: widget.product['status'] == 'sold'
+                              ? Colors.red
                               : Colors.green,
                           fontWeight: FontWeight.bold,
                         ),

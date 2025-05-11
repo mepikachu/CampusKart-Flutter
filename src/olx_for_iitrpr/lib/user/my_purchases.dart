@@ -17,10 +17,10 @@ class MyPurchasesPage extends StatefulWidget {
 
 class _MyPurchasesPageState extends State<MyPurchasesPage> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  List<dynamic> myPurchases = [];
+  List<Map<String, dynamic>> myPurchases = [];
   bool isLoading = true;
   String errorMessage = '';
-
+  
   // For image caching
   final Map<String, Uint8List> _loadedImages = {};
   final Set<String> _loadingProductIds = {};
@@ -33,9 +33,12 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
 
   Future<void> _loadMyPurchases() async {
     try {
+      if (mounted) {
+        setState(() => isLoading = true);
+      }
+      
       // First try to get cached purchase IDs
-      final activityIds = await ProfileService.activityIds;
-
+      final activityIds = ProfileService.activityIds;
       if (activityIds != null && activityIds['purchasedProducts'] != null) {
         // Get cached products
         List<Map<String, dynamic>> cachedPurchases = [];
@@ -45,21 +48,21 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
             cachedPurchases.add(product);
           }
         }
-
-        if (cachedPurchases.isNotEmpty) {
+        
+        if (cachedPurchases.isNotEmpty && mounted) {
           setState(() {
             myPurchases = cachedPurchases;
             isLoading = false;
           });
         }
       }
-
+      
       // If no cache or expired, refresh from server
       if (myPurchases.isEmpty || !ProfileService.hasValidActivityCache) {
-        await ProfileService.fetchAndCacheUserProfile();
-
+        await ProfileService.fetchAndUpdateProfile();
+        
         // Try loading from cache again
-        final freshIds = await ProfileService.activityIds;
+        final freshIds = ProfileService.activityIds;
         if (freshIds != null && freshIds['purchasedProducts'] != null) {
           List<Map<String, dynamic>> freshPurchases = [];
           for (String id in freshIds['purchasedProducts']!) {
@@ -68,7 +71,7 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
               freshPurchases.add(product);
             }
           }
-
+          
           if (mounted) {
             setState(() {
               myPurchases = freshPurchases;
@@ -77,34 +80,46 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
           }
         }
       }
-
+      
       // Load images for all purchases
       for (var purchase in myPurchases) {
-        if (!_loadedImages.containsKey(purchase['_id'])) {
+        if (purchase['_id'] != null && !_loadedImages.containsKey(purchase['_id'])) {
           await _loadCachedImage(purchase['_id']);
         }
       }
     } catch (e) {
-      setState(() {
-        errorMessage = e.toString();
-        isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          errorMessage = e.toString();
+          isLoading = false;
+        });
+      }
+    } finally {
+      if (mounted && isLoading) {
+        setState(() => isLoading = false);
+      }
     }
   }
 
   Future<void> _loadCachedImage(String productId) async {
-    final cachedImage = await ProductCacheService.getCachedImage(productId);
-    if (cachedImage != null && mounted) {
-      setState(() {
-        _loadedImages[productId] = cachedImage;
-      });
+    try {
+      final cachedImage = await ProductCacheService.getCachedImage(productId);
+      if (cachedImage != null && mounted) {
+        setState(() {
+          _loadedImages[productId] = cachedImage;
+        });
+      } else {
+        await _fetchProductImage(productId);
+      }
+    } catch (e) {
+      print('Error loading cached image: $e');
     }
   }
 
   Future<void> _fetchProductImage(String productId) async {
     if (_loadingProductIds.contains(productId)) return;
+    
     _loadingProductIds.add(productId);
-
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
@@ -114,17 +129,19 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
           'auth-cookie': authCookie ?? '',
         },
       );
-
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] && data['image'] != null) {
           final image = data['image'];
           final numImages = data['numImages'] ?? 1;
-
+          
           if (image != null && image['data'] != null) {
             final bytes = base64Decode(image['data']);
+            
+            // Cache the image
             await ProductCacheService.cacheImage(productId, bytes, numImages);
-
+            
             if (mounted) {
               setState(() {
                 _loadedImages[productId] = bytes;
@@ -140,23 +157,33 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
     }
   }
 
-  Widget _buildPurchaseCard(dynamic product) {
+  Widget _buildPurchaseCard(Map<String, dynamic> product) {
     Widget imageWidget;
+    
     if (_loadedImages.containsKey(product['_id'])) {
+      // Use cached image
       imageWidget = Image.memory(
         _loadedImages[product['_id']]!,
         fit: BoxFit.cover,
         width: double.infinity,
         height: 200,
       );
+    } else if (_loadingProductIds.contains(product['_id'])) {
+      // Show loading indicator
+      imageWidget = Container(
+        color: Colors.grey[200],
+        height: 200,
+        child: const Center(
+          child: CircularProgressIndicator(color: Colors.black),
+        ),
+      );
     } else {
+      // No image available
       imageWidget = Container(
         color: Colors.grey[300],
         height: 200,
-        child: Center(
-          child: _loadingProductIds.contains(product['_id'])
-              ? const CircularProgressIndicator()
-              : const Icon(Icons.image_not_supported, size: 50),
+        child: const Center(
+          child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
         ),
       );
     }
@@ -180,6 +207,7 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Image section
             ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
               child: imageWidget,
@@ -189,6 +217,7 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Product name
                   Text(
                     product['name'] ?? 'Unknown Product',
                     style: const TextStyle(
@@ -199,6 +228,7 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 8),
+                  // Product description
                   Text(
                     product['description'] ?? 'No description provided',
                     maxLines: 2,
@@ -209,6 +239,7 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  // Price and seller row
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -284,12 +315,34 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
                         ],
                       ),
                     )
-                  : ListView.builder(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      itemCount: myPurchases.length,
-                      itemBuilder: (context, index) =>
-                          _buildPurchaseCard(myPurchases[index]),
-                    ),
+                  : myPurchases.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.shopping_bag_outlined,
+                                size: 64,
+                                color: Colors.grey[400],
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No purchases found',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          itemCount: myPurchases.length,
+                          itemBuilder: (context, index) => _buildPurchaseCard(
+                            myPurchases[index],
+                          ),
+                        ),
         ),
       ),
     );

@@ -121,7 +121,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       child: Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
-          title: const Text('IITRPR MarketPlace', 
+          title: const Text('𝒞𝒶𝓂𝓅𝓊𝓈𝒦𝒶𝓇𝓉', 
             style: TextStyle(fontWeight: FontWeight.bold)
           ),
           actions: [

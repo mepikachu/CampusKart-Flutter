@@ -16,46 +16,62 @@ class LostFoundTab extends StatefulWidget {
 
 class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClientMixin {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  
   List<dynamic> lostItems = [];
+  List<dynamic> filteredItems = [];
   bool isLoading = true;
   String? errorMessage;
+  bool _showSearchBar = true;
+  String _sortBy = '';
   
-  // For image caching
+  // Image caching
   final Map<String, Uint8List> _loadedImages = {};
   final Set<String> _loadingItemIds = {};
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     fetchLostItems();
   }
 
-  Future<void> fetchLostItems() async {
+  void _onScroll() {
+    setState(() {
+      _showSearchBar = _scrollController.offset <= 10;
+    });
+  }
+
+  Future<void> fetchLostItems({bool forceRefresh = false}) async {
     try {
       setState(() {
         isLoading = true;
         errorMessage = null;
       });
       
-      // Check cached items first
-      final cachedItems = await LostFoundCacheService.getCachedItems();
-      if (cachedItems != null && cachedItems.isNotEmpty) {
-        setState(() {
-          lostItems = cachedItems;
-          isLoading = false;
-        });
-        
-        // Load cached images
-        for (var item in lostItems) {
-          _loadCachedImage(item['_id']);
+      // Try to load from cache first if not forcing refresh
+      if (!forceRefresh) {
+        final cachedItems = await LostFoundCacheService.getCachedItems();
+        if (cachedItems != null && cachedItems.isNotEmpty) {
+          setState(() {
+            lostItems = cachedItems;
+            filteredItems = cachedItems;
+            isLoading = false;
+          });
+          
+          // Load cached images for all items
+          for (var item in lostItems) {
+            if (item['_id'] != null) {
+              _loadCachedImage(item['_id']);
+            }
+          }
         }
-        
-        // Still fetch fresh data in background
-        _fetchFreshLostItems();
-        return;
       }
       
+      // Always fetch fresh data in the background (or as primary source if no cache)
       await _fetchFreshLostItems();
+      
     } catch (e) {
       setState(() {
         errorMessage = e.toString();
@@ -66,13 +82,18 @@ class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClie
   
   Future<void> _loadCachedImage(String itemId) async {
     try {
+      // Skip if already loaded or loading
+      if (_loadedImages.containsKey(itemId) || _loadingItemIds.contains(itemId)) {
+        return;
+      }
+      
       final cachedImage = await LostFoundCacheService.getCachedImage(itemId);
       if (cachedImage != null && mounted) {
         setState(() {
           _loadedImages[itemId] = cachedImage;
         });
       } else {
-        // If no cached image, try to fetch it
+        // If not in cache, fetch from network
         _fetchItemImage(itemId);
       }
     } catch (e) {
@@ -83,7 +104,6 @@ class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClie
   Future<void> _fetchFreshLostItems() async {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
-      
       final response = await http.get(
         Uri.parse('$serverUrl/api/lost-items'),
         headers: {
@@ -91,29 +111,34 @@ class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClie
           'auth-cookie': authCookie ?? '',
         },
       );
-
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        
         if (data['success']) {
-          // Modify the filter to only exclude 'found' items
-          final filteredItems = (data['items'] as List).where((item) =>
-            item['status'] != 'found'
-          ).toList();
+          final items = data['items'] as List;
           
           // Cache the items
-          await LostFoundCacheService.cacheItems(filteredItems);
+          await LostFoundCacheService.cacheItems(items);
           
           if (mounted) {
             setState(() {
-              lostItems = filteredItems;
+              lostItems = items;
+              
+              // Only update filtered items if no filter is active
+              if (_searchController.text.isEmpty) {
+                filteredItems = items;
+              } else {
+                // Re-apply current filters
+                _filterItems(_searchController.text);
+              }
+              
               isLoading = false;
             });
           }
           
-          // Fetch images for each item
-          for (var item in lostItems) {
-            if (!_loadedImages.containsKey(item['_id'])) {
+          // Fetch images for any items that don't have them
+          for (var item in items) {
+            if (item['_id'] != null && !_loadedImages.containsKey(item['_id'])) {
               _fetchItemImage(item['_id']);
             }
           }
@@ -131,7 +156,6 @@ class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClie
         throw Exception('Failed to load lost items');
       }
     } catch (e) {
-      print('Error fetching fresh items: $e');
       if (mounted) {
         setState(() {
           errorMessage = e.toString();
@@ -142,7 +166,7 @@ class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClie
   }
 
   Future<void> _fetchItemImage(String itemId) async {
-    // Skip if already loading
+    // Skip if already loading or loaded
     if (_loadingItemIds.contains(itemId)) return;
     _loadingItemIds.add(itemId);
     
@@ -155,25 +179,22 @@ class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClie
           'auth-cookie': authCookie ?? '',
         },
       );
-
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] && data['image'] != null) {
-          // main_image endpoint returns a single image directly (not as a list)
           final image = data['image'];
           final numImages = data['numImages'] ?? 1;
           
           if (image != null && image['data'] != null) {
-            final String base64Str = image['data'];
-            final Uint8List bytes = base64Decode(base64Str);
+            final bytes = base64Decode(image['data']);
             
-            // Cache the image and number of images
+            // Cache the image with number of images
             await LostFoundCacheService.cacheImage(itemId, bytes, numImages);
             
             if (mounted) {
               setState(() {
                 _loadedImages[itemId] = bytes;
-                _loadingItemIds.remove(itemId);
               });
             }
           }
@@ -181,20 +202,41 @@ class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClie
       }
     } catch (e) {
       print('Error fetching image: $e');
-      if (mounted) {
-        setState(() {
-          _loadingItemIds.remove(itemId);
-        });
-      }
+    } finally {
+      _loadingItemIds.remove(itemId);
     }
+  }
+
+  void _filterItems(String query) {
+    if (query.isEmpty) {
+      setState(() {
+        filteredItems = lostItems;
+      });
+      return;
+    }
+    
+    final searchTerm = query.toLowerCase();
+    setState(() {
+      filteredItems = lostItems.where((item) => 
+        (item['name']?.toLowerCase().contains(searchTerm) ?? false) ||
+        (item['description']?.toLowerCase().contains(searchTerm) ?? false) ||
+        (item['lastSeenLocation']?.toLowerCase().contains(searchTerm) ?? false)
+      ).toList();
+    });
+  }
+
+  String _formatDate(String? dateString) {
+    if (dateString == null) return '';
+    final date = DateTime.parse(dateString);
+    return '${date.day}/${date.month}/${date.year}';
   }
 
   Widget buildLostItemCard(dynamic item) {
     final String itemId = item['_id'];
     Widget imageWidget;
-
-    // Display image if loaded
+    
     if (_loadedImages.containsKey(itemId)) {
+      // Use cached image
       imageWidget = Image.memory(
         _loadedImages[itemId]!,
         fit: BoxFit.cover,
@@ -209,15 +251,20 @@ class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClie
           );
         },
       );
-    } else {
+    } else if (_loadingItemIds.contains(itemId)) {
       // Show loading indicator
+      imageWidget = Container(
+        color: Colors.grey[200],
+        height: 200,
+        child: const Center(child: CircularProgressIndicator(color: Colors.black)),
+      );
+    } else {
+      // No image and not loading
       imageWidget = Container(
         color: Colors.grey[300],
         height: 200,
-        child: Center(
-          child: _loadingItemIds.contains(itemId)
-              ? const CircularProgressIndicator()
-              : const Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
+        child: const Center(
+          child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
         ),
       );
     }
@@ -236,7 +283,7 @@ class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClie
                 initialImage: _loadedImages[itemId],
               ),
             ),
-          ).then((_) => fetchLostItems());
+          ).then((_) => fetchLostItems(forceRefresh: false));
         },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -319,12 +366,6 @@ class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClie
     );
   }
 
-  String _formatDate(String? dateString) {
-    if (dateString == null) return '';
-    final date = DateTime.parse(dateString);
-    return '${date.day}/${date.month}/${date.year}';
-  }
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -341,39 +382,162 @@ class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClie
       ),
       child: Scaffold(
         backgroundColor: Colors.white,
-        body: isLoading && lostItems.isEmpty
-            ? const Center(child: CircularProgressIndicator(color: Colors.black))
-            : errorMessage != null
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.error_outline, size: 64, color: Colors.black),
-                        const SizedBox(height: 16),
-                        Text('Error: $errorMessage'),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black,
-                            foregroundColor: Colors.white,
-                          ),
-                          onPressed: fetchLostItems,
-                          child: const Text('Retry'),
+        body: Column(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              height: _showSearchBar ? 68 : 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 4,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        height: 40,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(20),
                         ),
-                      ],
+                        child: Row(
+                          children: [
+                            Icon(Icons.search, color: Colors.grey[600], size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: _searchController,
+                                decoration: InputDecoration(
+                                  hintText: 'Search lost items...',
+                                  border: InputBorder.none,
+                                  hintStyle: TextStyle(color: Colors.grey[500]),
+                                ),
+                                onChanged: _filterItems,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  )
-                : RefreshIndicator(
-                    color: Colors.black,
-                    onRefresh: fetchLostItems,
-                    child: ListView.builder(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      itemCount: lostItems.length,
-                      itemBuilder: (context, index) => buildLostItemCard(lostItems[index]),
+                    const SizedBox(width: 8),
+                    Material(
+                      color: Colors.transparent,
+                      child: PopupMenuButton(
+                        icon: const Icon(Icons.filter_list),
+                        onSelected: (value) {
+                          setState(() {
+                            _sortBy = value.toString();
+                          });
+                          _applySorting();
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'date_desc',
+                            child: Text('Newest First'),
+                          ),
+                          const PopupMenuItem(
+                            value: 'date_asc',
+                            child: Text('Oldest First'),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
+                  ],
+                ),
+              ),
+            ),
+            
+            // Lost items list with filtered results
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () => fetchLostItems(forceRefresh: true),
+                color: Colors.black,
+                child: isLoading && filteredItems.isEmpty
+                  ? const Center(child: CircularProgressIndicator(color: Colors.black))
+                  : errorMessage != null
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.error_outline, size: 64, color: Colors.black),
+                            const SizedBox(height: 16),
+                            Text('Error: $errorMessage'),
+                            const SizedBox(height: 16),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.black,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () => fetchLostItems(forceRefresh: true),
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      )
+                    : filteredItems.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No lost items found',
+                                style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          controller: _scrollController,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          itemCount: filteredItems.length,
+                          itemBuilder: (context, index) => buildLostItemCard(filteredItems[index]),
+                        ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  void _applySorting() {
+    final sorted = List.from(filteredItems);
+    
+    switch (_sortBy) {
+      case 'date_desc':
+        sorted.sort((a, b) => 
+          DateTime.parse(b['createdAt']).compareTo(DateTime.parse(a['createdAt'])));
+        break;
+      case 'date_asc':
+        sorted.sort((a, b) => 
+          DateTime.parse(a['createdAt']).compareTo(DateTime.parse(b['createdAt'])));
+        break;
+      default:
+        // Default is newest first
+        sorted.sort((a, b) => 
+          DateTime.parse(b['createdAt']).compareTo(DateTime.parse(a['createdAt'])));
+    }
+    
+    setState(() {
+      filteredItems = sorted;
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override

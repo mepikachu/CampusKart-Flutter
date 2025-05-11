@@ -15,6 +15,10 @@ import 'tab_leaderboard.dart';
 import 'tab_lost&found.dart';
 import 'add_lost_item.dart';
 import 'server.dart';
+import '../services/profile_service.dart';
+import '../services/product_cache_service.dart';
+import '../services/donation_cache_service.dart';
+import '../services/lost_found_cache_service.dart';
 
 // Chat refresh service to manage periodic updates
 class ChatRefreshService {
@@ -191,7 +195,6 @@ class ChatRefreshService {
             // Add new messages if not already processed
             bool hasNewMessages = false;
             int highestId = 0;
-            
             for (var newMsg in newMessages) {
               if (newMsg['messageId'] != null) {
                 final msgId = newMsg['messageId'];
@@ -252,52 +255,75 @@ class ChatRefreshService {
 class UserHomeScreen extends StatefulWidget {
   const UserHomeScreen({super.key});
 
-  static final GlobalKey<_HomeScreenState> homeKey = GlobalKey<_HomeScreenState>();
+  static final GlobalKey<_UserHomeScreenState> homeKey = GlobalKey<_UserHomeScreenState>();
 
   @override
-  State<UserHomeScreen> createState() => _HomeScreenState();
+  State<UserHomeScreen> createState() => _UserHomeScreenState();
 }
 
-class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver, SingleTickerProviderStateMixin {
+class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   int _selectedIndex = 0;
-  bool _isFabExpanded = false;
   
   // Only keep chat service
   final ChatRefreshService _chatRefreshService = ChatRefreshService();
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   Timer? _notificationTimer;
   Timer? _notificationBackgroundTimer;
+  Timer? _profileRefreshTimer;
   String? _lastNotificationId;
+  bool _isInitialized = false;
 
-  // List of four tabs displayed in the home screen
+  // List of tabs displayed in the home screen
   final List<Widget> _tabs = const [
     ProductsTab(),
     LostFoundTab(),
+    SizedBox(), // Placeholder for Add button
     LeaderboardTab(),
     ProfileTab(),
   ];
-
-  late AnimationController _animationController;
-  late Animation<double> _animation;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _chatRefreshService.initialize();
-    _loadLastNotificationId();
-    _startNotificationRefresh();
-    
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    try {
+      // Initialize all cache services
+      await ProfileService.initialize();
+      
+      // Start the chat and notification services
+      _chatRefreshService.initialize();
+      await _loadLastNotificationId();
+      _startNotificationRefresh();
+      
+      // Periodically refresh profile data in the background
+      _startProfileRefresh();
+      
+      setState(() {
+        _isInitialized = true;
+      });
+    } catch (e) {
+      print('Error initializing app: $e');
+    }
+  }
+
+  void _startProfileRefresh() {
+    _profileRefreshTimer?.cancel();
+    _profileRefreshTimer = Timer.periodic(
+      const Duration(minutes: 5),
+      (_) => _refreshProfileData()
     );
-    
-    _animation = CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeOut,
-      reverseCurve: Curves.easeIn,
-    );
+  }
+
+  Future<void> _refreshProfileData() async {
+    try {
+      await ProfileService.fetchAndUpdateProfile();
+    } catch (e) {
+      print('Error refreshing profile data: $e');
+    }
   }
 
   Future<void> _loadLastNotificationId() async {
@@ -309,7 +335,7 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
     _notificationTimer?.cancel();
     _notificationBackgroundTimer?.cancel();
 
-    // Start foreground refresh (4 seconds)
+    // Start foreground refresh (10 seconds)
     _notificationTimer = Timer.periodic(
       const Duration(seconds: 10), 
       (_) => _refreshNotifications()
@@ -321,7 +347,7 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
     _notificationTimer?.cancel();
     _notificationBackgroundTimer?.cancel();
 
-    // Start background refresh (10 seconds)
+    // Start background refresh (60 seconds)
     _notificationBackgroundTimer = Timer.periodic(
       const Duration(seconds: 60),
       (_) => _refreshNotifications()
@@ -396,17 +422,6 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
     }
   }
 
-  void _toggleFab() {
-    setState(() {
-      _isFabExpanded = !_isFabExpanded;
-      if (_isFabExpanded) {
-        _animationController.forward();
-      } else {
-        _animationController.reverse();
-      }
-    });
-  }
-
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -414,6 +429,7 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
     if (state == AppLifecycleState.resumed) {
       _chatRefreshService.setAppState(true);
       _startNotificationRefresh(); // Start foreground refresh
+      _refreshProfileData(); // Refresh profile data when app is resumed
     } else if (state == AppLifecycleState.paused) {
       _chatRefreshService.setAppState(false);
       _startNotificationBackgroundRefresh(); // Start background refresh
@@ -422,11 +438,11 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
 
   @override
   void dispose() {
-    _animationController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _chatRefreshService.dispose();
     _notificationTimer?.cancel();
     _notificationBackgroundTimer?.cancel();
+    _profileRefreshTimer?.cancel();
     super.dispose();
   }
 
@@ -438,7 +454,7 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
     }
   }
 
-  @override
+  @override 
   Widget build(BuildContext context) {
     return Theme(
       data: ThemeData(
@@ -457,7 +473,7 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
           backgroundColor: Colors.white,
           elevation: 0,
           title: const Text(
-            'IITRPR MarketPlace',
+            '𝒞𝒶𝓂𝓅𝓊𝓈𝒦𝒶𝓇𝓉',
             style: TextStyle(
               color: Colors.black,
               fontWeight: FontWeight.bold
@@ -485,139 +501,147 @@ class _HomeScreenState extends State<UserHomeScreen> with WidgetsBindingObserver
             ),
           ],
         ),
-        body: _tabs[_selectedIndex],
-        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-        floatingActionButton: Padding(
-          padding: const EdgeInsets.only(bottom: 16), // Add padding to match tab height
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ScaleTransition(
-                scale: _animation,
-                child: Column(
-                  children: [
-                    if (_isFabExpanded) ...[
-                      FloatingActionButton.extended(
-                        heroTag: 'lost',
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const AddLostItemScreen()),
-                          ).then((success) {
-                            if (success == true) {
-                              // Refresh lost items tab if needed
-                              setState(() {});
-                            }
-                          });
-                        },
-                        backgroundColor: Colors.orange[600],
-                        label: const Text(
-                          'Report Lost Item',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        icon: const Icon(Icons.search),
-                      ),
-                      const SizedBox(height: 12),
-                      FloatingActionButton.extended(
-                        heroTag: 'donate',
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const AddDonationScreen()),
-                          );
-                        },
-                        backgroundColor: Colors.green[600],
-                        label: const Text(
-                          'Add Donation',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        icon: const Icon(Icons.volunteer_activism),
-                      ),
-                      const SizedBox(height: 12),
-                      FloatingActionButton.extended(
-                        heroTag: 'sell',
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const SellTab()),
-                          );
-                        },
-                        backgroundColor: Colors.blue[600],
-                        label: const Text(
-                          'Sell Product',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        icon: const Icon(Icons.sell),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                  ],
-                ),
+        body: _isInitialized 
+          ? _tabs[_selectedIndex] 
+          : const Center(child: CircularProgressIndicator(color: Colors.black)),
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, -2),
               ),
-              Container(
-                height: 56,
-                width: 56,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      _isFabExpanded ? Colors.red : Colors.blue[700]!,
-                      _isFabExpanded ? Colors.redAccent : Colors.blue[500]!,
-                    ],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: AnimatedRotation(
-                  duration: const Duration(milliseconds: 300),
-                  turns: _isFabExpanded ? 0.125 : 0,
-                  child: MaterialButton(
-                    onPressed: _toggleFab,
-                    shape: const CircleBorder(),
-                    padding: EdgeInsets.zero,
-                    child: Icon(
-                      Icons.add,
-                      color: Colors.white,
-                      size: 32,
-                    ),
-                  ),
-                ),
+            ],
+          ),
+          child: BottomNavigationBar(
+            currentIndex: _selectedIndex == 2 ? 2 : _selectedIndex,
+            type: BottomNavigationBarType.fixed,
+            backgroundColor: Colors.white,
+            selectedItemColor: Colors.black,
+            unselectedItemColor: Colors.grey,
+            showSelectedLabels: true,
+            showUnselectedLabels: true,
+            onTap: (index) {
+              if (index == 2) {
+                _showAddOptions();
+              } else {
+                setState(() => _selectedIndex = index);
+              }
+            },
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.home),
+                label: "Products",
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.find_in_page),
+                label: "Lost & Found",
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.add_circle_outline),
+                label: "Add",
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.leaderboard),
+                label: "Leaderboard", 
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.person),
+                label: "Profile",
               ),
             ],
           ),
         ),
-        bottomNavigationBar: BottomNavigationBar(
-          currentIndex: _selectedIndex,
-          onTap: (index) => setState(() { _selectedIndex = index; }),
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: Colors.white,
-          selectedItemColor: Colors.black,
-          unselectedItemColor: Colors.grey,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home),
-              label: "Products",
+      ),
+    );
+  }
+
+  void _showAddOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16))
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildAddOptionCard(
+              'Sell Product',
+              Icons.sell,
+              Colors.blue,
+              () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SellTab()),
+                );
+              },
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.find_in_page),
-              label: "Lost & Found",
+            const SizedBox(height: 12),
+            _buildAddOptionCard(
+              'Report Lost',
+              Icons.search,
+              Colors.orange,
+              () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AddLostItemScreen()),
+                );
+              },
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.leaderboard),
-              label: "Leaderboard",
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person),
-              label: "Profile",
+            const SizedBox(height: 12),
+            _buildAddOptionCard(
+              'Add Donation',
+              Icons.volunteer_activism,
+              Colors.green,
+              () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AddDonationScreen()),
+                );
+              },
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAddOptionCard(String label, IconData icon, Color color, VoidCallback onTap) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: color, size: 24),
+              const SizedBox(width: 16),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                  color: color,
+                ),
+              ),
+              const Spacer(),
+              Icon(Icons.arrow_forward_ios, color: color.withOpacity(0.5), size: 16),
+            ],
+          ),
         ),
       ),
     );

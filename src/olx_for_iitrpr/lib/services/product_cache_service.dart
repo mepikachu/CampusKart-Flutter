@@ -3,17 +3,18 @@ import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Service for caching product data and images to improve loading times
 class ProductCacheService {
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
   static const Duration _cacheLifetime = Duration(minutes: 10);
-  
+
   // In-memory cache
   static final Map<String, Uint8List> _mainImageCache = {};
   static final Map<String, List<Uint8List>> _allImagesCache = {};
   static final Map<String, Map<String, dynamic>> _productCache = {};
   static final Map<String, int> _numImagesCache = {};
   static final Map<String, DateTime> _cacheTimestamps = {};
-  
+
   // Cache keys
   static String _productKey(String id) => 'product_$id';
   static String _imageKey(String id) => 'image_$id';
@@ -22,12 +23,12 @@ class ProductCacheService {
   static String _timestampKey(String id) => 'timestamp_$id';
   static String _imageTimestampKey(String id) => 'image_timestamp_$id';
   static const String _productsListKey = 'products_list';
-  
-  // Cache a single product
+
+  /// Cache a single product
   static Future<void> cacheProduct(String id, Map<String, dynamic> product) async {
     try {
       // Store in memory
-      _productCache[id] = Map<String, dynamic>.from(product);
+      _productCache[id] = Map.from(product);
       _cacheTimestamps[id] = DateTime.now();
       
       // Store in secure storage
@@ -37,8 +38,8 @@ class ProductCacheService {
       print('Error caching product: $e');
     }
   }
-  
-  // Cache a list of products
+
+  /// Cache a list of products
   static Future<void> cacheProducts(List<dynamic> products) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -53,8 +54,8 @@ class ProductCacheService {
       print('Error caching products: $e');
     }
   }
-  
-  // Cache a single image (main image)
+
+  /// Cache a single image (main image)
   static Future<void> cacheImage(String id, Uint8List imageBytes, int numImages) async {
     try {
       // Store in memory
@@ -71,12 +72,12 @@ class ProductCacheService {
       print('Error caching image: $e');
     }
   }
-  
-  // Cache all images for a product
+
+  /// Cache all images for a product
   static Future<void> cacheAllImages(String id, List<Uint8List> images) async {
     try {
       // Store in memory
-      _allImagesCache[id] = List<Uint8List>.from(images);
+      _allImagesCache[id] = List.from(images);
       _numImagesCache[id] = images.length;
       _cacheTimestamps[id] = DateTime.now();
       
@@ -97,8 +98,8 @@ class ProductCacheService {
       print('Error caching all images: $e');
     }
   }
-  
-  // Store number of images
+
+  /// Store number of images
   static Future<void> cacheNumImages(String id, int numImages) async {
     try {
       _numImagesCache[id] = numImages;
@@ -107,22 +108,21 @@ class ProductCacheService {
       print('Error caching num images: $e');
     }
   }
-  
-  // Get cached products list
+
+  /// Get cached products list
   static Future<List<dynamic>?> getCachedProducts() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final String? jsonData = prefs.getString(_productsListKey);
       if (jsonData == null) return null;
-      
       return jsonDecode(jsonData);
     } catch (e) {
       print('Error getting cached products: $e');
       return null;
     }
   }
-  
-  // Get a cached product
+
+  /// Get a cached product
   static Future<Map<String, dynamic>?> getCachedProduct(String id) async {
     try {
       // Check memory cache first
@@ -159,8 +159,8 @@ class ProductCacheService {
       return null;
     }
   }
-  
-  // Get cached image
+
+  /// Get cached image
   static Future<Uint8List?> getCachedImage(String id) async {
     try {
       // Check memory cache first
@@ -197,8 +197,8 @@ class ProductCacheService {
       return null;
     }
   }
-  
-  // Get all cached images
+
+  /// Get all cached images
   static Future<List<Uint8List>?> getCachedAllImages(String id) async {
     try {
       // Check memory cache first
@@ -231,7 +231,7 @@ class ProductCacheService {
       }
       
       // Update memory cache
-      _allImagesCache[id] = List<Uint8List>.from(images);
+      _allImagesCache[id] = List.from(images);
       _cacheTimestamps[id] = DateTime.now();
       
       return images;
@@ -240,8 +240,8 @@ class ProductCacheService {
       return null;
     }
   }
-  
-  // Get cached number of images
+
+  /// Get cached number of images
   static Future<int?> getCachedNumImages(String id) async {
     try {
       // Check memory cache first
@@ -264,34 +264,26 @@ class ProductCacheService {
       return null;
     }
   }
-  
-  // Get image cache timestamp
-  static Future<DateTime?> getImageCacheTimestamp(String id) async {
-    try {
-      final timestampStr = await _secureStorage.read(key: _imageTimestampKey(id));
-      if (timestampStr == null) return null;
-      
-      return DateTime.parse(timestampStr);
-    } catch (e) {
-      print('Error getting image timestamp: $e');
-      return null;
-    }
+
+  /// Check if cache is still valid
+  static bool isCacheValid(String id) {
+    return _cacheTimestamps.containsKey(id) && 
+           DateTime.now().difference(_cacheTimestamps[id]!) <= _cacheLifetime;
   }
-  
-  // Get product's last updated timestamp
+
+  /// Get product's last updated timestamp
   static Future<DateTime?> getProductLastUpdated(String id) async {
     try {
       final product = await getCachedProduct(id);
       if (product == null || !product.containsKey('lastUpdatedAt')) return null;
-      
       return DateTime.parse(product['lastUpdatedAt']);
     } catch (e) {
       print('Error getting product last updated: $e');
       return null;
     }
   }
-  
-  // Clear product cache
+
+  /// Clear product cache
   static Future<void> _clearProductCache(String id) async {
     try {
       await _secureStorage.delete(key: _productKey(id));
@@ -302,8 +294,8 @@ class ProductCacheService {
       print('Error clearing product cache: $e');
     }
   }
-  
-  // Clear image cache
+
+  /// Clear image cache
   static Future<void> _clearImageCache(String id) async {
     try {
       await _secureStorage.delete(key: _imageKey(id));
@@ -320,8 +312,8 @@ class ProductCacheService {
       print('Error clearing image cache: $e');
     }
   }
-  
-  // Clear specific product's cache
+
+  /// Clear specific product's cache
   static Future<void> clearCache(String id) async {
     try {
       await _clearProductCache(id);
@@ -330,8 +322,8 @@ class ProductCacheService {
       print('Error clearing cache: $e');
     }
   }
-  
-  // Clear all caches
+
+  /// Clear all caches
   static Future<void> clearAllCaches() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -343,9 +335,6 @@ class ProductCacheService {
       _productCache.clear();
       _numImagesCache.clear();
       _cacheTimestamps.clear();
-      
-      // For a complete implementation, would need to iterate through
-      // all product IDs and clear them from secure storage
     } catch (e) {
       print('Error clearing all caches: $e');
     }

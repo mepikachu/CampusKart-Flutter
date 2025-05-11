@@ -18,7 +18,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Olx for IITRPR',
+      title: 'CampusKart',
       debugShowCheckedModeBanner: false,
       routes: {
         '/user_home': (context) => const UserHomeScreen(),

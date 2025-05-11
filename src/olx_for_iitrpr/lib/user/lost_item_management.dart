@@ -8,10 +8,11 @@ import '../services/lost_found_cache_service.dart';
 import 'server.dart';
 
 class LostItemDetailsScreen extends StatefulWidget {
-  final dynamic item;
+  final Map<String, dynamic> item;
   final bool isOwner;
+  
   const LostItemDetailsScreen({
-    super.key, 
+    super.key,
     required this.item,
     this.isOwner = false,
   });
@@ -24,11 +25,12 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   int _currentImageIndex = 0;
   bool _isLoading = false;
-
-  // Add image caching at top of class
+  
+  // Image caching fields
   final Map<String, List<Uint8List>> _imageCache = {};
-  final Set<String> _loadingImages = {};
-  bool _hasLoadedImages = false;
+  final Set<String> _loadingItemIds = {};
+  bool _isLoadingImages = true;
+  int _totalExpectedImages = 1;
 
   @override
   void initState() {
@@ -36,30 +38,97 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
     _loadCachedImages();
   }
 
-  // Add method to load cached images
   Future<void> _loadCachedImages() async {
-    if (_hasLoadedImages) return;
+    setState(() {
+      _isLoadingImages = true;
+    });
     
     try {
+      // Check if we have cached number of images first
+      final numImages = await LostFoundCacheService.getCachedNumImages(widget.item['_id']);
+      if (numImages != null) {
+        _totalExpectedImages = numImages;
+      }
+      
+      // Try to get cached images
       final cachedImages = await LostFoundCacheService.getCachedAllImages(widget.item['_id']);
-      if (cachedImages != null) {
+      if (cachedImages != null && cachedImages.isNotEmpty) {
         setState(() {
           _imageCache[widget.item['_id']] = cachedImages;
-          _hasLoadedImages = true;
+          _isLoadingImages = false;
         });
+      } else {
+        // If no cached images or we don't have all expected images, fetch them
+        await _fetchAllItemImages();
       }
     } catch (e) {
-      print('Error loading cached images: $e'); 
+      print('Error loading cached images: $e');
+      // Try to fetch fresh images if caching failed
+      await _fetchAllItemImages();
+    }
+  }
+  
+  Future<void> _fetchAllItemImages() async {
+    if (_loadingItemIds.contains(widget.item['_id'])) return;
+    
+    _loadingItemIds.add(widget.item['_id']);
+    setState(() => _isLoadingImages = true);
+    
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      final response = await http.get(
+        Uri.parse('$serverUrl/api/lost-items/${widget.item['_id']}/images'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] && data['images'] != null) {
+          final images = data['images'] as List;
+          final List<Uint8List> imagesList = [];
+          
+          for (var image in images) {
+            if (image != null && image['data'] != null) {
+              final imageBytes = base64Decode(image['data']);
+              imagesList.add(imageBytes);
+            }
+          }
+          
+          // Cache the images
+          if (imagesList.isNotEmpty) {
+            await LostFoundCacheService.cacheAllImages(widget.item['_id'], imagesList);
+            await LostFoundCacheService.cacheNumImages(widget.item['_id'], imagesList.length);
+            
+            if (mounted) {
+              setState(() {
+                _imageCache[widget.item['_id']] = imagesList;
+                _totalExpectedImages = imagesList.length;
+                _isLoadingImages = false;
+              });
+            }
+          } else {
+            // If no images were found, set loading to false
+            setState(() => _isLoadingImages = false);
+          }
+        }
+      }
+    } catch (e) {
+      print('Error fetching all item images: $e');
+      setState(() => _isLoadingImages = false);
+    } finally {
+      _loadingItemIds.remove(widget.item['_id']);
     }
   }
 
   Future<void> _markAsFound() async {
     try {
       setState(() => _isLoading = true);
-      
       final authCookie = await _secureStorage.read(key: 'authCookie');
       if (authCookie == null) throw Exception('Not authenticated');
-
+      
       final response = await http.patch(
         Uri.parse('$serverUrl/api/lost-items/${widget.item['_id']}/status'),
         headers: {
@@ -71,10 +140,18 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
           'status': 'found'
         }),
       );
-
+      
       if (response.headers['content-type']?.contains('application/json') == true) {
         final responseData = json.decode(response.body);
         if (response.statusCode == 200 && responseData['success'] == true) {
+          // Update the item in cache with the new status
+          final cachedItem = await LostFoundCacheService.getCachedItem(widget.item['_id']);
+          if (cachedItem != null) {
+            cachedItem['status'] = 'found';
+            cachedItem['foundDate'] = DateTime.now().toIso8601String();
+            await LostFoundCacheService.cacheItem(widget.item['_id'], cachedItem);
+          }
+          
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Item marked as found successfully')),
@@ -144,7 +221,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
         height: 300,
         color: Colors.grey[200],
         child: Center(
-          child: _loadingImages.contains(widget.item['_id'])
+          child: _isLoadingImages
               ? const CircularProgressIndicator()
               : const Icon(Icons.image_not_supported, size: 50),
         ),
@@ -175,11 +252,24 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
     return "${parsedDate.day}/${parsedDate.month}/${parsedDate.year}";
   }
 
+  // Get username safely from user object
+  String _getUserName() {
+    if (widget.item.containsKey('user')) {
+      // If user is a map with userName
+      if (widget.item['user'] is Map) {
+        return widget.item['user']['userName'] ?? 'Unknown';
+      }
+      // If user is just a string ID
+      return 'User';
+    }
+    return 'Unknown';
+  }
+
   @override
   Widget build(BuildContext context) {
     final images = _buildImageSlides();
     final status = widget.item['status'] ?? 'lost';
-
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Lost Item Details'),
@@ -231,7 +321,6 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                         ],
                       ],
                     ),
-
                   Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(
@@ -252,7 +341,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
-                                color: status == 'found' 
+                                color: status == 'found'
                                     ? Colors.green.withOpacity(0.1)
                                     : Colors.orange.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(20),
@@ -260,7 +349,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                               child: Text(
                                 status.toUpperCase(),
                                 style: TextStyle(
-                                  color: status == 'found' 
+                                  color: status == 'found'
                                       ? Colors.green[900]
                                       : Colors.orange[900],
                                   fontWeight: FontWeight.bold,
@@ -270,7 +359,6 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                           ],
                         ),
                         const SizedBox(height: 24),
-
                         // Details section
                         const Text(
                           'Item Details',
@@ -287,7 +375,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                               _buildDetailTile(
                                 Icons.person,
                                 'Posted By',
-                                widget.item['user']?['userName'] ?? 'Unknown',
+                                _getUserName(),
                               ),
                               _buildDetailTile(
                                 Icons.calendar_today,
@@ -315,7 +403,6 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                           ),
                         ),
                         const SizedBox(height: 24),
-
                         // Description section
                         const Text(
                           'Description',
@@ -338,7 +425,6 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                             ),
                           ),
                         ),
-
                         if (widget.item['additionalInfo'] != null &&
                             widget.item['additionalInfo'].isNotEmpty) ...[
                           const SizedBox(height: 24),
@@ -371,7 +457,6 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
               ),
             ),
           ),
-
           if (widget.isOwner && status != 'found')
             Padding(
               padding: const EdgeInsets.all(16),
@@ -384,16 +469,16 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     disabledBackgroundColor: Colors.grey,
                   ),
-                  child: _isLoading 
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                      )
-                    : const Text(
-                        'Mark as Found',
-                        style: TextStyle(fontSize: 16, color: Colors.white),
-                      ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text(
+                          'Mark as Found',
+                          style: TextStyle(fontSize: 16, color: Colors.white),
+                        ),
                 ),
               ),
             ),

@@ -197,10 +197,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
                           Text(
-                            "IITRPR MarketPlace",
+                            "𝒞𝒶𝓂𝓅𝓊𝓈𝒦𝒶𝓇𝓉",
                             style: TextStyle(
-                              fontSize: 36,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 50,
+                              fontWeight: FontWeight.w300,
                               letterSpacing: -1.0,
                               color: Colors.black,
                             ),

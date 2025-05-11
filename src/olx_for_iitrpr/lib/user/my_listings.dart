@@ -17,10 +17,10 @@ class MyListingsScreen extends StatefulWidget {
 
 class _MyListingsScreenState extends State<MyListingsScreen> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  List<dynamic> myListings = [];
+  List<Map<String, dynamic>> myListings = [];
   bool isLoading = true;
   String errorMessage = '';
-
+  
   // For image caching
   final Map<String, Uint8List> _loadedImages = {};
   final Set<String> _loadingProductIds = {};
@@ -33,9 +33,12 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
 
   Future<void> _loadMyListings() async {
     try {
+      if (mounted) {
+        setState(() => isLoading = true);
+      }
+      
       // First try to get cached product IDs
-      final activityIds = await ProfileService.activityIds;
-
+      final activityIds = ProfileService.activityIds;
       if (activityIds != null && activityIds['products'] != null) {
         // Get cached products
         List<Map<String, dynamic>> cachedProducts = [];
@@ -45,21 +48,21 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
             cachedProducts.add(product);
           }
         }
-
-        if (cachedProducts.isNotEmpty) {
+        
+        if (cachedProducts.isNotEmpty && mounted) {
           setState(() {
             myListings = cachedProducts;
             isLoading = false;
           });
         }
       }
-
+      
       // If no cache or expired, refresh from server
       if (myListings.isEmpty || !ProfileService.hasValidActivityCache) {
-        await ProfileService.fetchAndCacheUserProfile();
-
+        await ProfileService.fetchAndUpdateProfile();
+        
         // Try loading from cache again
-        final freshIds = await ProfileService.activityIds;
+        final freshIds = ProfileService.activityIds;
         if (freshIds != null && freshIds['products'] != null) {
           List<Map<String, dynamic>> freshProducts = [];
           for (String id in freshIds['products']!) {
@@ -68,7 +71,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
               freshProducts.add(product);
             }
           }
-
+          
           if (mounted) {
             setState(() {
               myListings = freshProducts;
@@ -77,18 +80,24 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
           }
         }
       }
-
+      
       // Load images for all products
       for (var product in myListings) {
-        if (!_loadedImages.containsKey(product['_id'])) {
+        if (product['_id'] != null && !_loadedImages.containsKey(product['_id'])) {
           await _loadCachedImage(product['_id']);
         }
       }
     } catch (e) {
-      setState(() {
-        errorMessage = e.toString();
-        isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          errorMessage = e.toString();
+          isLoading = false;
+        });
+      }
+    } finally {
+      if (mounted && isLoading) {
+        setState(() => isLoading = false);
+      }
     }
   }
 
@@ -100,57 +109,17 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
           _loadedImages[productId] = cachedImage;
         });
       } else {
-        _fetchProductImage(productId);
+        await _fetchProductImage(productId);
       }
     } catch (e) {
       print('Error loading cached image: $e');
     }
   }
 
-  Future<void> _fetchMyListings() async {
-    try {
-      final authCookie = await _secureStorage.read(key: 'authCookie');
-      if (authCookie == null) throw Exception('Not authenticated');
-
-      final response = await http.get(
-        Uri.parse('$serverUrl/api/users/me'),
-        headers: {
-          'Content-Type': 'application/json',
-          'auth-cookie': authCookie,
-        },
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success']) {
-          // Cache ALL response data
-          await ProfileService.cacheUserResponse(data);
-
-          setState(() {
-            myListings = data['activity']['products'] ?? [];
-            isLoading = false;
-          });
-
-          // Fetch images for new/updated products
-          for (var product in myListings) {
-            if (!_loadedImages.containsKey(product['_id'])) {
-              _fetchProductImage(product['_id']);
-            }
-          }
-        }
-      }
-    } catch (e) {
-      setState(() {
-        errorMessage = e.toString();
-        isLoading = false;
-      });
-    }
-  }
-
   Future<void> _fetchProductImage(String productId) async {
     if (_loadingProductIds.contains(productId)) return;
+    
     _loadingProductIds.add(productId);
-
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
@@ -160,19 +129,19 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
           'auth-cookie': authCookie ?? '',
         },
       );
-
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] && data['image'] != null) {
           final image = data['image'];
           final numImages = data['numImages'] ?? 1;
-
+          
           if (image != null && image['data'] != null) {
             final bytes = base64Decode(image['data']);
-
+            
             // Cache the image
             await ProductCacheService.cacheImage(productId, bytes, numImages);
-
+            
             if (mounted) {
               setState(() {
                 _loadedImages[productId] = bytes;
@@ -188,56 +157,45 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
     }
   }
 
-  Widget buildProductCard(dynamic product, int index) {
-    List<dynamic> imagesList = product['images'] ?? [];
+  Widget _buildProductCard(Map<String, dynamic> product, int index) {
     Widget imageWidget;
-
+    
     if (_loadedImages.containsKey(product['_id'])) {
+      // Use cached image
       imageWidget = Image.memory(
         _loadedImages[product['_id']]!,
         fit: BoxFit.cover,
         width: double.infinity,
         height: 200,
       );
-    } else if (imagesList.isNotEmpty &&
-        imagesList[0] is Map &&
-        imagesList[0]['data'] != null) {
-      try {
-        final String base64Str = imagesList[0]['data'];
-        final Uint8List bytes = base64Decode(base64Str);
-        imageWidget = Image.memory(
-          bytes,
-          fit: BoxFit.cover,
-          width: double.infinity,
-          height: 200,
-        );
-      } catch (e) {
-        imageWidget = Container(
-          color: Colors.grey[300],
-          height: 200,
-          child: const Center(
-            child: Text('Error loading image', style: TextStyle(fontSize: 14)),
-          ),
-        );
-      }
+    } else if (_loadingProductIds.contains(product['_id'])) {
+      // Show loading indicator
+      imageWidget = Container(
+        color: Colors.grey[200],
+        height: 200,
+        child: const Center(
+          child: CircularProgressIndicator(color: Colors.black),
+        ),
+      );
     } else {
+      // No image available
       imageWidget = Container(
         color: Colors.grey[300],
         height: 200,
-        child: const Center(child: Text('No image', style: TextStyle(fontSize: 14))),
+        child: const Center(
+          child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
+        ),
       );
     }
 
     return GestureDetector(
       onTap: () {
-        // Navigate to product management screen upon tap
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) =>
-                SellerOfferManagementScreen(product: product),
+            builder: (context) => SellerOfferManagementScreen(product: product),
           ),
-        );
+        ).then((_) => _loadMyListings());
       },
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -247,7 +205,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Image section taking full width
+              // Image section
               ClipRRect(
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
                 child: imageWidget,
@@ -330,38 +288,61 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
           foregroundColor: Colors.black,
           elevation: 0,
         ),
-        body: isLoading
-            ? const Center(child: CircularProgressIndicator(color: Colors.black))
-            : errorMessage.isNotEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.error_outline, size: 64, color: Colors.black),
-                        const SizedBox(height: 16),
-                        Text('Error: $errorMessage'),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black,
-                            foregroundColor: Colors.white,
+        body: RefreshIndicator(
+          color: Colors.black,
+          onRefresh: _loadMyListings,
+          child: isLoading
+              ? const Center(child: CircularProgressIndicator(color: Colors.black))
+              : errorMessage.isNotEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.error_outline, size: 64, color: Colors.black),
+                          const SizedBox(height: 16),
+                          Text('Error: $errorMessage'),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () => _loadMyListings(),
+                            child: const Text('Retry'),
                           ),
-                          onPressed: () => _loadMyListings(),
-                          child: const Text('Retry'),
+                        ],
+                      ),
+                    )
+                  : myListings.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.inventory_2_outlined,
+                                size: 64,
+                                color: Colors.grey[400],
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No listings found',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          itemCount: myListings.length,
+                          itemBuilder: (context, index) => _buildProductCard(
+                            myListings[index],
+                            index,
+                          ),
                         ),
-                      ],
-                    ),
-                  )
-                : RefreshIndicator(
-                    color: Colors.black,
-                    onRefresh: _loadMyListings,
-                    child: ListView.builder(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      itemCount: myListings.length,
-                      itemBuilder: (context, index) =>
-                          buildProductCard(myListings[index], index),
-                    ),
-                  ),
+        ),
       ),
     );
   }

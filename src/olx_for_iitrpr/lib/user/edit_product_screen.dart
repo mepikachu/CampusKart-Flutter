@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http_parser/http_parser.dart';
+import '../services/product_cache_service.dart';
 import 'server.dart';
 
 class EditProductScreen extends StatefulWidget {
@@ -21,13 +23,15 @@ class _EditProductScreenState extends State<EditProductScreen> {
   late TextEditingController _descriptionController;
   late TextEditingController _priceController;
   late String _selectedCategory;
-  List<File> _images = [];
-  List<dynamic> _existingImages = [];
+  List<File> _newImageFiles = [];
+  List<Map<String, dynamic>> _existingImages = [];
   bool _isLoading = false;
+  bool _initialLoadingImages = true;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-
-  final List<String> _categories = ['electronics', 'furniture', 'books', 'clothing', 'others'];
-
+  
+  // Product ID for convenience
+  late String _productId;
+  
   // Colors from tab_sell
   static const primaryColor = Color(0xFF1A73E8);
   static const surfaceColor = Color(0xFFFFFFFF);
@@ -39,12 +43,97 @@ class _EditProductScreenState extends State<EditProductScreen> {
   @override
   void initState() {
     super.initState();
+    _productId = widget.product['_id'];
     _nameController = TextEditingController(text: widget.product['name']);
     _descriptionController = TextEditingController(text: widget.product['description']);
     _priceController = TextEditingController(text: widget.product['price'].toString());
     _selectedCategory = widget.product['category'];
-    if (widget.product['images'] != null) {
-      _existingImages = List.from(widget.product['images']);
+    
+    // Load existing images from cache or fetch them
+    _loadProductImages();
+  }
+
+  Future<void> _loadProductImages() async {
+    try {
+      setState(() => _initialLoadingImages = true);
+      
+      // Try to get the number of images from cache
+      final numImages = await ProductCacheService.getCachedNumImages(_productId);
+      
+      if (numImages != null && numImages > 0) {
+        // Get all cached images
+        final cachedImages = await ProductCacheService.getCachedAllImages(_productId);
+        
+        if (cachedImages != null && cachedImages.isNotEmpty) {
+          // Create proper image objects from cached data
+          List<Map<String, dynamic>> images = [];
+          for (var imageBytes in cachedImages) {
+            images.add({
+              'data': base64Encode(imageBytes),
+              'contentType': 'image/jpeg'
+            });
+          }
+          
+          setState(() {
+            _existingImages = images;
+            _initialLoadingImages = false;
+          });
+          return;
+        }
+      }
+      
+      // If cache doesn't have images, fetch from server
+      await _fetchProductImages();
+      
+    } catch (e) {
+      print('Error loading product images: $e');
+      setState(() => _initialLoadingImages = false);
+    }
+  }
+
+  Future<void> _fetchProductImages() async {
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      final response = await http.get(
+        Uri.parse('$serverUrl/api/products/$_productId/images'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] && data['images'] != null) {
+          // Process images
+          List<Map<String, dynamic>> images = [];
+          List<Uint8List> imageBytesForCache = [];
+          
+          for (var image in data['images']) {
+            if (image != null && image['data'] != null) {
+              images.add(image);
+              // Also prepare for caching
+              imageBytesForCache.add(base64Decode(image['data']));
+            }
+          }
+          
+          // Cache all images
+          if (imageBytesForCache.isNotEmpty) {
+            await ProductCacheService.cacheAllImages(_productId, imageBytesForCache);
+            await ProductCacheService.cacheNumImages(_productId, imageBytesForCache.length);
+          }
+          
+          setState(() {
+            _existingImages = images;
+            _initialLoadingImages = false;
+          });
+        }
+      } else {
+        throw Exception('Failed to fetch product images');
+      }
+    } catch (e) {
+      print('Error fetching product images: $e');
+      setState(() => _initialLoadingImages = false);
     }
   }
 
@@ -54,9 +143,11 @@ class _EditProductScreenState extends State<EditProductScreen> {
     
     if (pickedFiles != null && pickedFiles.isNotEmpty) {
       setState(() {
-        _images.addAll(pickedFiles.map((xfile) => File(xfile.path)));
-        if (_images.length + _existingImages.length > 5) {
-          _images = _images.sublist(0, 5 - _existingImages.length);
+        _newImageFiles.addAll(pickedFiles.map((xfile) => File(xfile.path)));
+        
+        // Limit total number of images to 5
+        if (_newImageFiles.length + _existingImages.length > 5) {
+          _newImageFiles = _newImageFiles.sublist(0, 5 - _existingImages.length);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Maximum 5 images allowed')),
           );
@@ -83,26 +174,30 @@ class _EditProductScreenState extends State<EditProductScreen> {
         ],
       ),
     );
-
+    
     if (confirmed != true) return;
-
+    
     setState(() => _isLoading = true);
-
+    
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       if (authCookie == null) throw Exception('Authentication required');
-
+      
       final response = await http.delete(
-        Uri.parse('$serverUrl/api/products/${widget.product['_id']}'),
+        Uri.parse('$serverUrl/api/products/$_productId'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie,
         },
       );
-
+      
       if (response.statusCode == 200) {
+        // Clear cache for this product
+        await ProductCacheService.clearCache(_productId);
+        
         if (!mounted) return;
         Navigator.of(context).pop({'refresh': true});
+        
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Product deleted successfully')),
         );
@@ -122,16 +217,16 @@ class _EditProductScreenState extends State<EditProductScreen> {
     if (!_formKey.currentState!.validate()) return;
     
     setState(() => _isLoading = true);
-
+    
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       if (authCookie == null) throw Exception('Authentication required');
-
+      
       final request = http.MultipartRequest(
         'PUT',
-        Uri.parse('$serverUrl/api/products/${widget.product['_id']}'),
+        Uri.parse('$serverUrl/api/products/$_productId'),
       );
-
+      
       request.headers['auth-cookie'] = authCookie;
       
       // Add form fields
@@ -139,15 +234,15 @@ class _EditProductScreenState extends State<EditProductScreen> {
       request.fields['description'] = _descriptionController.text.trim();
       request.fields['price'] = _priceController.text.trim();
       request.fields['category'] = _selectedCategory;
-      request.fields['clearOffers'] = 'true'; // Add this line to clear offers
+      request.fields['clearOffers'] = 'true';
       
       // Add existing images that weren't deleted
       if (_existingImages.isNotEmpty) {
         request.fields['existingImages'] = json.encode(_existingImages);
       }
-
+      
       // Add new images
-      for (var image in _images) {
+      for (var image in _newImageFiles) {
         var stream = http.ByteStream(image.openRead());
         var length = await image.length();
         var multipartFile = http.MultipartFile(
@@ -159,14 +254,26 @@ class _EditProductScreenState extends State<EditProductScreen> {
         );
         request.files.add(multipartFile);
       }
-
+      
       final response = await request.send();
       final responseBody = await response.stream.bytesToString();
       final responseData = json.decode(responseBody);
-
+      
       if (response.statusCode == 200) {
+        // Update the cache with the updated product data
+        if (responseData['product'] != null) {
+          await ProductCacheService.cacheProduct(_productId, responseData['product']);
+          
+          // Update images in cache if they changed
+          if (_newImageFiles.isNotEmpty || _existingImages.length != widget.product['images']?.length) {
+            // We'll just invalidate the image cache, it will reload next time
+            await ProductCacheService.clearCache(_productId);
+          }
+        }
+        
         if (!mounted) return;
         Navigator.of(context).pop({'refresh': true});
+        
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Product updated successfully. All existing offers have been cleared.')),
         );
@@ -183,6 +290,34 @@ class _EditProductScreenState extends State<EditProductScreen> {
   }
 
   Widget _buildImagePreviews() {
+    if (_initialLoadingImages) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: surfaceColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: outlineColor),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: const Center(
+          child: Column(
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 12),
+              Text('Loading images...'),
+            ],
+          ),
+        ),
+      );
+    }
+    
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -211,7 +346,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Add up to ${5 - _existingImages.length} more images',
+            'Add up to ${5 - _existingImages.length - _newImageFiles.length} more images',
             style: const TextStyle(
               fontSize: 14,
               color: textSecondaryColor,
@@ -232,14 +367,14 @@ class _EditProductScreenState extends State<EditProductScreen> {
                       children: [
                         ClipRRect(
                           borderRadius: BorderRadius.circular(12),
-                          child: imageData['data'] != null 
-                            ? Image.memory(
-                                base64Decode(imageData['data']),
-                                height: 120,
-                                width: 120,
-                                fit: BoxFit.cover,
-                              )
-                            : Container(color: Colors.grey),
+                          child: imageData['data'] != null
+                              ? Image.memory(
+                                  base64Decode(imageData['data']),
+                                  height: 120,
+                                  width: 120,
+                                  fit: BoxFit.cover,
+                                )
+                              : Container(color: Colors.grey),
                         ),
                         Positioned(
                           top: 8,
@@ -263,9 +398,9 @@ class _EditProductScreenState extends State<EditProductScreen> {
                     ),
                   );
                 }).toList(),
-
+                
                 // Display newly picked images
-                ..._images.map((file) {
+                ..._newImageFiles.map((file) {
                   return Container(
                     width: 120,
                     margin: const EdgeInsets.only(right: 12),
@@ -293,7 +428,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
                               padding: const EdgeInsets.all(4),
                               constraints: const BoxConstraints(),
                               onPressed: () {
-                                setState(() => _images.remove(file));
+                                setState(() => _newImageFiles.remove(file));
                               },
                             ),
                           ),
@@ -302,9 +437,9 @@ class _EditProductScreenState extends State<EditProductScreen> {
                     ),
                   );
                 }).toList(),
-
+                
                 // Add image button
-                if (_existingImages.length + _images.length < 5)
+                if (_existingImages.length + _newImageFiles.length < 5)
                   Container(
                     width: 120,
                     margin: const EdgeInsets.only(right: 12),
@@ -316,9 +451,9 @@ class _EditProductScreenState extends State<EditProductScreen> {
                     child: InkWell(
                       onTap: _pickImages,
                       borderRadius: BorderRadius.circular(12),
-                      child: Column(
+                      child: const Column(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
+                        children: [
                           Icon(
                             Icons.add_photo_alternate_rounded,
                             color: primaryColor,
@@ -350,6 +485,9 @@ class _EditProductScreenState extends State<EditProductScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Edit Product'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.delete),
@@ -367,6 +505,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
               children: [
                 _buildImagePreviews(),
                 const SizedBox(height: 24),
+                
                 // Read-only product name
                 TextFormField(
                   controller: _nameController,
@@ -379,6 +518,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
                   enabled: false, // Make it read-only
                 ),
                 const SizedBox(height: 16),
+                
                 // Editable description
                 TextFormField(
                   controller: _descriptionController,
@@ -390,10 +530,11 @@ class _EditProductScreenState extends State<EditProductScreen> {
                     ),
                   ),
                   maxLines: 3,
-                  validator: (value) => 
+                  validator: (value) =>
                       (value?.isEmpty ?? true) ? "Enter description" : null,
                 ),
                 const SizedBox(height: 16),
+                
                 // Editable price and read-only category
                 Row(
                   children: [
@@ -409,7 +550,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
                           ),
                         ),
                         keyboardType: TextInputType.number,
-                        validator: (value) => 
+                        validator: (value) =>
                             (value?.isEmpty ?? true) ? "Enter price" : null,
                       ),
                     ),
@@ -430,12 +571,15 @@ class _EditProductScreenState extends State<EditProductScreen> {
                   ],
                 ),
                 const SizedBox(height: 32),
+                
                 Container(
                   width: double.infinity,
                   height: 54,
                   margin: const EdgeInsets.only(bottom: 16),
                   child: ElevatedButton(
-                    onPressed: _isLoading || _existingImages.isEmpty ? null : _updateProduct,
+                    onPressed: _isLoading || _initialLoadingImages || _existingImages.isEmpty && _newImageFiles.isEmpty 
+                      ? null 
+                      : _updateProduct,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       shape: RoundedRectangleBorder(
@@ -445,7 +589,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
                     child: _isLoading
                         ? const CircularProgressIndicator(color: Colors.white)
                         : Text(
-                            _existingImages.isEmpty 
+                            _existingImages.isEmpty && _newImageFiles.isEmpty
                                 ? 'At least one image required'
                                 : 'Save Changes',
                             style: const TextStyle(

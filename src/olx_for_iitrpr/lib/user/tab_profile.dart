@@ -10,9 +10,6 @@ import 'my_donations.dart';
 import 'my_purchases.dart';
 import 'my_lost_items.dart';
 import 'edit_profile_screen.dart';
-import '../services/product_cache_service.dart';
-import '../services/donation_cache_service.dart';
-import '../services/lost_found_cache_service.dart';
 import '../services/profile_service.dart';
 import 'server.dart';
 
@@ -20,7 +17,7 @@ class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
 
   @override
-  State<ProfileTab> createState() => _ProfileTabState();
+  State createState() => _ProfileTabState();
 }
 
 class _ProfileTabState extends State<ProfileTab> {
@@ -28,7 +25,7 @@ class _ProfileTabState extends State<ProfileTab> {
   Map<String, dynamic>? userData;
   String errorMessage = '';
   bool isLoading = true;
-  bool _hasLoadedProfileImage = false;
+  bool isLoadingImage = false;
   Uint8List? _profileImageBytes;
 
   @override
@@ -37,131 +34,157 @@ class _ProfileTabState extends State<ProfileTab> {
     _loadUserData();
   }
 
+  /// Load user profile data with caching strategy
   Future<void> _loadUserData() async {
-    setState(() => isLoading = true);
-
+    if (mounted) {
+      setState(() => isLoading = true);
+    }
+    
     try {
-      // First load cached data
-      final cachedData = await _secureStorage.read(key: 'cached_user_profile');
-      if (cachedData != null) {
+      // First try to get cached profile data
+      final cachedProfile = ProfileService.profileData;
+      if (cachedProfile != null) {
+        if (mounted) {
+          setState(() {
+            userData = cachedProfile;
+            isLoading = false;
+          });
+        }
+        await _loadProfileImage();
+      }
+      
+      // Fetch fresh data from server in the background
+      final success = await ProfileService.fetchAndUpdateProfile();
+      
+      if (success && mounted) {
         setState(() {
-          userData = json.decode(cachedData);
+          userData = ProfileService.profileData;
+          errorMessage = '';
+        });
+        
+        // Reload profile image if needed
+        if (!isLoadingImage) {
+          await _loadProfileImage();
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          errorMessage = 'Error: ${e.toString()}';
           isLoading = false;
         });
       }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
 
-      // Then fetch fresh data
+  /// Load and cache the user's profile image
+  Future<void> _loadProfileImage() async {
+    if (isLoadingImage || userData == null || userData!['profilePicture'] == null) {
+      return;
+    }
+    
+    try {
+      setState(() {
+        isLoadingImage = true;
+      });
+      
+      // Check for cached image first
+      final prefs = await SharedPreferences.getInstance();
+      final cachedImageStr = prefs.getString('profile_image');
+      
+      if (cachedImageStr != null) {
+        if (mounted) {
+          setState(() {
+            _profileImageBytes = base64Decode(cachedImageStr);
+          });
+        }
+        
+        // Check if the profile was updated recently
+        final imageTimestamp = prefs.getString('profile_image_timestamp');
+        if (imageTimestamp != null) {
+          final lastUpdate = DateTime.parse(imageTimestamp);
+          if (DateTime.now().difference(lastUpdate) <= const Duration(hours: 1)) {
+            setState(() {
+              isLoadingImage = false;
+            });
+            return; // Use cached image if it's recent
+          }
+        }
+      }
+      
+      // Fetch from server if no cache or cache is old
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('$serverUrl/api/users/me'),
+        Uri.parse('$serverUrl/api/users/me/profile-picture'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
         },
       );
-
-      final responseBody = json.decode(response.body);
-      if (response.statusCode == 200 && responseBody['success'] == true) {
-        // Cache user profile data
-        await _secureStorage.write(
-          key: 'cached_user_profile',
-          value: json.encode(responseBody['user']),
-        );
-
-        // Cache data in respective services
-        if (responseBody['activity'] != null) {
-          await ProfileService.cacheUserResponse(responseBody);
-
-          // Cache products
-          if (responseBody['activity']['products'] != null) {
-            for (var product in responseBody['activity']['products']) {
-              await ProductCacheService.cacheProduct(product['_id'], product);
-            }
-          }
-
-          // Cache donations
-          if (responseBody['activity']['donations'] != null) {
-            for (var donation in responseBody['activity']['donations']) {
-              await DonationCacheService.cacheDonation(donation['_id'], donation);
-            }
-          }
-
-          // Cache lost items
-          if (responseBody['activity']['lost_items'] != null) {
-            for (var item in responseBody['activity']['lost_items']) {
-              await LostFoundCacheService.cacheItem(item['_id'], item);
-            }
-          }
-        }
-
-        if (mounted) {
-          setState(() {
-            userData = responseBody['user'];
-            errorMessage = '';
-          });
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => errorMessage = e.toString());
-      }
-    }
-
-    await _loadProfileImage();
-  }
-
-  Future<void> _loadProfileImage() async {
-    try {
-      if (_hasLoadedProfileImage || userData == null || 
-          userData!['profilePicture'] == null) return;
-
-      final authCookie = await _secureStorage.read(key: 'authCookie');
-      final response = await http.get(
-        Uri.parse('$serverUrl/api/users/me/profile-picture'),
-        headers: {
-          'Content-Type': 'application/json',  
-          'auth-cookie': authCookie ?? '',
-        },
-      );
-
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] && data['image'] != null) {
-          setState(() {
-            _profileImageBytes = base64Decode(data['image']['data']);
-            _hasLoadedProfileImage = true;
-          });
+          final imageBytes = base64Decode(data['image']['data']);
+          
+          // Cache in memory and storage
+          if (mounted) {
+            setState(() {
+              _profileImageBytes = imageBytes;
+            });
+          }
+          
+          // Save to shared preferences
+          await prefs.setString('profile_image', data['image']['data']);
+          await prefs.setString('profile_image_timestamp', DateTime.now().toIso8601String());
         }
       }
     } catch (e) {
       print('Error loading profile image: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoadingImage = false;
+        });
+      }
     }
   }
 
+  /// Handle user logout
   Future<void> _logout() async {
-    // First, clear local storage and navigate
-    final authCookie = await _secureStorage.read(key: 'authCookie');
-    await _secureStorage.delete(key: 'authCookie');
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
+    try {
+      // First, clear local storage and navigate
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      
+      // Clear all caches
+      await ProfileService.clearProfile();
+      await _secureStorage.delete(key: 'authCookie');
+      
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      
+      if (mounted) {
+        setState(() {
+          userData = null;
+          errorMessage = '';
+          _profileImageBytes = null;
+        });
+        
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          '/login',
+          (route) => false,
+        );
+      }
 
-    await _secureStorage.deleteAll();
-    setState(() {
-      userData = null;
-      errorMessage = '';
-    });
-
-    if (mounted) {
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        '/login',
-        (route) => false,
-      );
-    }
-
-    // Then, make the API call in the background
-    if (authCookie != null) {
-      try {
+      // Then, make the API call in the background
+      if (authCookie != null) {
         await http.post(
           Uri.parse('$serverUrl/api/logout'),
           headers: {
@@ -169,16 +192,15 @@ class _ProfileTabState extends State<ProfileTab> {
             'auth-cookie': authCookie,
           },
         );
-      } catch (e) {
-        print("Backend logout error: $e");
-        // We don't need to handle this error as user is already logged out locally
       }
+    } catch (e) {
+      print("Logout error: $e");
     }
   }
 
   String _formatAddress(Map<String, dynamic>? address) {
     if (address == null) return 'No address';
-    return '${address['street']}, ${address['city']}, ${address['state']}, ${address['zipCode']}';
+    return '${address['street'] ?? ''}, ${address['city'] ?? ''}, ${address['state'] ?? ''}, ${address['zipCode'] ?? ''}';
   }
 
   String _formatDate(String? dateString) {
@@ -193,6 +215,7 @@ class _ProfileTabState extends State<ProfileTab> {
 
   Widget _buildInfoCard(String title, String value) {
     return Card(
+      elevation: 2,
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       child: Padding(
         padding: const EdgeInsets.all(15),
@@ -336,16 +359,16 @@ class _ProfileTabState extends State<ProfileTab> {
           ),
         ),
         const SizedBox(height: 20),
-        // Static sections without shimmer
+        // Static sections
         _buildSection('My Listings', Icons.list),
         _buildSection('My Purchases', Icons.shopping_bag),
         _buildSection('My Donations', Icons.volunteer_activism),
         _buildSection('My Lost Items', Icons.search),
         _buildSection('Settings', Icons.settings),
         const SizedBox(height: 20),
-        // Static logout button without shimmer
+        // Static logout button
         TextButton(
-          onPressed: _logout,
+          onPressed: null,  // Disabled while loading
           style: TextButton.styleFrom(
             foregroundColor: Colors.red,
             textStyle: const TextStyle(
@@ -365,6 +388,7 @@ class _ProfileTabState extends State<ProfileTab> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: RefreshIndicator(
+        color: Colors.black,
         onRefresh: _loadUserData,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -373,7 +397,7 @@ class _ProfileTabState extends State<ProfileTab> {
               : Column(
                   children: [
                     const SizedBox(height: 20),
-                    // Profile picture - Modified to match view_profile.dart
+                    // Profile picture
                     CircleAvatar(
                       radius: 50,
                       backgroundColor: Colors.grey.shade200,
@@ -382,21 +406,25 @@ class _ProfileTabState extends State<ProfileTab> {
                           : null,
                       child: _profileImageBytes == null
                           ? const Icon(Icons.person, size: 50, color: Colors.grey)
-                          : null,
+                          : isLoadingImage 
+                              ? const CircularProgressIndicator()
+                              : null,
                     ),
                     const SizedBox(height: 8),
-                    // Add Edit Profile Button
+                    // Edit Profile Button
                     TextButton.icon(
                       onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => EditProfileScreen(
-                              userData: userData!,
-                              onProfileUpdated: () => _loadUserData(),
+                        if (userData != null) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => EditProfileScreen(
+                                userData: userData!,
+                                onProfileUpdated: () => _loadUserData(),
+                              ),
                             ),
-                          ),
-                        );
+                          );
+                        }
                       },
                       icon: const Icon(Icons.edit, size: 16),
                       label: const Text('Edit Profile'),
@@ -405,11 +433,10 @@ class _ProfileTabState extends State<ProfileTab> {
                         textStyle: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),
-                    const SizedBox(height: 8),
                     const SizedBox(height: 16),
                     // Username
                     Text(
-                      userData?['userName'] ?? '',
+                      userData?['userName'] ?? 'User',
                       style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -426,10 +453,8 @@ class _ProfileTabState extends State<ProfileTab> {
                     const SizedBox(height: 20),
                     // Info cards
                     _buildInfoCard('Phone', userData?['phone'] ?? 'Not provided'),
-                    _buildInfoCard(
-                        'Address', _formatAddress(userData?['address'])),
-                    _buildInfoCard('Member Since',
-                        _formatDate(userData?['registrationDate'])),
+                    _buildInfoCard('Address', _formatAddress(userData?['address'])),
+                    _buildInfoCard('Member Since', _formatDate(userData?['registrationDate'])),
                     const SizedBox(height: 20),
                     // Sections
                     _buildSection('My Listings', Icons.list),
@@ -455,7 +480,7 @@ class _ProfileTabState extends State<ProfileTab> {
                       Padding(
                         padding: const EdgeInsets.all(16),
                         child: Text(
-                          'Error: $errorMessage',
+                          errorMessage,
                           style: const TextStyle(color: Colors.red),
                         ),
                       ),
