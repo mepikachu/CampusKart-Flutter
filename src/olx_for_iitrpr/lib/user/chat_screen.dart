@@ -182,13 +182,15 @@ class ChatScreen extends StatefulWidget {
   final String partnerNames;
   final String partnerId;
   final Map? initialProduct; // For "Chat with Seller"
-  
+  final Map? initialDonation; // For "Chat with Donor"
+
   const ChatScreen({
     Key? key,
     required this.conversationId,
     required this.partnerNames,
     required this.partnerId,
     this.initialProduct,
+    this.initialDonation,
   }) : super(key: key);
 
   @override
@@ -271,14 +273,22 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _checkIfBlocked();
     _loadPartnerProfilePicture();
     
-    // Handle initial product from "Chat with Seller"
-    if (widget.initialProduct != null) {
+    // Handle initial product/donation for chat
+    if (widget.initialProduct != null || widget.initialDonation != null) {
+      final item = widget.initialProduct ?? widget.initialDonation;
+      final itemType = widget.initialProduct != null ? 'product' : 'donation';
+      final itemId = widget.initialProduct != null ? 
+                     item!['productId'] : 
+                     item!['donationId'];
+
       WidgetsBinding.instance.addPostFrameCallback((_) {
         setState(() {
           _replyingTo = {
-            'id': widget.initialProduct!['productId'],
-            'type': 'product',
-            'text': widget.initialProduct!['name'] ?? 'Product',
+            'id': itemId,
+            'type': itemType,
+            'text': item['name'],
+            'price': item['price'],
+            'image': item['image'],
           };
         });
         
@@ -1196,6 +1206,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     
     // Create a temporary message with a temporary ID
     final tempId = DateTime.now().millisecondsSinceEpoch.toString();
+    
+    // Store replyTo data before clearing it
+    final replyToData = _replyingTo;
+    
     Map tempMessage = {
       'messageId': tempId,
       'sender': currentUserId,
@@ -1205,16 +1219,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     };
     
     // Add replyTo information if replying to something
-    if (_replyingTo != null) {
+    if (replyToData != null) {
       tempMessage['replyTo'] = {
-        'id': _replyingTo!['id'],
-        'type': 'product',
-        'text': _replyingTo!['text'] ?? 'Product',
+        'id': replyToData['id'],
+        'type': replyToData['type'],
+        'text': replyToData['text'] ?? 'Item',
       };
     }
-    
-    // Store replyTo data for the API call
-    final replyToData = _replyingTo;
     
     setState(() {
       // Set isLoading to false if this is the first message
@@ -2540,109 +2551,80 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     try {
       final replyTo = message['replyTo'];
       if (replyTo == null) return SizedBox.shrink();
-      
-      // Handle product replies
-      if (replyTo['type'] == 'product') {
-        final productId = replyTo['id'];
-        
-        // Get a reference to the Future only once per productId to prevent rebuilds
-        final Future<Map<String, dynamic>> productFuture = _fetchProductDetails(productId);
-        
-        return FutureBuilder<Map<String, dynamic>>(
-          future: productFuture,
-          builder: (context, snapshot) {
-            // If we have data, immediately show it
-            if (snapshot.hasData) {
-              return _buildProductPreviewContent(snapshot.data!);
-            }
-            
-            // If there's an error, show error state
-            if (snapshot.hasError) {
-              return Container(
-                margin: const EdgeInsets.only(bottom: 6),
-                padding: const EdgeInsets.all(6),
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border(
-                    left: BorderSide(
-                      color: Colors.red.shade300,
-                      width: 4,
-                    ),
-                  ),
-                ),
-                child: Text(
-                  'Product unavailable',
-                  style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic),
-                ),
-              );
-            }
-            
-            // If still loading, show a stable loading state
-            return Container(
-              margin: const EdgeInsets.only(bottom: 6),
-              padding: const EdgeInsets.all(6),
-                           width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(8),
-                border: Border(
-                  left: BorderSide(
-                    color: Colors.green.shade700,
-                    width: 4,
-                  ),
-                ),
+
+      // Handle donation and product replies
+      if (replyTo['type'] == 'donation' || replyTo['type'] == 'product') {
+        final itemId = replyTo['id'];
+        final itemType = replyTo['type'];
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.all(6),
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(8),
+            border: Border(
+              left: BorderSide(
+                color: itemType == 'donation' ? Colors.green.shade700 : Colors.blue.shade700,
+                width: 4,
               ),
-              child: Row(
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
                 children: [
-                  Icon(Icons.shopping_bag, size: 12, color: Colors.green.shade700),
+                  Icon(
+                    itemType == 'donation' ? Icons.volunteer_activism : Icons.shopping_bag,
+                    size: 12,
+                    color: itemType == 'donation' ? Colors.green.shade700 : Colors.blue.shade700,
+                  ),
                   SizedBox(width: 4),
                   Text(
-                    'Product',
+                    itemType == 'donation' ? 'Donation' : 'Product',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
-                      color: Colors.green.shade700,
-                    ),
-                  ),
-                  Expanded(child: SizedBox()), // Spacer
-                  SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.green.shade700),
+                      color: itemType == 'donation' ? Colors.green.shade700 : Colors.blue.shade700,
                     ),
                   ),
                 ],
               ),
-            );
-          },
+              const SizedBox(height: 2),
+              Text(
+                replyTo['text'] ?? 'Item',
+                style: const TextStyle(fontSize: 12),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         );
       }
-      
-      // Handle message replies
-      final replyToId = replyTo['id'];
-      final originalMessage = messages.firstWhere(
-        (m) => m['messageId'] != null && m['messageId'].toString() == replyToId.toString(),
+
+      // Handle regular message replies
+      final replyToMessage = messages.firstWhere(
+        (m) => m['_id']?.toString() == message['replyToMessageId']?.toString(),
         orElse: () => {'text': 'Original message not found', 'sender': currentUserId},
       );
-      
-      final messageText = originalMessage['text'] ?? 'Message unavailable';
+
+      final messageText = replyToMessage['text'] ?? 'Message unavailable';
+
       bool isOriginalSenderMe = false;
-      
-      if (originalMessage['sender'] != null) {
-        if (originalMessage['sender'] is String) {
-          isOriginalSenderMe = originalMessage['sender'].toString() == currentUserId.toString();
-        } else if (originalMessage['sender'] is Map && originalMessage['sender']['_id'] != null) {
-          isOriginalSenderMe = originalMessage['sender']['_id'].toString() == currentUserId.toString();
+      if (replyToMessage['sender'] != null) {
+        if (replyToMessage['sender'] is String) {
+          isOriginalSenderMe = replyToMessage['sender'].toString() == currentUserId.toString();
+        } else if (replyToMessage['sender'] is Map && replyToMessage['sender']['_id'] != null) {
+          isOriginalSenderMe = replyToMessage['sender']['_id'].toString() == currentUserId.toString();
         }
       }
-      
+
       return GestureDetector(
         onTap: () {
-          _scrollToMessage(replyToId.toString());
+          _scrollToMessage(replyToMessage['_id'].toString());
         },
         child: Container(
           margin: const EdgeInsets.only(bottom: 6),

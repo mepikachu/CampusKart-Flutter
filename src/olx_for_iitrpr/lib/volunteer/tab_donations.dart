@@ -1,9 +1,12 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../services/product_cache_service.dart';
 import 'donation_description.dart';
 import 'server.dart';
+
 enum SortOption {
   nameAsc,
   nameDesc,
@@ -20,6 +23,8 @@ class VolunteerDonationsPage extends StatefulWidget {
 
 class _VolunteerDonationsPageState extends State<VolunteerDonationsPage> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final Map<String, Uint8List> _loadedImages = {};
+  final Set<String> _loadingProductIds = {};
   List<dynamic> donations = [];
   List<dynamic> filteredDonations = [];
   String searchQuery = '';
@@ -38,8 +43,7 @@ class _VolunteerDonationsPageState extends State<VolunteerDonationsPage> {
       setState(() => isLoading = true);
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse(
-            '$serverUrl/api/donations?status=available'),
+        Uri.parse('$serverUrl/api/donations?status=available'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -47,19 +51,94 @@ class _VolunteerDonationsPageState extends State<VolunteerDonationsPage> {
       );
       final data = json.decode(response.body);
       if (response.statusCode == 200 && data['success'] == true) {
+        // Filter out invalid donations
+        final validDonations = (data['donations'] as List).where((donation) {
+          return donation != null && 
+                 donation['_id'] != null &&
+                 donation['name'] != null;
+        }).toList();
+
+        print('Valid Donations: ${validDonations.length}'); // Debug log
+        
         setState(() {
-          donations = data['donations'];
-          filteredDonations = List.from(donations);
+          donations = validDonations;
+          filteredDonations = List.from(validDonations);
           _sortDonations();
           errorMessage = '';
         });
+
+        // Load images for valid donations
+        for (var donation in validDonations) {
+          if (donation['_id'] != null) {
+            _loadCachedImage(donation['_id']);
+          }
+        }
       } else {
         throw Exception(data['error'] ?? 'Failed to load donations');
       }
     } catch (e) {
+      print('Error fetching donations: $e'); // Debug log
       setState(() => errorMessage = e.toString());
     } finally {
       setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> _loadCachedImage(String donationId) async {
+    try {
+      if (_loadedImages.containsKey(donationId) || _loadingProductIds.contains(donationId)) {
+        return;
+      }
+
+      final cachedImage = await ProductCacheService.getCachedImage(donationId);
+      if (cachedImage != null && mounted) {
+        setState(() {
+          _loadedImages[donationId] = cachedImage;
+        });
+      } else {
+        _fetchProductImage(donationId);
+      }
+    } catch (e) {
+      print('Error loading cached image: $e');
+    }
+  }
+
+  Future<void> _fetchProductImage(String donationId) async {
+    if (_loadingProductIds.contains(donationId)) return;
+    _loadingProductIds.add(donationId);
+
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      final response = await http.get(
+        Uri.parse('$serverUrl/api/donations/$donationId/main_image'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] && data['image'] != null) {
+          final image = data['image'];
+          final numImages = data['numImages'] ?? 1;
+
+          if (image != null && image['data'] != null) {
+            final bytes = base64Decode(image['data']);
+            await ProductCacheService.cacheImage(donationId, bytes, numImages);
+
+            if (mounted) {
+              setState(() {
+                _loadedImages[donationId] = bytes;
+              });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error fetching image: $e');
+    } finally {
+      _loadingProductIds.remove(donationId);
     }
   }
 
@@ -165,28 +244,45 @@ class _VolunteerDonationsPageState extends State<VolunteerDonationsPage> {
     );
   }
 
-  Widget _buildDonationCard(dynamic donation, int index) {
+  Widget _buildDonationCard(Map<String, dynamic> donation, int index) {
+    final String donationId = donation['_id'] ?? '';
+    if (donationId.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
     Widget imageWidget;
-    final List<dynamic> images = donation['images'] ?? [];
-    if (images.isNotEmpty && images[0]['data'] != null) {
-      try {
-        final bytes = base64Decode(images[0]['data']);
-        imageWidget = Image.memory(bytes,
-            fit: BoxFit.cover, width: double.infinity, height: 200);
-      } catch (e) {
-        imageWidget = Container(
-          color: Colors.grey[300],
-          height: 200,
-          child: const Center(child: Text('Error loading image')),
-        );
-      }
+    if (_loadedImages.containsKey(donationId)) {
+      imageWidget = Image.memory(
+        _loadedImages[donationId]!,
+        fit: BoxFit.cover,
+        height: 200,
+        width: double.infinity,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            color: Colors.grey[300],
+            height: 200,
+            child: const Center(
+              child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
+            ),
+          );
+        },
+      );
+    } else if (_loadingProductIds.contains(donationId)) {
+      imageWidget = Container(
+        color: Colors.grey[200],
+        height: 200,
+        child: const Center(child: CircularProgressIndicator(color: Colors.black)),
+      );
     } else {
       imageWidget = Container(
         color: Colors.grey[300],
         height: 200,
-        child: const Center(child: Text('No image')),
+        child: const Center(
+          child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
+        ),
       );
     }
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
