@@ -462,33 +462,6 @@ class _ProfileTabState extends State<ProfileTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            child: TextButton.icon(
-              onPressed: _logout,
-              icon: Icon(Icons.logout, color: Colors.red.shade400),
-              label: Text(
-                'Logout',
-                style: TextStyle(
-                  color: Colors.red.shade400,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              style: TextButton.styleFrom(
-                backgroundColor: Colors.red.shade50,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
       body: RefreshIndicator(
         color: Colors.black,
         onRefresh: _loadUserData,
@@ -499,7 +472,32 @@ class _ProfileTabState extends State<ProfileTab> {
               : Column(
                   children: [
                     const SizedBox(height: 20),
-                    // Simple clean avatar without edit button
+                    // Logout button at top of scrolling content
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        child: TextButton.icon(
+                          onPressed: _logout,
+                          icon: Icon(Icons.logout, color: Colors.red.shade400),
+                          label: Text(
+                            'Logout',
+                            style: TextStyle(
+                              color: Colors.red.shade400,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          style: TextButton.styleFrom(
+                            backgroundColor: Colors.red.shade50,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Profile avatar
                     CircleAvatar(
                       radius: 50,
                       backgroundColor: Colors.grey.shade200,
