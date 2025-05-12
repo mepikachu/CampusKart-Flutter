@@ -95,7 +95,7 @@ class _ReportsTabState extends State<ReportsTab> {
 
       final data = json.decode(response.body);
 
-      if (response.statusCode == 200 && data['success'] == true) {
+      if (response.statusCode == 200) {
         setState(() {
           _allReports = data['reports'] ?? [];
           _totalPages = data['totalPages'] ?? 1;
@@ -405,69 +405,121 @@ class _ReportsTabState extends State<ReportsTab> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white, // Set white background
+      backgroundColor: Colors.white,
       body: Stack(
         children: [
           Column(
             children: [
-              // Filter section
               _buildCompactFilterBar(),
               
-              // Reports list
               Expanded(
-                child: _isLoading && _allReports.isEmpty
+                child: _isLoading
                     ? _buildShimmerLoading()
-                    : _isError && _allReports.isEmpty
-                        ? _buildErrorView()
-                        : _filteredReports.isEmpty
-                            ? Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.info_outline, size: 48, color: Colors.grey.shade400),
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      'No reports found',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        color: Colors.grey.shade600,
+                    : RefreshIndicator(
+                        onRefresh: _fetchAllReports,
+                        child: _isError
+                            ? _buildErrorView()
+                            : _allReports.isEmpty
+                                ? _buildEmptyState()
+                                : _filteredReports.isEmpty && _hasActiveFilters()
+                                    ? _buildNoFilterResults()
+                                    : ListView.builder(
+                                        controller: _scrollController,
+                                        itemCount: _filteredReports.length + (_currentPage < _totalPages ? 1 : 0),
+                                        itemBuilder: (context, index) {
+                                          if (index == _filteredReports.length) {
+                                            return const Padding(
+                                              padding: EdgeInsets.symmetric(vertical: 16.0),
+                                              child: Center(child: CircularProgressIndicator()),
+                                            );
+                                          }
+                                          final report = _filteredReports[index];
+                                          final bool isExpanded = _expandedReportId == report['_id'];
+                                          return _buildReportItem(report, isExpanded);
+                                        },
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            : RefreshIndicator(
-                                onRefresh: _fetchAllReports,
-                                child: ListView.builder(
-                                  controller: _scrollController,
-                                  itemCount: _filteredReports.length + (_currentPage < _totalPages ? 1 : 0),
-                                  itemBuilder: (context, index) {
-                                    if (index == _filteredReports.length) {
-                                      return const Padding(
-                                        padding: EdgeInsets.symmetric(vertical: 16.0),
-                                        child: Center(child: CircularProgressIndicator()),
-                                      );
-                                    }
-                                    
-                                    final report = _filteredReports[index];
-                                    final bool isExpanded = _expandedReportId == report['_id'];
-                                    
-                                    return _buildReportItem(report, isExpanded);
-                                  },
-                                ),
-                              ),
+                      ),
               ),
             ],
           ),
-          
-          // Loading overlay
           if (_isPerformingAction)
             Container(
               color: Colors.black.withOpacity(0.3),
-              child: const Center(
-                child: CircularProgressIndicator(),
-              ),
+              child: const Center(child: CircularProgressIndicator()),
             ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.report_off_outlined,
+            size: 64,
+            color: Colors.grey[400],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No Reports',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'There are no reports to review',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[600],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoFilterResults() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.filter_list_off,
+            size: 64,
+            color: Colors.grey[400],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No Matching Reports',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey[800],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Try adjusting your filters',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextButton.icon(
+            onPressed: _clearFilters,
+            icon: Icon(Icons.clear_all, color: Theme.of(context).primaryColor),
+            label: Text(
+              'Clear Filters',
+              style: TextStyle(color: Theme.of(context).primaryColor),
+            ),
+          ),
         ],
       ),
     );
@@ -768,7 +820,7 @@ class _ReportsTabState extends State<ReportsTab> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                _selectedStatus.capitalize(),
+                                StringExtension(_selectedStatus).capitalize(),
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: filterColor,

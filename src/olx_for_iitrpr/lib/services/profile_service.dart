@@ -79,6 +79,7 @@ class ProfileService {
 
   /// Cache a user response containing profile and activity data
   static Future<void> cacheUserResponse(Map<String, dynamic> response) async {
+    print('start');
     if (response['user'] != null) {
       _profileData = response['user'];
       await _storage.write(
@@ -88,58 +89,81 @@ class ProfileService {
     }
 
     if (response['activity'] != null) {
-      // Extract and store activity IDs
+      final activity = response['activity'];
+      
+      // Extract and store activity IDs, ensuring String type
       _userActivityIds = {
-        'products': _extractIds(response['activity']['products']),
-        'donations': _extractIds(response['activity']['donations']),
-        'lost_items': _extractIds(response['activity']['lost_items']),
-        'purchasedProducts': _extractIds(response['activity']['purchasedProducts']),
+        'products': _extractIds(activity['products'] as List?),
+        'donations': _extractIds(activity['donations'] as List?),
+        'lost_items': _extractIds(activity['lostitems'] as List?),
+        'purchasedProducts': _extractIds(activity['purchasedProducts'] as List?),
       };
       
+      print('start2');
       // Cache full objects in respective services
-      if (response['activity']['products'] != null) {
-        for (var product in response['activity']['products']) {
-          await ProductCacheService.cacheProduct(product['_id'], product);
+      if (activity['products'] != null) {
+        for (var product in activity['products'] as List) {
+          if (product is Map<String, dynamic> && product['_id'] != null) {
+            print(product);
+            await ProductCacheService.cacheProduct(
+              product['_id'].toString(),
+              product
+            );
+          }
+        }
+      }
+      print('start3');
+      
+      if (activity['donations'] != null) {
+        for (var donation in activity['donations'] as List) {
+          if (donation is Map<String, dynamic> && donation['_id'] != null) {
+            print(donation);
+            await DonationCacheService.cacheDonation(
+              donation['_id'].toString(),
+              donation
+            );
+          }
         }
       }
       
-      if (response['activity']['donations'] != null) {
-        for (var donation in response['activity']['donations']) {
-          await DonationCacheService.cacheDonation(donation['_id'], donation);
-        }
-      }
-      
-      if (response['activity']['lost_items'] != null) {
-        for (var item in response['activity']['lost_items']) {
-          await LostFoundCacheService.cacheItem(item['_id'], item);
+      print('start4');
+      if (activity['lostitems'] != null) {
+        for (var item in activity['lostitems'] as List) {
+          if (item is Map<String, dynamic> && item['_id'] != null) {
+            print(item);
+            await LostFoundCacheService.cacheItem(
+              item['_id'].toString(),
+              item
+            );
+          }
         }
       }
 
-      // Store activity IDs in secure storage
+      // Store activity IDs in secure storage with proper typing
       await _storage.write(
         key: _activityIdsKey,
         value: json.encode({
-          'products': _userActivityIds!['products'],
-          'donations': _userActivityIds!['donations'],
-          'lost_items': _userActivityIds!['lost_items'],
-          'purchasedProducts': _userActivityIds!['purchasedProducts'],
+          'products': _userActivityIds!['products'] ?? [],
+          'donations': _userActivityIds!['donations'] ?? [],
+          'lost_items': _userActivityIds!['lost_items'] ?? [],
+          'purchasedProducts': _userActivityIds!['purchasedProducts'] ?? [],
         })
       );
       
-      // Update timestamp
       _lastActivitySync = DateTime.now();
       await _storage.write(
         key: _activitySyncKey,
         value: _lastActivitySync!.toIso8601String()
       );
     }
+    print('end');
   }
 
-  /// Extract IDs from a list of items
+  /// Extract IDs from a list of items, ensuring string conversion
   static List<String> _extractIds(List? items) {
     if (items == null) return [];
     return items
-        .where((item) => item['_id'] != null)
+        .where((item) => item is Map<String, dynamic> && item['_id'] != null)
         .map((item) => item['_id'].toString())
         .toList();
   }

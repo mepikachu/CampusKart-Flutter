@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'server.dart';
+import 'view_profile.dart'; // Add this import
 
 class VolunteerRequestsScreen extends StatefulWidget {
   const VolunteerRequestsScreen({super.key});
@@ -83,23 +84,38 @@ class _VolunteerRequestsScreenState extends State<VolunteerRequestsScreen> {
 
   Widget _buildRequestCard(dynamic request) {
     return Card(
-      elevation: 3,
+      elevation: 1,
+      color: Colors.white,
       margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-      child: ListTile(
-        title: Text(request['userName'] ?? 'No Username'),
-        subtitle: Text(request['email'] ?? ''),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.check, color: Colors.green),
-              onPressed: () => _updateRequest(request['_id'], 'approve'),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ViewProfileScreen(userId: request['_id']),
             ),
-            IconButton(
-              icon: const Icon(Icons.clear, color: Colors.red),
-              onPressed: () => _updateRequest(request['_id'], 'reject'),
-            ),
-          ],
+          );
+        },
+        child: ListTile(
+          title: Text(request['userName'] ?? 'No Username'),
+          subtitle: Text(request['email'] ?? ''),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.check, color: Colors.green),
+                onPressed: () => _updateRequest(request['_id'], 'approve'),
+              ),
+              IconButton(
+                icon: const Icon(Icons.clear, color: Colors.red),
+                onPressed: () => _updateRequest(request['_id'], 'reject'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -108,6 +124,7 @@ class _VolunteerRequestsScreenState extends State<VolunteerRequestsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : errorMessage.isNotEmpty
@@ -116,6 +133,7 @@ class _VolunteerRequestsScreenState extends State<VolunteerRequestsScreen> {
                   ? const Center(child: Text("No pending requests"))
                   : RefreshIndicator(
                       onRefresh: fetchVolunteerRequests,
+                      color: Colors.black,
                       child: ListView.builder(
                         itemCount: requests.length,
                         itemBuilder: (context, index) {

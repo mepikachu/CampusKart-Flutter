@@ -117,13 +117,28 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Theme(
-      data: appTheme,
+      data: Theme.of(context).copyWith(
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+          scrolledUnderElevation: 0, // Prevents color change on scroll
+        ),
+      ),
       child: Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
-          title: const Text('𝒞𝒶𝓂𝓅𝓊𝓈𝒦𝒶𝓇𝓉', 
-            style: TextStyle(fontWeight: FontWeight.bold)
+          backgroundColor: Colors.white,
+          elevation: 0,
+          title: Text(
+            '𝒞𝒶𝓂𝓅𝓊𝓈𝒦𝒶𝓇𝓉',
+            style: TextStyle(
+              color: Colors.black,
+              fontSize: 30, // Increased from previous size
+              fontWeight: FontWeight.w400, // Reduced from bold
+            ),
           ),
+          centerTitle: false,
           actions: [
             IconButton(
               icon: const Icon(Icons.person_outline), 

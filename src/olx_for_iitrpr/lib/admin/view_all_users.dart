@@ -26,6 +26,7 @@ class _AllUsersScreenState extends State<AllUsersScreen> {
   String _selectedStatus = 'All';
   String _sortBy = 'userName';
   bool _sortAscending = true;
+  bool _isFilterExpanded = false;
 
   final List<String> _roleOptions = ['All', 'admin', 'volunteer', 'volunteer_pending', 'user'];
   final List<String> _statusOptions = ['All', 'Blocked', 'Active'];
@@ -364,190 +365,618 @@ class _AllUsersScreenState extends State<AllUsersScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        title: const Text('All Users'),
         elevation: 0,
-        title: const Text('All Users', style: TextStyle(color: Colors.black)),
-        leading: IconButton(
-          icon: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 8,
-                  spreadRadius: 1,
-                ),
-              ],
-            ),
-            child: const Icon(Icons.arrow_back, color: Colors.blue, size: 20),
-          ),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
       ),
       body: Column(
         children: [
-          // Search and Filter Bar - Made more compact
+          // Search bar
           Container(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             color: Colors.white,
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (value) {
+                setState(() {});
+                _filterUsers();
+              },
+              decoration: InputDecoration(
+                hintText: 'Search users by name or email',
+                prefixIcon: const Icon(Icons.search, size: 22),
+                contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: const Color(0xFF1A73E8)),
+                ),
+                filled: true,
+                fillColor: Colors.grey.shade50,
+              ),
+            ),
+          ),
+
+          // Filter section
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // Search Field with rounded corners and compact design
-                TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search by username or email',
-                    prefixIcon: const Icon(Icons.search, size: 20),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(30),
-                      borderSide: BorderSide.none,
-                    ),
-                    filled: true,
-                    fillColor: Colors.grey[200],
-                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                    isDense: true,
-                    suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, size: 18),
-                          onPressed: () {
-                            setState(() {
-                              _searchController.clear();
-                            });
-                            _applyFiltersAndSort();
-                          },
-                        )
-                      : null,
-                  ),
-                  onChanged: (value) {
-                    _applyFiltersAndSort();
+                // Filter button is full width
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _isFilterExpanded = !_isFilterExpanded;
+                    });
                   },
-                ),
-                
-                const SizedBox(height: 8),
-                
-                // Filter and Sort Buttons in a more compact row
-                Row(
-                  children: [
-                    // Filter Button
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _showFilterDialog,
-                        icon: const Icon(Icons.filter_list, size: 16),
-                        label: const Text('Filter'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        ),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: _hasActiveFilters() ? const Color(0xFF1A73E8).withOpacity(0.1) : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: _hasActiveFilters() ? const Color(0xFF1A73E8) : Colors.grey.shade300,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    // Sort Button
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _showSortDialog,
-                        icon: const Icon(Icons.sort, size: 16),
-                        label: Text(_sortOptions[_sortBy] ?? 'Sort'),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                
-                // Active Filters Chips - made more compact and horizontal scrollable
-                if (_selectedRole != 'All' || _selectedStatus != 'All')
-                  SizedBox(
-                    height: 32,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
+                    child: Row(
                       children: [
-                        if (_selectedRole != 'All')
-                          Padding(
-                            padding: const EdgeInsets.only(right: 8.0),
-                            child: Chip(
-                              label: Text('Role: $_selectedRole'),
-                              labelStyle: const TextStyle(fontSize: 12),
-                              deleteIcon: const Icon(Icons.close, size: 14),
-                              padding: EdgeInsets.zero,
-                              visualDensity: VisualDensity.compact,
-                              onDeleted: () {
-                                setState(() {
-                                  _selectedRole = 'All';
-                                });
-                                _applyFiltersAndSort();
-                              },
+                        Icon(
+                          Icons.filter_list,
+                          size: 16,
+                          color: _hasActiveFilters() ? const Color(0xFF1A73E8) : Colors.grey.shade700,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Filters',
+                          style: TextStyle(
+                            color: _hasActiveFilters() ? const Color(0xFF1A73E8) : Colors.grey.shade700,
+                            fontWeight: _hasActiveFilters() ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                        if (_hasActiveFilters())
+                          Container(
+                            margin: const EdgeInsets.only(left: 4),
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1A73E8),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Text(
+                              _getActiveFilterCount().toString(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                        if (_selectedStatus != 'All')
-                          Chip(
-                            label: Text('Status: $_selectedStatus'),
-                            labelStyle: const TextStyle(fontSize: 12),
-                            deleteIcon: const Icon(Icons.close, size: 14),
-                            padding: EdgeInsets.zero,
-                            visualDensity: VisualDensity.compact,
-                            onDeleted: () {
-                              setState(() {
-                                _selectedStatus = 'All';
-                              });
-                              _applyFiltersAndSort();
-                            },
+                        const Spacer(),
+                        if (_hasActiveFilters())
+                          TextButton(
+                            onPressed: _clearFilters,
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              foregroundColor: const Color(0xFF1A73E8),
+                            ),
+                            child: const Text('Clear All', style: TextStyle(fontSize: 12)),
                           ),
                       ],
                     ),
                   ),
+                ),
+
+                // Active filter chips
+                if (_hasActiveFilters())
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          if (_selectedRole != 'All')
+                            _buildActiveFilterChip('Role: $_selectedRole', () {
+                              setState(() {
+                                _selectedRole = 'All';
+                              });
+                              _filterUsers();
+                            }),
+                          if (_selectedStatus != 'All')
+                            _buildActiveFilterChip('Status: $_selectedStatus', () {
+                              setState(() {
+                                _selectedStatus = 'All';
+                              });
+                              _filterUsers();
+                            }),
+                          if (_sortBy != 'userName')
+                            _buildActiveFilterChip('Sort: ${_sortOptions[_sortBy]}', () {
+                              setState(() {
+                                _sortBy = 'userName';
+                              });
+                              _filterUsers();
+                            }),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // Expanded filter options
+                if (_isFilterExpanded)
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    margin: const EdgeInsets.only(top: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Role filters
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Role',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[700],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: [
+                                    'All',
+                                    'admin',
+                                    'volunteer',
+                                    'volunteer_pending',
+                                    'user',
+                                  ].map((role) => Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: _buildFilterOptionChip(
+                                      role,
+                                      _selectedRole == role,
+                                      () {
+                                        setState(() => _selectedRole = role);
+                                        _filterUsers();
+                                      },
+                                    ),
+                                  )).toList(),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Divider(height: 16),
+                        // Status filters
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Status',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[700],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: [
+                                    'All',
+                                    'Active',
+                                    'Blocked',
+                                  ].map((status) => Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: _buildFilterOptionChip(
+                                      status,
+                                      _selectedStatus == status,
+                                      () {
+                                        setState(() => _selectedStatus = status);
+                                        _filterUsers();
+                                      },
+                                    ),
+                                  )).toList(),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Divider(height: 16),
+                        // Sort options
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Sort By',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[700],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: _sortOptions.entries.map((entry) => Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: _buildFilterOptionChip(
+                                      entry.value,
+                                      _sortBy == entry.key,
+                                      () {
+                                        setState(() {
+                                          if (_sortBy == entry.key) {
+                                            _sortAscending = !_sortAscending;
+                                          } else {
+                                            _sortBy = entry.key;
+                                            _sortAscending = true;
+                                          }
+                                        });
+                                        _filterUsers();
+                                      },
+                                    ),
+                                  )).toList(),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // Results counter
+                Container(
+                  margin: const EdgeInsets.only(top: 8, bottom: 4, left: 0),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'Showing ${_filteredUsers.length} user${_filteredUsers.length != 1 ? 's' : ''}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                ),
+                
+                const Divider(height: 1),
               ],
             ),
           ),
-          
-          // Divider
-          const Divider(height: 1),
-          
-          // User List
+
+          // Users list
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _isError
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.error_outline, size: 60, color: Colors.red),
-                            const SizedBox(height: 16),
-                            Text('Error: $_errorMessage'),
-                            const SizedBox(height: 16),
-                            ElevatedButton(
-                              onPressed: _fetchUsers,
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
-                      )
-                    : _filteredUsers.isEmpty
-                        ? const Center(
-                            child: Text('No users found'),
-                          )
-                        : RefreshIndicator(
-                            onRefresh: _fetchUsers,
-                            child: ListView.separated(
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              itemCount: _filteredUsers.length,
-                              separatorBuilder: (context, index) => const Divider(height: 1),
-                              itemBuilder: (context, index) {
-                                final user = _filteredUsers[index];
-                                return _buildUserCard(user);
-                              },
-                            ),
-                          ),
+              ? _buildLoadingList()
+              : _errorMessage.isNotEmpty
+                ? _buildErrorView()
+                : _filteredUsers.isEmpty
+                  ? _buildEmptyView()
+                  : _buildUsersList(),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildActiveFilterChip(String label, VoidCallback onDelete) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: Container(
+        height: 28,
+        padding: const EdgeInsets.only(left: 8, right: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1A73E8).withOpacity(0.1),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF1A73E8).withOpacity(0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                color: const Color(0xFF1A73E8),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: onDelete,
+                child: Padding(
+                  padding: const EdgeInsets.all(4.0),
+                  child: Icon(
+                    Icons.close,
+                    size: 14,
+                    color: const Color(0xFF1A73E8),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFilterSection(String title, List<String> options, String selected, Function(String) onSelect) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.w500,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: options.map((option) => _buildFilterOptionChip(
+              option,
+              selected == option,
+              () => onSelect(option),
+            )).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterOptionChip(String label, bool isSelected, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        height: 28,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF1A73E8).withOpacity(0.1) : Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF1A73E8).withOpacity(0.5) : Colors.grey.shade300,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: isSelected ? const Color(0xFF1A73E8) : Colors.grey.shade700,
+              fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSortingSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Sort By',
+            style: TextStyle(
+              fontWeight: FontWeight.w500,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _sortOptions.entries.map((entry) => _buildFilterOptionChip(
+              entry.value,
+              _sortBy == entry.key,
+              () {
+                setState(() {
+                  if (_sortBy == entry.key) {
+                    _sortAscending = !_sortAscending;
+                  } else {
+                    _sortBy = entry.key;
+                    _sortAscending = true;
+                  }
+                });
+                _filterUsers();
+              },
+            )).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _hasActiveFilters() {
+    return _selectedRole != 'All' || 
+           _selectedStatus != 'All' || 
+           _sortBy != 'userName';
+  }
+
+  int _getActiveFilterCount() {
+    int count = 0;
+    if (_selectedRole != 'All') count++;
+    if (_selectedStatus != 'All') count++;
+    if (_sortBy != 'userName') count++;
+    return count;
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _selectedRole = 'All';
+      _selectedStatus = 'All';
+      _sortBy = 'userName';
+      _sortAscending = true;
+    });
+    _filterUsers();
+  }
+
+  Future<void> _filterUsers() async {
+    setState(() {
+      _isLoading = true;
+    });
+    try {
+      // Simulate network delay
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Filtering logic
+      List<UserModel> filtered = _allUsers.where((user) {
+        final matchesRole = _selectedRole == 'All' || user.role == _selectedRole;
+        final matchesStatus = _selectedStatus == 'All' || 
+                              (_selectedStatus == 'Active' && !user.isBlocked) || 
+                              (_selectedStatus == 'Blocked' && user.isBlocked);
+        return matchesRole && matchesStatus;
+      }).toList();
+      
+      setState(() {
+        _filteredUsers = filtered;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _isError = true;
+        _errorMessage = e.toString();
+      });
+    }
+  }
+
+  Widget _buildLoadingList() {
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: 6,
+      separatorBuilder: (context, index) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              // Skeleton avatar
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 12),
+              
+              // Skeleton text column
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Skeleton username
+                    Container(
+                      height: 16,
+                      width: double.infinity,
+                      color: Colors.grey.shade300,
+                    ),
+                    const SizedBox(height: 4),
+                    // Skeleton email
+                    Container(
+                      height: 14,
+                      width: double.infinity,
+                      color: Colors.grey.shade300,
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Skeleton button
+              Container(
+                height: 32,
+                width: 80,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildErrorView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.error_outline, size: 60, color: Colors.red),
+          const SizedBox(height: 16),
+          Text('Error: $_errorMessage'),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _fetchUsers,
+            child: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyView() {
+    return Center(
+      child: Text(
+        'No users found',
+        style: TextStyle(
+          fontSize: 16,
+          color: Colors.grey.shade600,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUsersList() {
+    return RefreshIndicator(
+      onRefresh: _fetchUsers,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        itemCount: _filteredUsers.length,
+        separatorBuilder: (context, index) => const Divider(height: 1),
+        itemBuilder: (context, index) {
+          final user = _filteredUsers[index];
+          return _buildUserCard(user);
+        },
       ),
     );
   }
@@ -555,14 +984,13 @@ class _AllUsersScreenState extends State<AllUsersScreen> {
   Widget _buildUserCard(UserModel user) {
     final roleColor = _getRoleColor(user.role);
     
-    // More compact card design
     return InkWell(
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => AdminProfileView(userId: user.id),
+          builder: (context) => ViewProfileScreen(userId: user.id),
         ),
-      ).then((_) => _fetchUsers()), // Refresh when returning from profile
+      ).then((_) => _fetchUsers()),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
@@ -585,13 +1013,11 @@ class _AllUsersScreenState extends State<AllUsersScreen> {
             ),
             const SizedBox(width: 12),
             
-            // User Details Column
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Username and Role in the same row
                   Row(
                     children: [
                       Text(
@@ -625,8 +1051,6 @@ class _AllUsersScreenState extends State<AllUsersScreen> {
                       ],
                     ],
                   ),
-                  
-                  // Email
                   Text(
                     user.email,
                     style: TextStyle(
@@ -638,22 +1062,23 @@ class _AllUsersScreenState extends State<AllUsersScreen> {
               ),
             ),
             
-            // Block/Unblock Button - made smaller and more subtle
-            IconButton(
-              onPressed: () => _toggleBlockStatus(user),
-              icon: Icon(
-                user.isBlocked ? Icons.lock_open : Icons.block,
-                size: 18,
+            // Only show block/unblock button for non-admin users
+            if (user.role != 'admin')
+              IconButton(
+                onPressed: () => _toggleBlockStatus(user),
+                icon: Icon(
+                  user.isBlocked ? Icons.lock_open : Icons.block,
+                  size: 18,
+                ),
+                style: IconButton.styleFrom(
+                  foregroundColor: user.isBlocked ? Colors.green : Colors.red,
+                  backgroundColor: user.isBlocked 
+                      ? Colors.green.withOpacity(0.1) 
+                      : Colors.red.withOpacity(0.1),
+                  padding: const EdgeInsets.all(8),
+                  minimumSize: const Size(32, 32),
+                ),
               ),
-              style: IconButton.styleFrom(
-                foregroundColor: user.isBlocked ? Colors.green : Colors.red,
-                backgroundColor: user.isBlocked 
-                    ? Colors.green.withOpacity(0.1) 
-                    : Colors.red.withOpacity(0.1),
-                padding: const EdgeInsets.all(8),
-                minimumSize: const Size(32, 32),
-              ),
-            ),
           ],
         ),
       ),

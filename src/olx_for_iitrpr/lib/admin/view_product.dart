@@ -1,106 +1,420 @@
-import 'dart:convert';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide CarouselController;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:carousel_slider/carousel_slider.dart';
+import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
+import 'view_profile.dart';
+import '../services/product_cache_service.dart';
 import 'server.dart';
-class AdminProductView extends StatefulWidget {
-  final String productId;
-  const AdminProductView({Key? key, required this.productId}) : super(key: key);
+
+class ProductDetailsScreen extends StatefulWidget {
+  final Map<String, dynamic> product;
+  final bool showOfferButton;
+  
+  const ProductDetailsScreen({
+    super.key,
+    required this.product,
+    this.showOfferButton = true,
+  });
 
   @override
-  State<AdminProductView> createState() => _AdminProductViewState();
+  State<ProductDetailsScreen> createState() => _ProductDetailsScreenState();
 }
 
-class _AdminProductViewState extends State<AdminProductView> {
+class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  bool isLoading = true;
-  String? errorMessage;
-  Map<String, dynamic>? productData;
+  String currentUserName = '';
+  String currentUserId = '';
   int _currentImageIndex = 0;
   final CarouselSliderController _carouselController = CarouselSliderController();
+  
+  bool hasOffer = false;
+  double? currentOfferAmount;
+  bool isCheckingOffer = true;
+  Map<String, dynamic>? productDetails;
+  bool isLoading = true;
+  bool isLoadingAllImages = false;
+  
+  // Store images
+  List<Uint8List> productImages = [];
+  int totalNumImages = 1;
+
+  // Add these variables to track seller details
+  Map<String, dynamic>? sellerDetails;
+  Map<String, dynamic>? sellerProfile;
 
   @override
   void initState() {
     super.initState();
+    _loadCurrentUser();
+    _loadProductDetails();
+    
+    if (widget.product['_id'] != null) {
+      _checkExistingOffer();
+    }
+  }
+
+  Future<void> _loadCurrentUser() async {
+    String? name = await _secureStorage.read(key: 'userName');
+    String? id = await _secureStorage.read(key: 'userId');
+    if (mounted) {
+      setState(() {
+        currentUserName = name ?? '';
+        currentUserId = id ?? '';
+      });
+    }
+  }
+
+  Future<void> _loadProductDetails() async {
+    // First set with the data we already have
+    setState(() {
+      productDetails = widget.product;
+      isLoading = false;
+      
+      // Use imageData if passed from products tab
+      if (widget.product['imageData'] != null) {
+        productImages = [widget.product['imageData']];
+      }
+    });
+    
+    // Check for cached product
+    final cachedProduct = await ProductCacheService.getCachedProduct(widget.product['_id']);
+    if (cachedProduct != null) {
+      setState(() {
+        productDetails = cachedProduct;
+      });
+    }
+    
+    // Check for cached images
+    await _loadCachedImages();
+    
+    // Fetch fresh product data
     _fetchProductDetails();
+  }
+  
+  Future<void> _loadCachedImages() async {
+    try {
+      // Get cached number of images first
+      final numImages = await ProductCacheService.getCachedNumImages(widget.product['_id']);
+      if (numImages != null) {
+        totalNumImages = numImages;
+      }
+      
+      // Try to get cached images
+      final cachedImages = await ProductCacheService.getCachedAllImages(widget.product['_id']);
+      if (cachedImages != null && cachedImages.isNotEmpty) {
+        setState(() {
+          productImages = cachedImages;
+          isLoadingAllImages = false;
+        });
+      } else if (productImages.isEmpty && widget.product['imageData'] != null) {
+        // We have at least the main image from products tab
+        setState(() {
+          productImages = [widget.product['imageData']];
+        });
+      } else {
+        // If we don't have all expected images or any images, fetch them
+        _fetchAllProductImages();
+      }
+    } catch (e) {
+      print('Error loading cached images: $e');
+      _fetchAllProductImages();
+    }
   }
 
   Future<void> _fetchProductDetails() async {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
-        Uri.parse('$serverUrl/api/products/${widget.productId}'),
+        Uri.parse('$serverUrl/api/products/${widget.product['_id']}'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
         },
       );
-
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success']) {
-          setState(() {
-            productData = data['product'];
-            isLoading = false;
-          });
-        } else {
-          throw Exception(data['error'] ?? 'Failed to load product');
+          // Cache the product data
+          await ProductCacheService.cacheProduct(widget.product['_id'], data['product']);
+          
+          if (mounted) {
+            setState(() {
+              productDetails = data['product'];
+            });
+          }
+          
+          // Check if we need to update images
+          final lastUpdated = await ProductCacheService.getProductLastUpdated(widget.product['_id']);
+          final numImages = await ProductCacheService.getCachedNumImages(widget.product['_id']);
+          
+          if (numImages == null || productImages.isEmpty || 
+              productImages.length < numImages ||
+              (lastUpdated != null && productDetails?['lastUpdatedAt'] != null && 
+               DateTime.parse(productDetails!['lastUpdatedAt']).isAfter(lastUpdated))) {
+            _fetchAllProductImages();
+          }
         }
-      } else {
-        throw Exception('Failed to load product');
       }
     } catch (e) {
-      setState(() {
-        errorMessage = e.toString();
-        isLoading = false;
-      });
+      print('Error fetching product details: $e');
     }
   }
 
-  List<Widget> _buildImageSlides() {
-    final List images = productData?['images'] ?? [];
-    return images.map<Widget>((image) {
-      if (image != null && image['data'] != null) {
-        try {
-          final imageBytes = base64Decode(image['data']);
-          return Container(
-            width: double.infinity,
-            child: Image.memory(
-              imageBytes,
-              fit: BoxFit.cover,
-            ),
-          );
-        } catch (e) {
-          return const Center(child: Icon(Icons.error));
+  Future<void> _fetchAllProductImages() async {
+    if (isLoadingAllImages) return;
+    
+    setState(() {
+      isLoadingAllImages = true;
+    });
+    
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      final response = await http.get(
+        Uri.parse('$serverUrl/api/products/${widget.product['_id']}/images'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] && data['images'] != null) {
+          List<Uint8List> loadedImages = [];
+          final images = data['images'] as List;
+          
+          for (var image in images) {
+            if (image != null && image['data'] != null) {
+              final String base64Str = image['data'];
+              final Uint8List bytes = base64Decode(base64Str);
+              loadedImages.add(bytes);
+            }
+          }
+          
+          // Cache images and number of images
+          if (loadedImages.isNotEmpty) {
+            await ProductCacheService.cacheAllImages(widget.product['_id'], loadedImages);
+            await ProductCacheService.cacheNumImages(widget.product['_id'], loadedImages.length);
+            
+            if (mounted) {
+              setState(() {
+                productImages = loadedImages;
+                totalNumImages = loadedImages.length;
+                isLoadingAllImages = false;
+              });
+            }
+          }
         }
       }
-      return const Center(child: Icon(Icons.image_not_supported));
-    }).toList();
+    } catch (e) {
+      print('Error fetching all product images: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoadingAllImages = false;
+        });
+      }
+    }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (productData == null) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Product Details'),
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-        ),
-        body: const Center(
-          child: Text('Product not found'),
+  Future<void> _checkExistingOffer() async {
+    if (widget.product['_id'] == null) {
+      setState(() {
+        isCheckingOffer = false;
+      });
+      return;
+    }
+    
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      final response = await http.get(
+        Uri.parse('$serverUrl/api/products/${widget.product['_id']}/check-offer'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (mounted) {
+          setState(() {
+            // If the offer was rejected (status == 'rejected'), set hasOffer to false
+            hasOffer = (data['hasOffer'] ?? false) && (data['offerStatus'] != 'rejected');
+            currentOfferAmount = hasOffer ? data['offerAmount']?.toDouble() : null;
+            isCheckingOffer = false;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error checking offer status: $e');
+      if (mounted) {
+        setState(() {
+          isCheckingOffer = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildImageCarousel() {
+    if (productImages.isEmpty) {
+      return Container(
+        width: double.infinity,
+        height: 300,
+        color: Colors.grey[200],
+        child: Center(
+          child: isLoadingAllImages
+              ? const CircularProgressIndicator()
+              : Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.image_not_supported, color: Colors.grey[400], size: 50),
+                    const SizedBox(height: 8),
+                    Text(
+                      'No images available',
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
         ),
       );
     }
 
-    final images = _buildImageSlides();
+    // Build image widgets from Uint8List
+    List<Widget> imageWidgets = [];
+    for (var imageBytes in productImages) {
+      imageWidgets.add(
+        Image.memory(
+          imageBytes,
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: 300,
+          errorBuilder: (context, error, stackTrace) {
+            print('Error displaying image: $error');
+            return Container(
+              width: double.infinity,
+              height: 300,
+              color: Colors.grey[200],
+              child: const Center(
+                child: Icon(Icons.error, size: 50, color: Colors.grey),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    // Carousel with loading indicator if more images are coming
+    return Stack(
+      children: [
+        // Carousel slider
+        CarouselSlider(
+          items: imageWidgets,
+          carouselController: _carouselController,
+          options: CarouselOptions(
+            height: 300,
+            viewportFraction: 1.0,
+            enableInfiniteScroll: imageWidgets.length > 1,
+            autoPlay: imageWidgets.length > 1,
+            autoPlayInterval: const Duration(seconds: 3),
+            onPageChanged: (index, reason) {
+              setState(() {
+                _currentImageIndex = index;
+              });
+            },
+          ),
+        ),
+        
+        // Loading indicator if we're still loading more images
+        if (isLoadingAllImages)
+          Positioned(
+            top: 10,
+            right: 10,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const SizedBox(
+                width: 15,
+                height: 15,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation(Colors.white),
+                ),
+              ),
+            ),
+          ),
+          
+        // Image indicators
+        if (imageWidgets.length > 1)
+          Positioned(
+            bottom: 10,
+            left: 0,
+            right: 0,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: imageWidgets.asMap().entries.map((entry) {
+                return Container(
+                  width: 8.0,
+                  height: 8.0,
+                  margin: const EdgeInsets.symmetric(horizontal: 4.0),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _currentImageIndex == entry.key
+                        ? Colors.white
+                        : Colors.white.withOpacity(0.4),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading && productDetails == null) {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          title: const Text('Product Details'),
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final product = productDetails ?? widget.product;
     
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Product Details'),
         backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
+        elevation: 0,
+        leading: Container(
+          margin: EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            shape: BoxShape.circle,
+          ),
+          child: IconButton(
+            icon: Icon(Icons.arrow_back, color: Colors.black),
+            padding: EdgeInsets.zero,
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
+        title: Text(product['name'] ?? 'Product Details', 
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)
+        ),
       ),
       body: Column(
         children: [
@@ -109,137 +423,226 @@ class _AdminProductViewState extends State<AdminProductView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (images.isNotEmpty)
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        CarouselSlider(
-                          carouselController: _carouselController,
-                          items: images,
-                          options: CarouselOptions(
-                            height: 300,
-                            viewportFraction: 1.0,
-                            enableInfiniteScroll: false,
-                            onPageChanged: (index, reason) {
-                              setState(() {
-                                _currentImageIndex = index;
-                              });
-                            },
-                          ),
-                        ),
-                        if (_currentImageIndex > 0)
-                          Positioned(
-                            left: 10,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.5),
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.5),
-                                  width: 1,
-                                ),
-                              ),
-                              child: IconButton(
-                                icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-                                onPressed: () => _carouselController.previousPage(),
-                              ),
-                            ),
-                          ),
-                        if (_currentImageIndex < images.length - 1)
-                          Positioned(
-                            right: 10,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: Colors.black.withOpacity(0.5),
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.5),
-                                  width: 1,
-                                ),
-                              ),
-                              child: IconButton(
-                                icon: const Icon(Icons.arrow_forward_ios, color: Colors.white),
-                                onPressed: () => _carouselController.nextPage(),
-                              ),
-                            ),
-                          ),
-                        Positioned(
-                          bottom: 10,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.5),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.5),
-                                width: 1,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: images.asMap().entries.map((entry) {
-                                return Container(
-                                  width: 8,
-                                  height: 8,
-                                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: Colors.white.withOpacity(0.5),
-                                      width: 1,
-                                    ),
-                                    color: Colors.white.withOpacity(
-                                      _currentImageIndex == entry.key ? 0.9 : 0.4
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                  // Image carousel
+                  _buildImageCarousel(),
+
+                  // Main content section
                   Padding(
-                    padding: const EdgeInsets.all(16.0),
+                    padding: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          productData!['name'] ?? 'Unknown Product',
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '₹${productData!['price']?.toString() ?? '0'}',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            color: Colors.green,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        // Product name and status
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                product['name'] ?? 'Unknown Product',
+                                style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                '${product['status']?.toUpperCase() ?? "AVAILABLE"}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 16),
-                        Text(
-                          'Seller: ${productData!['seller']?['userName'] ?? 'Unknown'}',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey,
+
+                        // Category tags - replace the existing tag section with this
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              Text(
+                                'Tags: ',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[700],
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Container(
+                                margin: const EdgeInsets.only(right: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                                ),
+                                child: Text(
+                                  'Electronics',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.blue[700],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: Colors.green.withOpacity(0.2)),
+                                ),
+                                child: Text(
+                                  'Campus',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.green[700],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Description:',
+                        const SizedBox(height: 24),
+
+                        // Price section
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  'Price: ',
+                                  style: TextStyle(fontSize: 16),
+                                ),
+                                Text(
+                                  '₹${product['price']?.toString() ?? "0"}',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.green,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Seller details section with API data
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Seller Details',
+                              style: TextStyle(fontSize: 16),
+                            ),
+                            const SizedBox(height: 8),
+                            InkWell(
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ViewProfileScreen(
+                                    userId: product['seller']?['_id'] ?? '',
+                                  ),
+                                ),
+                              ),
+                              child: Container(
+                                padding: EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[50],
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.grey[200]!),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 20,
+                                          backgroundColor: Colors.grey[200],
+                                          child: Icon(Icons.person, color: Colors.grey[400]),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              product['seller']?['userName'] ?? 'Unknown',
+                                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                                            ),
+                                            if (sellerProfile != null) ...[
+                                              Text(
+                                                'Last online: ${_formatDateTime(sellerProfile!['lastSeen'])}',
+                                                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                              ),
+                                              Text(
+                                                'Member since: ${_formatDateTime(sellerProfile!['createdAt'])}',
+                                                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                              ),
+                                              if (sellerProfile!['address'] != null)
+                                                Text(
+                                                  'Address: ${sellerProfile!['address']}',
+                                                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                                ),
+                                            ],
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Product timestamps
+                        Container(
+                          padding: EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.blue.withOpacity(0.1)),
+                          ),
+                          child: Column(
+                            children: [
+                              _buildTimeDetail('Posted on', _formatDateTime(product['createdAt'])),
+                              const SizedBox(height: 8),
+                              _buildTimeDetail('Last updated', _formatDateTime(product['lastUpdatedAt'])),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
+                        // Description section
+                        Text(
+                          'About this item',
                           style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey[800],
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 12),
                         Text(
-                          productData!['description'] ?? 'No description available',
-                          style: const TextStyle(fontSize: 16),
+                          product['description'] ?? 'No description available',
+                          style: TextStyle(
+                            fontSize: 15,
+                            height: 1.5,
+                            color: Colors.grey[800],
+                          ),
                         ),
                       ],
                     ),
@@ -249,7 +652,136 @@ class _AdminProductViewState extends State<AdminProductView> {
             ),
           ),
         ],
+      )
+    );
+  }
+
+  Widget _buildTag(String text) {
+    return Container(
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: Colors.grey[800],
+        ),
       ),
     );
+  }
+
+  Widget _buildSellerDetail(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Text(
+            '$label: ',
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey[600],
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimeDetail(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey[600],
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getStatusColor(String? status) {
+    switch (status?.toLowerCase()) {
+      case 'available':
+        return Colors.green;
+      case 'sold':
+        return Colors.orange;
+      case 'closed':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _formatDate(dynamic date) {
+    if (date == null) return 'N/A';
+    try {
+      final DateTime dateTime = DateTime.parse(date.toString());
+      return DateFormat('MMM d, yyyy').format(dateTime);
+    } catch (e) {
+      return 'N/A';
+    }
+  }
+
+  // Update helper method to include time
+  String _formatDateTime(dynamic dateTime) {
+    if (dateTime == null) return 'N/A';
+    try {
+      final DateTime date = DateTime.parse(dateTime.toString());
+      return DateFormat('MMM d, yyyy • h:mm a').format(date);
+    } catch (e) {
+      return 'N/A';
+    }
+  }
+
+  Future<void> _loadSellerProfile() async {
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      final response = await http.get(
+        Uri.parse('$serverUrl/api/users/profile/${widget.product['seller']['_id']}'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (mounted) {
+          setState(() {
+            sellerProfile = data['user'];
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading seller profile: $e');
+    }
   }
 }

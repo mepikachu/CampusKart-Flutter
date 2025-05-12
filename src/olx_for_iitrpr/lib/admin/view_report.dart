@@ -8,6 +8,7 @@ import 'view_chat.dart';
 import 'view_profile.dart';
 import 'view_product.dart';
 import 'server.dart';
+
 class ReportDetailScreen extends StatefulWidget {
   final String reportId;
   final String reportType;
@@ -373,7 +374,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => AdminProfileView(userId: userId),
+        builder: (context) => ViewProfileScreen(userId: userId),
       ),
     );
   }
@@ -382,7 +383,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => AdminProductView(productId: productId),
+        builder: (context) => ProductDetailsScreen(product: {'_id': productId},),
       ),
     );
   }
@@ -768,7 +769,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         elevation: 0,
         backgroundColor: Colors.white,
         title: Text(
-          '${widget.reportType.capitalize()} Report${entityName.isNotEmpty ? ': $entityName' : ''}',
+          '${ViewReportStringExtension(widget.reportType).capitalize()} Report${entityName.isNotEmpty ? ': $entityName' : ''}',
           style: const TextStyle(color: Colors.black),
         ),
         leading: IconButton(
@@ -1565,12 +1566,12 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       case 'deleted_product':
         return 'Product Deleted';
       default:
-        return action.replaceAll('_', ' ').capitalize();
+        return ViewReportStringExtension(action.replaceAll('_', ' ')).capitalize();
     }
   }
 }
 
-extension StringExtension on String {
+extension ViewReportStringExtension on String {
   String capitalize() {
     return "${this[0].toUpperCase()}${substring(1)}";
   }

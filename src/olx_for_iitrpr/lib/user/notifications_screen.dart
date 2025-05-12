@@ -172,9 +172,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                               itemBuilder: (context, index) {
                                 final notification = filteredNotifications[index];
                                 return Card(
+                                  elevation: 0,
                                   margin: const EdgeInsets.symmetric(
                                     horizontal: 8,
                                     vertical: 4,
+                                  ),
+                                  color: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    side: BorderSide(
+                                      color: Colors.grey.shade200,
+                                    ),
                                   ),
                                   child: ListTile(
                                     leading: Icon(

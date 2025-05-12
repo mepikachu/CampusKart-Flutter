@@ -70,8 +70,8 @@ class _UserItemsViewState extends State<UserItemsView> {
       context,
       MaterialPageRoute(
         builder: (context) => widget.type == 'products' 
-            ? AdminProductView(productId: itemId)
-            : AdminDonationView(donationId: itemId),
+            ? ProductDetailsScreen(product : {'_id': itemId})
+            : DonationDetailsScreen(donation: {'_id': itemId}),
       ),
     );
   }

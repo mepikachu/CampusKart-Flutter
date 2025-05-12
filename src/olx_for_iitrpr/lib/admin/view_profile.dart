@@ -9,16 +9,16 @@ import 'view_donation.dart';
 import 'view_user_items.dart';
 import 'package:shimmer/shimmer.dart';
 import 'server.dart';
-class AdminProfileView extends StatefulWidget {
+class ViewProfileScreen extends StatefulWidget {
   final String userId;
 
-  const AdminProfileView({Key? key, required this.userId}) : super(key: key);
+  const ViewProfileScreen({Key? key, required this.userId}) : super(key: key);
 
   @override
-  State<AdminProfileView> createState() => _AdminProfileViewState();
+  State<ViewProfileScreen> createState() => _ViewProfileScreenState();
 }
 
-class _AdminProfileViewState extends State<AdminProfileView> {
+class _ViewProfileScreenState extends State<ViewProfileScreen> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final ScrollController _scrollController = ScrollController();
   
@@ -33,6 +33,7 @@ class _AdminProfileViewState extends State<AdminProfileView> {
     'products': [],
     'purchasedProducts': [],
     'donations': [],
+    'lostitems': [], // Add lost items array
     'reportsFiled': {
       'user': [],
       'product': []
@@ -101,6 +102,7 @@ class _AdminProfileViewState extends State<AdminProfileView> {
               userActivity['products'] = data['activity']['products'] ?? [];
               userActivity['purchasedProducts'] = data['activity']['purchasedProducts'] ?? [];
               userActivity['donations'] = data['activity']['donations'] ?? [];
+              userActivity['lostitems'] = data['activity']['lostitems'] ?? []; // Add lost items
               
               if (data['activity']['reportsFiled'] != null) {
                 userActivity['reportsFiled']['user'] = data['activity']['reportsFiled']['user'] ?? [];
@@ -272,7 +274,7 @@ class _AdminProfileViewState extends State<AdminProfileView> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => AdminProductView(productId: productId),
+        builder: (context) => ProductDetailsScreen(product: {'_id': productId}),
       ),
     );
   }
@@ -523,7 +525,118 @@ class _AdminProfileViewState extends State<AdminProfileView> {
       ),
     );
   }
+  
+  Widget _buildEmptyStateCard(String message) {
+    return Center(
+      child: Container(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          message,
+          style: TextStyle(fontSize: 16, color: Colors.grey),
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildProductsSection() {
+    final products = userActivity['products'] ?? [];
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Products (${products.length})',
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Divider(),
+        const SizedBox(height: 8),
+        products.isEmpty
+            ? _buildEmptyStateCard('No products listed')
+            : _buildItemsHorizontalList(products, 'product'),
+      ],
+    );
+  }
 
+  Widget _buildDonationsSection() {
+    final donations = userActivity['donations'] ?? [];
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Donations (${donations.length})',
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Divider(),
+        const SizedBox(height: 8),
+        donations.isEmpty
+            ? _buildEmptyStateCard('No donations listed')
+            : _buildItemsHorizontalList(donations, 'donation'),
+      ],
+    );
+  }
+  
+  // Add Lost Items section widget
+  Widget _buildLostItemsSection() {
+    final lostitems = userActivity['lostitems'] ?? [];
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Lost Items (${lostitems.length})',
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Divider(),
+        const SizedBox(height: 8),
+        lostitems.isEmpty
+            ? _buildEmptyStateCard('No lost items posted')
+            : _buildItemsHorizontalList(lostitems, 'lostitem'),
+      ],
+    );
+  }
+
+  Widget _buildItemsHorizontalList(List items, String type) {
+    return SizedBox(
+      height: 220,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        scrollDirection: Axis.horizontal,
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          if (type == 'donation') {
+            return GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => DonationDetailsScreen(donation: items[index]),
+                  ),
+                );
+              },
+              child: _buildItemPreview(items[index], type, type, (_) {}),
+            );
+          } else {
+            return _buildItemPreview(items[index], type, type, _navigateToProduct);
+          }
+        },
+      ),
+    );
+  }
+  
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -723,21 +836,7 @@ class _AdminProfileViewState extends State<AdminProfileView> {
                 
                 // Products Section
                 if ((userActivity['products'] as List).isNotEmpty) ...[
-                  _buildSectionHeader('Products', _viewAllProducts),
-                  SizedBox(
-                    height: 220,
-                    child: ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      scrollDirection: Axis.horizontal,
-                      itemCount: math.min((userActivity['products'] as List).length, 10),
-                      itemBuilder: (context, index) => _buildItemPreview(
-                        (userActivity['products'] as List)[index],
-                        'product',
-                        'product',
-                        _navigateToProduct,
-                      ),
-                    ),
-                  ),
+                  _buildProductsSection(),
                   const SizedBox(height: 24),
                 ],
                 
@@ -763,26 +862,13 @@ class _AdminProfileViewState extends State<AdminProfileView> {
                 
                 // Donations Section
                 if ((userActivity['donations'] as List).isNotEmpty) ...[
-                  _buildSectionHeader('Donations', _viewAllDonations),
-                  SizedBox(
-                    height: 220,
-                    child: ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      scrollDirection: Axis.horizontal,
-                      itemCount: math.min((userActivity['donations'] as List).length, 10),
-                      itemBuilder: (context, index) => _buildItemPreview(
-                        (userActivity['donations'] as List)[index],
-                        'donation',
-                        'donation',
-                        (id) => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => AdminDonationView(donationId: id),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+                  _buildDonationsSection(),
+                  const SizedBox(height: 24),
+                ],
+                
+                // Lost Items Section
+                if ((userActivity['lostitems'] as List).isNotEmpty) ...[
+                  _buildLostItemsSection(),
                   const SizedBox(height: 24),
                 ],
                 

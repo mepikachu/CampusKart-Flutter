@@ -198,9 +198,26 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: Text(userData != null ? userData!['userName'] ?? 'User Profile' : 'User Profile'),
-        elevation: 2,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: Container(
+          margin: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.grey.shade100,
+          ),
+          child: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.black),
+            onPressed: () => Navigator.pop(context),
+            padding: EdgeInsets.zero,
+          ),
+        ),
+        title: Text(
+          userData != null ? userData!['userName'] ?? 'User Profile' : 'User Profile',
+          style: const TextStyle(color: Colors.black),
+        ),
       ),
       body: isLoading 
           ? const Center(child: CircularProgressIndicator())

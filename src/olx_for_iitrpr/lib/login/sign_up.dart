@@ -412,11 +412,20 @@ class _SignUpScreenState extends State<SignUpScreen> {
         setState(() {
           _isVerifyingEmail = false;
         });
-        return; // User canceled the sign-in flow
+        return;
       }
       
-      // Get email from Google account
       final email = googleUser.email;
+      
+      // Check if it's an IIT Ropar email
+      if (!email.endsWith('@iitrpr.ac.in')) {
+        _showTopSnackBar('Please use your IIT Ropar email account');
+        await _googleSignIn.signOut();
+        setState(() {
+          _isVerifyingEmail = false;
+        });
+        return;
+      }
       
       // Verify with backend
       final response = await http.post(
@@ -787,7 +796,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
-                hintText: "Email",
+                hintText: "IIT Ropar Email",
                 hintStyle: TextStyle(color: Colors.grey[500], fontSize: 14),
                 filled: true,
                 fillColor: Colors.grey[100],
@@ -807,7 +816,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
               validator: (value) {
                 if (value == null || value.isEmpty) return "Email is required";
-                if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                if (!value.endsWith('@iitrpr.ac.in')) {
+                  return "Please use your IIT Ropar email (@iitrpr.ac.in)";
+                }
+                if (!RegExp(r'^[\w-\.]+@iitrpr\.ac\.in$').hasMatch(value)) {
                   return "Invalid email format";
                 }
                 return null;

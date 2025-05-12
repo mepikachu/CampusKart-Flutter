@@ -569,25 +569,16 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              ElevatedButton.icon(
-                                icon: const Icon(Icons.check, color: Colors.white),
-                                label: const Text('Accept'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
-                                ),
+                              IconButton(
+                                icon: const Icon(Icons.check_circle, color: Colors.green),
                                 onPressed: () => _showConfirmationDialog(
                                   'Accept Offer',
                                   'Are you sure you want to accept this offer? This will mark the product as sold.',
                                   () => _handleOfferAction(offer['_id'], 'accept'),
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              ElevatedButton.icon(
-                                icon: const Icon(Icons.clear, color: Colors.white),
-                                label: const Text('Reject'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                ),
+                              IconButton(
+                                icon: const Icon(Icons.cancel, color: Colors.red),
                                 onPressed: () => _showConfirmationDialog(
                                   'Reject Offer',
                                   'Are you sure you want to reject this offer?',

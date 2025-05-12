@@ -95,6 +95,16 @@ class DonationCacheService {
     }
   }
 
+  /// Store number of images
+  static Future<void> cacheNumImages(String id, int numImages) async {
+    try {
+      _numImagesCache[id] = numImages;
+      await _secureStorage.write(key: _numImagesKey(id), value: numImages.toString());
+    } catch (e) {
+      print('Error caching num images: $e');
+    }
+  }
+
   /// Get cached donations list
   static Future<List<dynamic>?> getCachedDonations() async {
     try {
