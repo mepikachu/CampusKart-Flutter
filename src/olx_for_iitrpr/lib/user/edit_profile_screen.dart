@@ -63,76 +63,71 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final authCookie = await _storage.read(key: 'authCookie');
       if (authCookie == null) throw Exception('Not authenticated');
 
+      // Create address map only if any field is filled
+      Map<String, String> address = {};
+      if (_streetController.text.isNotEmpty) address['street'] = _streetController.text.trim();
+      if (_cityController.text.isNotEmpty) address['city'] = _cityController.text.trim();
+      if (_stateController.text.isNotEmpty) address['state'] = _stateController.text.trim();
+      if (_zipCodeController.text.isNotEmpty) address['zipCode'] = _zipCodeController.text.trim();
+
       // Prepare the request data
       final Map<String, dynamic> updateData = {
         'userName': _usernameController.text.trim(),
         'phone': _phoneController.text.trim(),
-        'address': {
-          'street': _streetController.text.trim(),
-          'city': _cityController.text.trim(),
-          'state': _stateController.text.trim(),
-          'zipCode': _zipCodeController.text.trim(),
-        },
       };
+
+      // Only add address if any field is filled
+      if (address.isNotEmpty) {
+        updateData['address'] = address;
+      }
 
       // Handle profile picture
       if (_imageFile != null) {
-        try {
-          final bytes = await _imageFile!.readAsBytes();
-          final base64Image = base64Encode(bytes);
-          updateData['profilePicture'] = {
-            'data': base64Image,
-            'contentType': 'image/jpeg'  // or detect actual mime type
-          };
-        } catch (e) {
-          print('Error processing image: $e');
-          // Continue without updating profile picture
-        }
+        final bytes = await _imageFile!.readAsBytes();
+        final base64Image = base64Encode(bytes);
+        updateData['profilePicture'] = {
+          'data': base64Image,
+          'contentType': 'image/jpeg'
+        };
       }
-
-      // Remove any null or empty values
-      updateData.removeWhere((key, value) => value == null);
-      updateData['address'].removeWhere((key, value) => value == null || value.isEmpty);
-      if (updateData['address'].isEmpty) {
-        updateData.remove('address');
-      }
-
-      print('Request data: ${json.encode(updateData)}'); // Debug print
 
       final response = await http.put(
         Uri.parse('$serverUrl/api/users/me'),
         headers: {
-          'Content-Type': 'application/json; charset=UTF-8',
-          'auth-cookie': authCookie,
+          'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'auth-cookie': authCookie,
         },
         body: json.encode(updateData),
-      ).timeout(const Duration(seconds: 30));
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('Request timed out. Please try again.');
+        },
+      );
 
-      print('Response status: ${response.statusCode}');
-      print('Response body: ${response.body}');
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
+      if (response.statusCode == 200) {
         final responseData = json.decode(response.body);
-        if (responseData['success'] == true || response.statusCode == 200) {
+        if (responseData['success'] == true) {
+          // Save updated user data locally
+          await _storage.write(key: 'userName', value: updateData['userName']);
+          
           widget.onProfileUpdated();
           if (mounted) {
+            Navigator.pop(context);
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text('Profile updated successfully'),
                 backgroundColor: Colors.green,
               ),
             );
-            Navigator.pop(context);
           }
         } else {
-          throw Exception(responseData['message'] ?? 'Failed to update profile');
+          throw Exception(responseData['error'] ?? 'Failed to update profile');
         }
       } else {
-        final errorMessage = response.body.isNotEmpty 
-            ? json.decode(response.body)['message'] ?? 'Unknown error occurred'
-            : 'Server error occurred';
-        throw Exception(errorMessage);
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['error'] ?? 'Server returned ${response.statusCode}');
       }
     } catch (e) {
       if (mounted) {
@@ -140,11 +135,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           SnackBar(
             content: Text('Error: ${e.toString().replaceAll('Exception: ', '')}'),
             backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
           ),
         );
       }
-      print('Error updating profile: $e');
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);

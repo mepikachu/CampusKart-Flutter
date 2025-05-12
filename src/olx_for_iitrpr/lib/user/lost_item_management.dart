@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -270,219 +271,354 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
     final images = _buildImageSlides();
     final status = widget.item['status'] ?? 'lost';
     
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Lost Item Details'),
+    return Theme(
+      data: Theme.of(context).copyWith(
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+        ),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (images.isNotEmpty)
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        CarouselSlider(
-                          options: CarouselOptions(
-                            height: 300,
-                            viewportFraction: 1.0,
-                            enableInfiniteScroll: false,
-                            autoPlay: images.length > 1,
-                            autoPlayInterval: const Duration(seconds: 3),
-                            onPageChanged: (index, reason) {
-                              setState(() => _currentImageIndex = index);
-                            },
-                          ),
-                          items: images,
-                        ),
-                        // Image navigation arrows
-                        if (images.length > 1) ...[
-                          Positioned(
-                            left: 10,
-                            child: IconButton(
-                              icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-                              onPressed: _currentImageIndex > 0
-                                  ? () => setState(() => _currentImageIndex--)
-                                  : null,
-                            ),
-                          ),
-                          Positioned(
-                            right: 10,
-                            child: IconButton(
-                              icon: const Icon(Icons.arrow_forward_ios, color: Colors.white),
-                              onPressed: _currentImageIndex < images.length - 1
-                                  ? () => setState(() => _currentImageIndex++)
-                                  : null,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                widget.item['name'] ?? 'Unknown Item',
-                                style: const TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: status == 'found'
-                                    ? Colors.green.withOpacity(0.1)
-                                    : Colors.orange.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                status.toUpperCase(),
-                                style: TextStyle(
-                                  color: status == 'found'
-                                      ? Colors.green[900]
-                                      : Colors.orange[900],
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        // Details section
-                        const Text(
-                          'Item Details',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Card(
-                          elevation: 2,
-                          child: Column(
-                            children: [
-                              _buildDetailTile(
-                                Icons.person,
-                                'Posted By',
-                                _getUserName(),
-                              ),
-                              _buildDetailTile(
-                                Icons.calendar_today,
-                                'Posted Date',
-                                _formatDate(widget.item['createdAt']),
-                              ),
-                              _buildDetailTile(
-                                Icons.location_on,
-                                'Last Seen Location',
-                                widget.item['lastSeenLocation'] ?? 'Not specified',
-                              ),
-                              if (widget.item['lostDate'] != null)
-                                _buildDetailTile(
-                                  Icons.event,
-                                  'Lost Date',
-                                  _formatDate(widget.item['lostDate']),
-                                ),
-                              if (status == 'found')
-                                _buildDetailTile(
-                                  Icons.check_circle,
-                                  'Found Date',
-                                  _formatDate(widget.item['foundDate']),
-                                ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        // Description section
-                        const Text(
-                          'Description',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Card(
-                          elevation: 2,
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Text(
-                              widget.item['description'] ?? 'No description available',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                height: 1.5,
-                              ),
-                            ),
-                          ),
-                        ),
-                        if (widget.item['additionalInfo'] != null &&
-                            widget.item['additionalInfo'].isNotEmpty) ...[
-                          const SizedBox(height: 24),
-                          const Text(
-                            'Additional Information',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Card(
-                            elevation: 2,
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Text(
-                                widget.item['additionalInfo'],
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  height: 1.5,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        extendBodyBehindAppBar: false,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          systemOverlayStyle: SystemUiOverlayStyle.dark,
+          title: Text(
+            'Lost Item Details',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.black,
             ),
           ),
-          if (widget.isOwner && status != 'found')
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _markAsFound,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    disabledBackgroundColor: Colors.grey,
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                        )
-                      : const Text(
-                          'Mark as Found',
-                          style: TextStyle(fontSize: 16, color: Colors.white),
-                        ),
+          leading: Container(
+            margin: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: Icon(Icons.arrow_back, color: Colors.black),
+              padding: EdgeInsets.zero,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (images.isNotEmpty)
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          CarouselSlider(
+                            items: images,
+                            options: CarouselOptions(
+                              height: 300,
+                              viewportFraction: 1.0,
+                              enableInfiniteScroll: images.length > 1,
+                              onPageChanged: (index, reason) {
+                                setState(() {
+                                  _currentImageIndex = index;
+                                });
+                              },
+                            ),
+                          ),
+                          
+                          // Navigation arrows with better styling
+                          if (_currentImageIndex > 0)
+                            Positioned(
+                              left: 16,
+                              child: Container(
+                                height: 40,
+                                width: 40,
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.5),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: IconButton(
+                                  icon: const Icon(Icons.arrow_back_ios_new, size: 18, color: Colors.white),
+                                  onPressed: () => setState(() => _currentImageIndex--),
+                                ),
+                              ),
+                            ),
+                            
+                          if (_currentImageIndex < images.length - 1)
+                            Positioned(
+                              right: 16,
+                              child: Container(
+                                height: 40,
+                                width: 40,
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.5),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: IconButton(
+                                  icon: const Icon(Icons.arrow_forward_ios, size: 18, color: Colors.white),
+                                  onPressed: () => setState(() => _currentImageIndex++),
+                                ),
+                              ),
+                            ),
+                            
+                          // Loading indicator
+                          if (_isLoadingImages)
+                            Positioned(
+                              top: 16,
+                              right: 16,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.5),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation(Colors.white),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            
+                          // Image counter dots
+                          if (images.length > 1)
+                            Positioned(
+                              bottom: 16,
+                              left: 0,
+                              right: 0,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: images.asMap().entries.map((entry) {
+                                  return Container(
+                                    width: 8.0,
+                                    height: 8.0,
+                                    margin: const EdgeInsets.symmetric(horizontal: 3.0),
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: _currentImageIndex == entry.key
+                                          ? Colors.white
+                                          : Colors.white.withOpacity(0.5),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                        ],
+                      ),
+                      
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Name and Status
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  widget.item['name'] ?? 'Unknown Item',
+                                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
+                                ),
+                              ),
+                              Container(
+                                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: status == 'found' ? Colors.green.shade50 : Colors.orange.shade50,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  status.toUpperCase(),
+                                  style: TextStyle(
+                                    color: status == 'found' ? Colors.green.shade700 : Colors.orange.shade700,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 16),
+
+                          // Tags Section
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Tags: ',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    children: [
+                                      _buildTag('Lost Item'),
+                                      _buildTag('Campus'),
+                                      if (widget.item['category'] != null) 
+                                        _buildTag(widget.item['category']),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 24),
+
+                          // Last Seen Location
+                          Row(
+                            children: [
+                              Text(
+                                'Last Seen at: ',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  widget.item['lastSeenLocation'] ?? 'Unknown',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey[900],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 16),
+
+                          // Posted Date in blue box
+                          Container(
+                            width: double.infinity,
+                            margin: EdgeInsets.symmetric(vertical: 16),
+                            padding: EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'Posted on ${_formatDate(widget.item['createdAt'])}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.blue[700],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: 24),
+
+                          // About This Item
+                          Text(
+                            'About This Item',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          SizedBox(height: 12),
+                          Text(
+                            widget.item['description'] ?? 'No description available',
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: Colors.grey[800],
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-        ],
+            
+            // Mark as Found button with improved styling
+            if (widget.isOwner && status != 'found')
+              Container(
+                padding: const EdgeInsets.all(16.0),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      offset: const Offset(0, -4),
+                      blurRadius: 8,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _markAsFound,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: _isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Text(
+                              'Mark as Found',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTag(String text) {
+    return Container(
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.blue.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          color: Colors.blue[700],
+        ),
       ),
     );
   }
