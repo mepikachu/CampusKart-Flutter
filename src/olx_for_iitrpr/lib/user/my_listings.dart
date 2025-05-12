@@ -193,7 +193,7 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
     String formattedDate = '';
     if (product['createdAt'] != null) {
       final date = DateTime.parse(product['createdAt']);
-      formattedDate = '• ${date.day}/${date.month}/${date.year}';
+      formattedDate = '${date.day}/${date.month}/${date.year}';
     }
 
     return GestureDetector(
@@ -214,20 +214,17 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image with rounded corners
             ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
               child: imageWidget,
             ),
-            // Product details section
             Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // First row: Name and Price
+                  // First row: Name, Status and Price
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
                         child: Text(
@@ -240,18 +237,47 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      Text(
-                        '₹${product['price']?.toString() ?? '0'}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black,
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: statusColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              statusText,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: statusColor,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 4),
-                  // Description (2 lines)
+                  Text(
+                    '₹${product['price']?.toString() ?? '0'}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
                   Text(
                     product['description'] ?? 'No description provided',
                     style: TextStyle(
@@ -263,40 +289,10 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 8),
-                  // Status, date and offer count
+                  // Last row: Date and offer count
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Expanded(
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: statusColor,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              statusText,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey[700],
-                              ),
-                            ),
-                            if (formattedDate.isNotEmpty)
-                              Text(
-                                formattedDate,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
                       if (product['offerRequests'] != null &&
                           (product['offerRequests'] as List).isNotEmpty)
                         Container(
@@ -314,6 +310,13 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                             ),
                           ),
                         ),
+                      Text(
+                        formattedDate,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
                     ],
                   ),
                 ],

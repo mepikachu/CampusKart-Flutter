@@ -482,124 +482,148 @@ class _EditProductScreenState extends State<EditProductScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Edit Product'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black,
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.delete),
-            color: Colors.red,
-            onPressed: _isLoading ? null : _deleteProduct,
-          ),
-        ],
+    return Theme(
+      data: Theme.of(context).copyWith(
+        scaffoldBackgroundColor: Colors.white,
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+          scrolledUnderElevation: 0, // Prevents color change on scroll
+        ),
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              children: [
-                _buildImagePreviews(),
-                const SizedBox(height: 24),
-                
-                // Read-only product name
-                TextFormField(
-                  controller: _nameController,
-                  decoration: InputDecoration(
-                    labelText: "Product Name",
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  enabled: false, // Make it read-only
-                ),
-                const SizedBox(height: 16),
-                
-                // Editable description
-                TextFormField(
-                  controller: _descriptionController,
-                  decoration: InputDecoration(
-                    labelText: "Description",
-                    alignLabelWithHint: true,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  maxLines: 3,
-                  validator: (value) =>
-                      (value?.isEmpty ?? true) ? "Enter description" : null,
-                ),
-                const SizedBox(height: 16),
-                
-                // Editable price and read-only category
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: TextFormField(
-                        controller: _priceController,
-                        decoration: InputDecoration(
-                          labelText: "Price",
-                          prefixText: '₹ ',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (value) =>
-                            (value?.isEmpty ?? true) ? "Enter price" : null,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      flex: 3,
-                      child: TextFormField(
-                        initialValue: _selectedCategory[0].toUpperCase() + _selectedCategory.substring(1),
-                        decoration: InputDecoration(
-                          labelText: "Category",
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        enabled: false, // Make it read-only
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-                
-                Container(
-                  width: double.infinity,
-                  height: 54,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  child: ElevatedButton(
-                    onPressed: _isLoading || _initialLoadingImages || _existingImages.isEmpty && _newImageFiles.isEmpty 
-                      ? null 
-                      : _updateProduct,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      shape: RoundedRectangleBorder(
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          title: const Text('Edit Product'),
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+          leading: Container(
+            margin: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: Icon(Icons.arrow_back, color: Colors.black),
+              padding: EdgeInsets.zero,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.delete),
+              color: Colors.red,
+              onPressed: _isLoading ? null : _deleteProduct,
+            ),
+          ],
+        ),
+        body: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                children: [
+                  _buildImagePreviews(),
+                  const SizedBox(height: 24),
+                  
+                  // Read-only product name
+                  TextFormField(
+                    controller: _nameController,
+                    decoration: InputDecoration(
+                      labelText: "Product Name",
+                      border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: _isLoading
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : Text(
-                            _existingImages.isEmpty && _newImageFiles.isEmpty
-                                ? 'At least one image required'
-                                : 'Save Changes',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
+                    enabled: false, // Make it read-only
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Editable description
+                  TextFormField(
+                    controller: _descriptionController,
+                    decoration: InputDecoration(
+                      labelText: "Description",
+                      alignLabelWithHint: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    maxLines: 3,
+                    validator: (value) =>
+                        (value?.isEmpty ?? true) ? "Enter description" : null,
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Editable price and read-only category
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: TextFormField(
+                          controller: _priceController,
+                          decoration: InputDecoration(
+                            labelText: "Price",
+                            prefixText: '₹ ',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
+                          keyboardType: TextInputType.number,
+                          validator: (value) =>
+                              (value?.isEmpty ?? true) ? "Enter price" : null,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        flex: 3,
+                        child: TextFormField(
+                          initialValue: _selectedCategory[0].toUpperCase() + _selectedCategory.substring(1),
+                          decoration: InputDecoration(
+                            labelText: "Category",
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          enabled: false, // Make it read-only
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 32),
+                  
+                  Container(
+                    width: double.infinity,
+                    height: 54,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    child: ElevatedButton(
+                      onPressed: _isLoading || _initialLoadingImages || _existingImages.isEmpty && _newImageFiles.isEmpty 
+                        ? null 
+                        : _updateProduct,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: _isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : Text(
+                              _existingImages.isEmpty && _newImageFiles.isEmpty
+                                  ? 'At least one image required'
+                                  : 'Save Changes',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

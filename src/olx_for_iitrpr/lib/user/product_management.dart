@@ -202,6 +202,121 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
     }
   }
 
+  Future<void> _closeProduct() async {
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      final response = await http.post(
+        Uri.parse('$serverUrl/api/products/${widget.product['_id']}/close'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          widget.product['status'] = 'closed';
+        });
+        
+        // Update cache
+        final cachedProduct = await ProductCacheService.getCachedProduct(widget.product['_id']);
+        if (cachedProduct != null) {
+          cachedProduct['status'] = 'closed';
+          await ProductCacheService.cacheProduct(widget.product['_id'], cachedProduct);
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Product closed successfully')),
+        );
+
+        // Navigate back after a short delay
+        Future.delayed(const Duration(seconds: 2), () {
+          Navigator.of(context).pop();
+        });
+      } else {
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['error'] ?? 'Failed to close product');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
+      );
+    }
+  }
+
+  Future<void> _showCloseConfirmationDialog() async {
+    return showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          backgroundColor: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Close Product',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Are you sure you want to close this product listing? This will remove it from active listings and cannot be undone.',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[700],
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      child: Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: Colors.grey[700],
+                          fontSize: 16,
+                        ),
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      ),
+                      child: const Text(
+                        'Close',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.white,
+                        ),
+                      ),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        _closeProduct();
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -212,7 +327,7 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
             backgroundColor: Colors.white,
             foregroundColor: Colors.black,
             elevation: 0,
-            scrolledUnderElevation: 0, // Prevents color change on scroll
+            scrolledUnderElevation: 0,
           ),
         ),
         child: Scaffold(
@@ -234,25 +349,26 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
               ),
             ),
             actions: [
-              Container(
-                margin: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  shape: BoxShape.circle,
+              if (widget.product['status'] == 'available') // Only show edit button if product is available
+                Container(
+                  margin: EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: Icon(Icons.edit, color: Colors.black),
+                    padding: EdgeInsets.zero,
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => EditProductScreen(product: widget.product),
+                        ),
+                      );
+                    },
+                  ),
                 ),
-                child: IconButton(
-                  icon: Icon(Icons.edit, color: Colors.black),
-                  padding: EdgeInsets.zero,
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => EditProductScreen(product: widget.product),
-                      ),
-                    );
-                  },
-                ),
-              ),
             ],
             title: Text(
               'Product Details',
@@ -278,6 +394,39 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
               _buildOffersList(),
             ],
           ),
+          bottomNavigationBar: widget.product['status'] == 'available' 
+            ? Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 5,
+                      offset: Offset(0, -2),
+                    ),
+                  ],
+                ),
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed: _showCloseConfirmationDialog,
+                  child: const Text(
+                    'Close Product',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              )
+            : null,
         ),
       ),
     );
@@ -552,68 +701,176 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
                     itemCount: offers.length,
                     itemBuilder: (context, index) {
                       final offer = offers[index];
-                      return Card(
+                      return Container(
                         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        child: ListTile(
-                          title: Text(
-                            '₹${offer['offerPrice']}',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          subtitle: Text(
-                            'From: ${offer['buyer']?['userName'] ?? 'Unknown'}\n'
-                            'Date: ${DateTime.parse(offer['createdAt']).toString().split('.')[0]}',
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: IntrinsicHeight(
+                          child: Row(
                             children: [
-                              IconButton(
-                                icon: const Icon(Icons.check_circle, color: Colors.green),
-                                onPressed: () => _showConfirmationDialog(
-                                  'Accept Offer',
-                                  'Are you sure you want to accept this offer? This will mark the product as sold.',
-                                  () => _handleOfferAction(offer['_id'], 'accept'),
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '₹${offer['offerPrice']}',
+                                        style: const TextStyle(
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'From: ${offer['buyer']?['userName'] ?? 'Unknown'}',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          color: Colors.grey[700],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Date: ${DateTime.parse(offer['createdAt']).toString().split('.')[0]}',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey[600],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.cancel, color: Colors.red),
-                                onPressed: () => _showConfirmationDialog(
-                                  'Reject Offer',
-                                  'Are you sure you want to reject this offer?',
-                                  () => _handleOfferAction(offer['_id'], 'decline'),
+                              if (widget.product['status'] == 'available') // Only show action buttons if product is available
+                                Container(
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                      left: BorderSide(color: Colors.grey.shade200),
+                                    ),
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                    children: [
+                                      _buildActionButton(
+                                        icon: Icons.check_circle,
+                                        color: Colors.green,
+                                        onPressed: () => _showConfirmationDialog(
+                                          'Accept Offer',
+                                          'Are you sure you want to accept this offer? This will mark the product as sold.',
+                                          () => _handleOfferAction(offer['_id'], 'accept'),
+                                        ),
+                                      ),
+                                      Container(
+                                        height: 1,
+                                        width: 56,
+                                        color: Colors.grey.shade200,
+                                      ),
+                                      _buildActionButton(
+                                        icon: Icons.cancel,
+                                        color: Colors.red,
+                                        onPressed: () => _showConfirmationDialog(
+                                          'Reject Offer',
+                                          'Are you sure you want to reject this offer?',
+                                          () => _handleOfferAction(offer['_id'], 'decline'),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
                             ],
                           ),
-                          isThreeLine: true,
                         ),
                       );
                     },
                   );
   }
 
+  Widget _buildActionButton({
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return SizedBox(
+      width: 56,
+      height: 56,
+      child: IconButton(
+        icon: Icon(icon, size: 32),
+        color: color,
+        onPressed: onPressed,
+      ),
+    );
+  }
+
   Future<void> _showConfirmationDialog(String title, String message, Function onConfirm) async {
     return showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(title),
-          content: Text(message),
-          actions: [
-            TextButton(
-              child: const Text('Cancel'),
-              onPressed: () => Navigator.of(context).pop(),
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          backgroundColor: Colors.white,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[700],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      child: Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: Colors.grey[700],
+                          fontSize: 16,
+                        ),
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: title.contains('Accept') ? Colors.green : Colors.red,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      ),
+                      child: Text(
+                        title.split(' ')[0],
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Colors.white,
+                        ),
+                      ),
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        onConfirm();
+                      },
+                    ),
+                  ],
+                ),
+              ],
             ),
-            ElevatedButton(
-              child: const Text('Confirm'),
-              onPressed: () {
-                Navigator.of(context).pop();
-                onConfirm();
-              },
-            ),
-          ],
+          ),
         );
       },
     );

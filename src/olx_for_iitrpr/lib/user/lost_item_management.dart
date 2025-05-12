@@ -7,7 +7,6 @@ import 'package:carousel_slider/carousel_slider.dart';
 import 'package:http/http.dart' as http;
 import '../services/lost_found_cache_service.dart';
 import 'server.dart';
-import 'view_profile.dart';
 
 class LostItemDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> item;
@@ -231,50 +230,19 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
     ];
   }
 
-  // Modify the _buildDetailTile method to make it clickable and use icons
-  Widget _buildDetailTile(IconData icon, String title, String value, {String? userId}) {
-    return InkWell(
-      onTap: userId != null ? () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ViewProfileScreen(userId: userId),
-          ),
-        );
-      } : null,
-      child: ListTile(
-        leading: Icon(icon, color: Colors.grey[700]),
-        title: Text(
-          title,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-          ),
+  Widget _buildDetailTile(IconData icon, String title, String value) {
+    return ListTile(
+      leading: Icon(icon, color: Colors.grey[700]),
+      title: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
         ),
-        subtitle: Row(
-          children: [
-            Expanded(
-              child: Text(
-                value,
-                style: const TextStyle(fontSize: 16),
-              ),
-            ),
-            if (userId != null) ...[
-              Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: widget.item['status'] == 'found' ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
-                ),
-                child: Icon(
-                  widget.item['status'] == 'found' ? Icons.check_circle : Icons.cancel,
-                  size: 20,
-                  color: widget.item['status'] == 'found' ? Colors.green : Colors.red,
-                ),
-              ),
-            ],
-          ],
-        ),
+      ),
+      subtitle: Text(
+        value,
+        style: const TextStyle(fontSize: 16),
       ),
     );
   }

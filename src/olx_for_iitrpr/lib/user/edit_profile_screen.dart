@@ -28,6 +28,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   
   late TextEditingController _usernameController;
   late TextEditingController _phoneController;
+  late TextEditingController _fullNameController;
+  late TextEditingController _emailController;
   late TextEditingController _streetController;
   late TextEditingController _cityController;
   late TextEditingController _stateController;
@@ -37,7 +39,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void initState() {
     super.initState();
     _usernameController = TextEditingController(text: widget.userData['userName']);
+    _fullNameController = TextEditingController(text: widget.userData['fullName']);
     _phoneController = TextEditingController(text: widget.userData['phone']);
+    _emailController = TextEditingController(text: widget.userData['email']);
     _streetController = TextEditingController(text: widget.userData['address']?['street']);
     _cityController = TextEditingController(text: widget.userData['address']?['city']);
     _stateController = TextEditingController(text: widget.userData['address']?['state']);
@@ -180,11 +184,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  GestureDetector(
-                    onTap: _pickImage,
-                    child: Stack(
-                      children: [
-                        Container(
+                  Stack(
+                    children: [
+                      GestureDetector(
+                        onTap: _pickImage,
+                        child: Container(
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(
@@ -203,44 +207,33 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                     : null) as ImageProvider?,
                             child: (_imageFile == null &&
                                     widget.userData['profilePicture']?['data'] == null)
-                                ? Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: const [
-                                      Icon(
-                                        Icons.person,
-                                        size: 50,
-                                        color: Colors.grey,
-                                      ),
-                                      SizedBox(height: 5),
-                                      Icon(
-                                        Icons.camera_alt,
-                                        size: 24,
-                                        color: Colors.grey,
-                                      ),
-                                    ],
+                                ? const Icon(
+                                    Icons.person,
+                                    size: 50,
+                                    color: Colors.grey,
                                   )
                                 : null,
                           ),
                         ),
-                        Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Theme.of(context).primaryColor,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 3),
-                            ),
-                            child: const Icon(
-                              Icons.edit,
-                              size: 20,
-                              color: Colors.white,
-                            ),
+                      ),
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.black,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 2),
+                          ),
+                          child: const Icon(
+                            Icons.camera_alt,
+                            size: 20,
+                            color: Colors.white,
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -264,7 +257,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'Personal Information',
+                              'Account Information',
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -272,23 +265,43 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             ),
                             const SizedBox(height: 20),
                             TextFormField(
+                              controller: _emailController,
+                              enabled: false,
+                              decoration: InputDecoration(
+                                labelText: 'Email',
+                                prefixIcon: const Icon(Icons.email),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                filled: true,
+                                fillColor: Colors.grey.shade100,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
                               controller: _usernameController,
                               decoration: InputDecoration(
                                 labelText: 'Username',
                                 prefixIcon: const Icon(Icons.person),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
                                 ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
-                                ),
-                                filled: true,
-                                fillColor: Colors.white,
                               ),
                               validator: (value) =>
                                   value?.isEmpty ?? true ? 'Username is required' : null,
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: _fullNameController,
+                              decoration: InputDecoration(
+                                labelText: 'Full Name',
+                                prefixIcon: const Icon(Icons.person_outline),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              validator: (value) =>
+                                  value?.isEmpty ?? true ? 'Full name is required' : null,
                             ),
                             const SizedBox(height: 16),
                             TextFormField(
@@ -298,14 +311,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                 prefixIcon: const Icon(Icons.phone),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
                                 ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
-                                ),
-                                filled: true,
-                                fillColor: Colors.white,
                               ),
                               validator: (value) =>
                                   value?.isEmpty ?? true ? 'Phone is required' : null,
@@ -337,19 +343,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             const SizedBox(height: 20),
                             TextFormField(
                               controller: _streetController,
+                              enabled: false,
                               decoration: InputDecoration(
                                 labelText: 'Street',
                                 prefixIcon: const Icon(Icons.location_on),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
                                 ),
                                 filled: true,
-                                fillColor: Colors.white,
+                                fillColor: Colors.grey.shade100,
                               ),
                             ),
                             const SizedBox(height: 16),
@@ -358,19 +360,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                 Expanded(
                                   child: TextFormField(
                                     controller: _cityController,
+                                    enabled: false,
                                     decoration: InputDecoration(
                                       labelText: 'City',
                                       prefixIcon: const Icon(Icons.location_city),
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(color: Colors.grey.shade300),
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(color: Colors.grey.shade300),
                                       ),
                                       filled: true,
-                                      fillColor: Colors.white,
+                                      fillColor: Colors.grey.shade100,
                                     ),
                                   ),
                                 ),
@@ -378,19 +376,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                 Expanded(
                                   child: TextFormField(
                                     controller: _stateController,
+                                    enabled: false,
                                     decoration: InputDecoration(
                                       labelText: 'State',
                                       prefixIcon: const Icon(Icons.map),
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(color: Colors.grey.shade300),
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(10),
-                                        borderSide: BorderSide(color: Colors.grey.shade300),
                                       ),
                                       filled: true,
-                                      fillColor: Colors.white,
+                                      fillColor: Colors.grey.shade100,
                                     ),
                                   ),
                                 ),
@@ -399,19 +393,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             const SizedBox(height: 16),
                             TextFormField(
                               controller: _zipCodeController,
+                              enabled: false,
                               decoration: InputDecoration(
                                 labelText: 'ZIP Code',
                                 prefixIcon: const Icon(Icons.local_post_office),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
                                 ),
                                 filled: true,
-                                fillColor: Colors.white,
+                                fillColor: Colors.grey.shade100,
                               ),
                             ),
                           ],
@@ -464,6 +454,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void dispose() {
     _usernameController.dispose();
     _phoneController.dispose();
+    _fullNameController.dispose();
+    _emailController.dispose();
     _streetController.dispose();
     _cityController.dispose();
     _stateController.dispose();
