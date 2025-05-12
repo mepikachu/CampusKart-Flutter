@@ -289,6 +289,11 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Image carousel
+          if (_imageCache[widget.product['_id']]?.isNotEmpty == true || _isLoadingImages)
+            _buildImageCarousel(),
+          const SizedBox(height: 16),
+
           // Name and Status row
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -448,7 +453,7 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
           label,
           style: TextStyle(
             fontSize: 14,
-            color: Colors.blue[700],
+            color: Colors.black, // Changed from blue to black
             fontWeight: FontWeight.w500,
           ),
         ),
@@ -456,7 +461,7 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
           value,
           style: TextStyle(
             fontSize: 14,
-            color: Colors.blue[700],
+            color: Colors.black, // Changed from blue to black
             fontWeight: FontWeight.w500,
           ),
         ),
