@@ -21,21 +21,36 @@ class VolunteerDonationsPage extends StatefulWidget {
   State<VolunteerDonationsPage> createState() => _VolunteerDonationsPageState();
 }
 
-class _VolunteerDonationsPageState extends State<VolunteerDonationsPage> {
+class _VolunteerDonationsPageState extends State<VolunteerDonationsPage>
+    with AutomaticKeepAliveClientMixin {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final Map<String, Uint8List> _loadedImages = {};
   final Set<String> _loadingProductIds = {};
+  final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   List<dynamic> donations = [];
   List<dynamic> filteredDonations = [];
   String searchQuery = '';
   bool isLoading = true;
   String errorMessage = '';
   SortOption _currentSort = SortOption.dateDesc;
+  bool _showSearchBar = true;
+  String _sortBy = '';
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     fetchDonations();
+  }
+
+  void _onScroll() {
+    final show = _scrollController.offset <= 10;
+    if (show != _showSearchBar) {
+      setState(() {
+        _showSearchBar = show;
+      });
+    }
   }
 
   Future<void> fetchDonations() async {
@@ -51,23 +66,19 @@ class _VolunteerDonationsPageState extends State<VolunteerDonationsPage> {
       );
       final data = json.decode(response.body);
       if (response.statusCode == 200 && data['success'] == true) {
-        // Filter out invalid donations
         final validDonations = (data['donations'] as List).where((donation) {
-          return donation != null && 
-                 donation['_id'] != null &&
-                 donation['name'] != null;
+          return donation != null &&
+              donation['_id'] != null &&
+              donation['name'] != null;
         }).toList();
 
-        print('Valid Donations: ${validDonations.length}'); // Debug log
-        
         setState(() {
           donations = validDonations;
           filteredDonations = List.from(validDonations);
-          _sortDonations();
+          _filterAndSortDonations();
           errorMessage = '';
         });
 
-        // Load images for valid donations
         for (var donation in validDonations) {
           if (donation['_id'] != null) {
             _loadCachedImage(donation['_id']);
@@ -77,7 +88,6 @@ class _VolunteerDonationsPageState extends State<VolunteerDonationsPage> {
         throw Exception(data['error'] ?? 'Failed to load donations');
       }
     } catch (e) {
-      print('Error fetching donations: $e'); // Debug log
       setState(() => errorMessage = e.toString());
     } finally {
       setState(() => isLoading = false);
@@ -86,7 +96,8 @@ class _VolunteerDonationsPageState extends State<VolunteerDonationsPage> {
 
   Future<void> _loadCachedImage(String donationId) async {
     try {
-      if (_loadedImages.containsKey(donationId) || _loadingProductIds.contains(donationId)) {
+      if (_loadedImages.containsKey(donationId) ||
+          _loadingProductIds.contains(donationId)) {
         return;
       }
 
@@ -145,106 +156,53 @@ class _VolunteerDonationsPageState extends State<VolunteerDonationsPage> {
   void _filterDonations(String query) {
     setState(() {
       searchQuery = query.toLowerCase();
-      if (searchQuery.isEmpty) {
-        filteredDonations = List.from(donations);
-      } else {
-        filteredDonations = donations.where((donation) {
-          final name = donation['name']?.toString().toLowerCase() ?? '';
-          final description = donation['description']?.toString().toLowerCase() ?? '';
-          return name.contains(searchQuery) || description.contains(searchQuery);
-        }).toList();
-      }
-      _sortDonations();
+      _filterAndSortDonations();
     });
   }
 
-  void _sortDonations() {
+  void _filterAndSortDonations() {
+    var filtered = List.from(donations);
+
+    if (_searchController.text.isNotEmpty) {
+      final searchTerm = _searchController.text.toLowerCase();
+      filtered = filtered.where((donation) =>
+          (donation['name']?.toLowerCase().contains(searchTerm) ?? false) ||
+          (donation['description']?.toLowerCase().contains(searchTerm) ?? false)).toList();
+    }
+
+    switch (_sortBy) {
+      case 'name_asc':
+        filtered.sort((a, b) => (a['name'] ?? '').compareTo(b['name'] ?? ''));
+        break;
+      case 'name_desc':
+        filtered.sort((a, b) => (b['name'] ?? '').compareTo(a['name'] ?? ''));
+        break;
+      case 'date_desc':
+        filtered.sort((a, b) => DateTime.parse(b['createdAt'])
+            .compareTo(DateTime.parse(a['createdAt'])));
+        break;
+      case 'date_asc':
+        filtered.sort((a, b) => DateTime.parse(a['createdAt'])
+            .compareTo(DateTime.parse(b['createdAt'])));
+        break;
+    }
+
     setState(() {
-      filteredDonations.sort((a, b) {
-        switch (_currentSort) {
-          case SortOption.nameAsc:
-            return (a['name'] ?? '').toString().toLowerCase().compareTo(
-                (b['name'] ?? '').toString().toLowerCase());
-          case SortOption.nameDesc:
-            return (b['name'] ?? '').toString().toLowerCase().compareTo(
-                (a['name'] ?? '').toString().toLowerCase());
-          case SortOption.dateDesc:
-            return (b['createdAt'] ?? '').toString()
-                .compareTo((a['createdAt'] ?? '').toString());
-          case SortOption.dateAsc:
-            return (a['createdAt'] ?? '').toString()
-                .compareTo((b['createdAt'] ?? '').toString());
-        }
-      });
+      filteredDonations = filtered;
     });
   }
 
-  void _showSortMenu(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      builder: (BuildContext ctx) {
-        return Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const ListTile(
-                title: Text('Sort by'),
-                subtitle: Text('Choose sorting option'),
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.sort_by_alpha),
-                title: const Text('Name (A to Z)'),
-                onTap: () {
-                  setState(() {
-                    _currentSort = SortOption.nameAsc;
-                    _sortDonations();
-                  });
-                  Navigator.pop(ctx);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.sort_by_alpha),
-                title: const Text('Name (Z to A)'),
-                onTap: () {
-                  setState(() {
-                    _currentSort = SortOption.nameDesc;
-                    _sortDonations();
-                  });
-                  Navigator.pop(ctx);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.access_time),
-                title: const Text('Date (Newest First)'),
-                onTap: () {
-                  setState(() {
-                    _currentSort = SortOption.dateDesc;
-                    _sortDonations();
-                  });
-                  Navigator.pop(ctx);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.access_time),
-                title: const Text('Date (Oldest First)'),
-                onTap: () {
-                  setState(() {
-                    _currentSort = SortOption.dateAsc;
-                    _sortDonations();
-                  });
-                  Navigator.pop(ctx);
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
+  String _formatDate(String? dateString) {
+    if (dateString == null) return 'Unknown';
+    try {
+      final date = DateTime.parse(dateString);
+      return '${date.day}/${date.month}/${date.year}';
+    } catch (_) {
+      return 'Unknown';
+    }
   }
 
-  Widget _buildDonationCard(Map<String, dynamic> donation, int index) {
+  Widget _buildDonationCard(Map<String, dynamic> donation) {
     final String donationId = donation['_id'] ?? '';
     if (donationId.isEmpty) {
       return const SizedBox.shrink();
@@ -283,37 +241,73 @@ class _VolunteerDonationsPageState extends State<VolunteerDonationsPage> {
       );
     }
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => DonationDescriptionScreen(donation: donation),
-          ),
-        );
-      },
-      child: Card(
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    return Card(
+      elevation: 4,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => DonationDescriptionScreen(
+                donation: donation,
+              ),
+            ),
+          ).then((_) => fetchDonations());
+        },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(15)),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
               child: imageWidget,
             ),
             Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                donation['name'] ?? 'Donation ${index + 1}',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    (donation['name'] ?? 'Unnamed Donation').toUpperCase(),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    donation['description'] ?? 'No description',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 14,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Donated by ${donation['donatedBy']?['userName'] ?? 'Unknown'}',
+                        style: const TextStyle(
+                          color: Colors.blue,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        _formatDate(donation['createdAt']),
+                        style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ],
@@ -324,60 +318,162 @@ class _VolunteerDonationsPageState extends State<VolunteerDonationsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: null, // Removed empty header by setting appBar to null
-      body: Column(
-        children: [
-          // Row with search bar and filter button
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              children: [
-                // Search field
-                Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                      hintText: 'Search donations...',
-                      prefixIcon: const Icon(Icons.search),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(25),
-                      ),
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 16),
+    super.build(context);
+    return Theme(
+      data: ThemeData(
+        primaryColor: Colors.black,
+        scaffoldBackgroundColor: Colors.white,
+        colorScheme: ColorScheme.light(
+          primary: Colors.black,
+          secondary: const Color(0xFF4CAF50),
+          background: Colors.white,
+          surface: Colors.white,
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: Column(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              height: _showSearchBar ? 68 : 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 4,
                     ),
-                    onChanged: _filterDonations,
-                  ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                // Sort/filter button
-                IconButton(
-                  icon: const Icon(Icons.sort),
-                  onPressed: () => _showSortMenu(context),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : errorMessage.isNotEmpty
-                    ? Center(child: Text('Error: $errorMessage'))
-                    : filteredDonations.isEmpty
-                        ? const Center(child: Text('No donations found'))
-                        : RefreshIndicator(
-                            onRefresh: fetchDonations,
-                            child: ListView.builder(
-                              physics:
-                                  const AlwaysScrollableScrollPhysics(),
-                              itemCount: filteredDonations.length,
-                              itemBuilder: (context, index) =>
-                                  _buildDonationCard(
-                                      filteredDonations[index], index),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        height: 40,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.search, color: Colors.grey[600], size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: _searchController,
+                                decoration: InputDecoration(
+                                  hintText: 'Search donations...',
+                                  border: InputBorder.none,
+                                  hintStyle: TextStyle(color: Colors.grey[500]),
+                                ),
+                                onChanged: _filterDonations,
+                              ),
                             ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Material(
+                      color: Colors.transparent,
+                      child: PopupMenuButton(
+                        icon: const Icon(Icons.filter_list),
+                        onSelected: (String value) {
+                          setState(() {
+                            _sortBy = value;
+                            _filterAndSortDonations();
+                          });
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem(
+                            value: 'date_desc',
+                            child: Text('Newest First'),
                           ),
-          ),
-        ],
+                          const PopupMenuItem(
+                            value: 'date_asc',
+                            child: Text('Oldest First'),
+                          ),
+                          const PopupMenuItem(
+                            value: 'name_asc',
+                            child: Text('Name: A to Z'),
+                          ),
+                          const PopupMenuItem(
+                            value: 'name_desc',
+                            child: Text('Name: Z to A'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: fetchDonations,
+                color: Colors.black,
+                child: isLoading && filteredDonations.isEmpty
+                    ? const Center(
+                        child: CircularProgressIndicator(color: Colors.black))
+                    : errorMessage.isNotEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.error_outline,
+                                    size: 64, color: Colors.black),
+                                const SizedBox(height: 16),
+                                Text('Error: $errorMessage'),
+                                const SizedBox(height: 16),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.black,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  onPressed: fetchDonations,
+                                  child: const Text('Retry'),
+                                ),
+                              ],
+                            ),
+                          )
+                        : filteredDonations.isEmpty
+                            ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.search_off,
+                                        size: 64, color: Colors.grey[400]),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'No donations found',
+                                      style: TextStyle(
+                                          fontSize: 18,
+                                          color: Colors.grey[600]),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : ListView.builder(
+                                controller: _scrollController,
+                                physics: const BouncingScrollPhysics(
+                                    parent: AlwaysScrollableScrollPhysics()),
+                                itemCount: filteredDonations.length,
+                                itemBuilder: (context, index) =>
+                                    _buildDonationCard(
+                                        filteredDonations[index]),
+                              ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
+
+  @override
+  bool get wantKeepAlive => true;
 }

@@ -30,7 +30,7 @@ class _MyDonationCollectionsState extends State<MyDonationCollections> {
       if (authCookie == null) throw Exception('Not authenticated');
 
       final response = await http.get(
-        Uri.parse('$serverUrl/api/donations/volunteer/donations'), // Updated endpoint
+        Uri.parse('$serverUrl/api/donations/volunteer/donations'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie,
@@ -40,8 +40,15 @@ class _MyDonationCollectionsState extends State<MyDonationCollections> {
       final responseBody = json.decode(response.body);
       if (response.statusCode == 200 && responseBody['success'] == true) {
         setState(() {
-          donations = responseBody['donations'] ?? [];
-          errorMessage = '';
+          donations = (responseBody['donations'] as List<dynamic>).map((donation) => {
+            'id': donation['_id'] ?? '',
+            'name': donation['name'] ?? 'No Name',
+            'description': donation['description'] ?? 'No description',
+            'status': donation['status'] ?? 'available',
+            'donationDate': donation['donationDate'] ?? donation['createdAt'],
+            'collectedBy': donation['collectedBy'],
+            'donatedBy': donation['donatedBy'],
+          }).toList();
         });
       } else {
         throw Exception(responseBody['error'] ?? 'Failed to fetch donations');
@@ -66,25 +73,48 @@ class _MyDonationCollectionsState extends State<MyDonationCollections> {
         child: isLoading
             ? const Center(child: CircularProgressIndicator())
             : errorMessage.isNotEmpty
-                ? Center(child: Text('Error: $errorMessage'))
+                ? Center(child: Text(errorMessage))
                 : donations.isEmpty
-                    ? const Center(child: Text('No donations found'))
+                    ? const Center(
+                        child: Text(
+                          'No donations found',
+                          style: TextStyle(fontSize: 16),
+                        ),
+                      )
                     : ListView.builder(
                         itemCount: donations.length,
+                        padding: const EdgeInsets.all(8),
                         itemBuilder: (context, index) {
                           final donation = donations[index];
                           return Card(
                             margin: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
+                              horizontal: 8,
+                              vertical: 4,
                             ),
                             child: ListTile(
-                              title: Text(donation['title'] ?? 'Unnamed Donation'),
+                              title: Text(
+                                donation['name'],
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                               subtitle: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('Status: ${donation['status']}'),
-                                  Text('Date: ${_formatDate(donation['date'])}'),
+                                  const SizedBox(height: 4),
+                                  Text(donation['description']),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Status: ${donation['status'].toString().toUpperCase()}',
+                                    style: TextStyle(
+                                      color: _getStatusColor(donation['status']),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Date: ${_formatDate(donation['donationDate'])}',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
                                 ],
                               ),
                               trailing: Icon(
@@ -100,36 +130,32 @@ class _MyDonationCollectionsState extends State<MyDonationCollections> {
   }
 
   String _formatDate(String? dateString) {
-    if (dateString == null) return 'Unknown';
+    if (dateString == null) return 'N/A';
     try {
       final date = DateTime.parse(dateString);
       return '${date.day}/${date.month}/${date.year}';
     } catch (_) {
-      return 'Unknown';
+      return 'N/A';
     }
   }
 
   IconData _getStatusIcon(String? status) {
     switch (status?.toLowerCase()) {
-      case 'completed':
+      case 'collected':
         return Icons.check_circle;
-      case 'pending':
+      case 'available':
         return Icons.pending;
-      case 'cancelled':
-        return Icons.cancel;
       default:
-        return Icons.help;
+        return Icons.help_outline;
     }
   }
 
   Color _getStatusColor(String? status) {
     switch (status?.toLowerCase()) {
-      case 'completed':
+      case 'collected':
         return Colors.green;
-      case 'pending':
-        return Colors.orange;
-      case 'cancelled':
-        return Colors.red;
+      case 'available':
+        return Colors.blue;
       default:
         return Colors.grey;
     }

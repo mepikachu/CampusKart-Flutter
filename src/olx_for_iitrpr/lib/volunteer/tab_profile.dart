@@ -16,7 +16,7 @@ class VolunteerProfileTab extends StatefulWidget {
   State<VolunteerProfileTab> createState() => _VolunteerProfileTabState();
 }
 
-class _VolunteerProfileTabState extends State<VolunteerProfileTab> {
+class _VolunteerProfileTabState extends State<VolunteerProfileTab> with AutomaticKeepAliveClientMixin {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   Map<String, dynamic>? userData;
   String errorMessage = '';
@@ -104,6 +104,44 @@ class _VolunteerProfileTabState extends State<VolunteerProfileTab> {
     } catch (_) {
       return 'Unknown';
     }
+  }
+
+  Widget _buildDivider() {
+    return Divider(
+      color: Colors.grey[200],
+      thickness: 1,
+      height: 1,
+    );
+  }
+
+  Widget _buildProfileSection(String title, String value) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+        ),
+        _buildDivider(),
+      ],
+    );
   }
 
   Widget _buildInfoCard(String title, String value) {
@@ -233,6 +271,7 @@ class _VolunteerProfileTabState extends State<VolunteerProfileTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Scaffold(
       backgroundColor: Colors.white,
       body: RefreshIndicator(
@@ -244,55 +283,57 @@ class _VolunteerProfileTabState extends State<VolunteerProfileTab> {
               ? _buildLoadingProfile()
               : Column(
                   children: [
-                    const SizedBox(height: 20),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                        child: TextButton.icon(
-                          onPressed: _logout,
-                          icon: Icon(Icons.logout, color: Colors.red.shade400),
-                          label: Text(
-                            'Logout',
-                            style: TextStyle(
-                              color: Colors.red.shade400,
-                              fontWeight: FontWeight.w500,
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton.icon(
+                            onPressed: _logout,
+                            icon: Icon(Icons.logout, color: Colors.red[400]),
+                            label: Text(
+                              'Logout',
+                              style: TextStyle(color: Colors.red[400]),
+                            ),
+                            style: TextButton.styleFrom(
+                              backgroundColor: Colors.red[50],
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
                             ),
                           ),
-                          style: TextButton.styleFrom(
-                            backgroundColor: Colors.red.shade50,
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                          ),
-                        ),
+                        ],
                       ),
                     ),
                     if (userData != null && userData!['role'] == 'volunteer_pending')
                       Container(
                         width: double.infinity,
-                        color: Colors.orange,
-                        padding: const EdgeInsets.all(8),
+                        color: Colors.orange[400],
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 8,
+                          horizontal: 16,
+                        ),
                         child: const Text(
                           'Your volunteer application is pending approval',
                           style: TextStyle(
                             color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w500,
                           ),
                           textAlign: TextAlign.center,
                         ),
                       ),
+                    const SizedBox(height: 20),
                     CircleAvatar(
                       radius: 50,
-                      backgroundColor: Colors.grey.shade200,
+                      backgroundColor: Colors.grey[200],
                       backgroundImage: userData?['profilePicture']?['data'] != null
                           ? MemoryImage(base64Decode(userData!['profilePicture']['data']))
-                          : (_profileImageBytes != null
-                              ? MemoryImage(_profileImageBytes!)
-                              : null),
-                      child: (userData?['profilePicture']?['data'] == null && 
-                             _profileImageBytes == null)
+                          : null,
+                      child: userData?['profilePicture']?['data'] == null
                           ? const Icon(Icons.person, size: 50, color: Colors.grey)
                           : null,
                     ),
@@ -308,19 +349,33 @@ class _VolunteerProfileTabState extends State<VolunteerProfileTab> {
                       userData?['email'] ?? '',
                       style: TextStyle(
                         fontSize: 16,
-                        color: Colors.grey.shade600,
+                        color: Colors.grey[600],
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    _buildInfoCard('Phone', userData?['phone'] ?? 'Not provided'),
-                    _buildInfoCard(
-                        'Address', _formatAddress(userData?['address'])),
-                    _buildInfoCard('Member Since',
-                        _formatDate(userData?['registrationDate'])),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          _buildProfileSection('Phone', userData?['phone'] ?? 'Not provided'),
+                          _buildProfileSection('Address', _formatAddress(userData?['address'])),
+                          _buildProfileSection('Member Since', _formatDate(userData?['registrationDate'])),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                     _buildSection('My Donation Collections', Icons.volunteer_activism),
                     _buildSection('Settings', Icons.settings),
-                    const SizedBox(height: 20),
                     if (errorMessage.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.all(16),
@@ -329,10 +384,14 @@ class _VolunteerProfileTabState extends State<VolunteerProfileTab> {
                           style: const TextStyle(color: Colors.red),
                         ),
                       ),
+                    const SizedBox(height: 24),
                   ],
                 ),
         ),
       ),
     );
   }
+
+  @override
+  bool get wantKeepAlive => true;
 }
