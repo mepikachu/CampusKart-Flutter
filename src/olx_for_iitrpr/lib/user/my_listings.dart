@@ -189,6 +189,13 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
     final statusColor = status == 'sold' ? Colors.orange : Colors.green;
     final statusText = status.substring(0, 1).toUpperCase() + status.substring(1);
 
+    // Format the date
+    String formattedDate = '';
+    if (product['createdAt'] != null) {
+      final date = DateTime.parse(product['createdAt']);
+      formattedDate = '• ${date.day}/${date.month}/${date.year}';
+    }
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -256,29 +263,39 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 8),
-                  // Status and offer count
+                  // Status, date and offer count
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: statusColor,
-                              shape: BoxShape.circle,
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: statusColor,
+                                shape: BoxShape.circle,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            statusText,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey[700],
+                            const SizedBox(width: 6),
+                            Text(
+                              statusText,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey[700],
+                              ),
                             ),
-                          ),
-                        ],
+                            if (formattedDate.isNotEmpty)
+                              Text(
+                                formattedDate,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                       if (product['offerRequests'] != null &&
                           (product['offerRequests'] as List).isNotEmpty)
@@ -324,10 +341,23 @@ class _MyListingsScreenState extends State<MyListingsScreen> {
       child: Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
-          title: const Text('My Listings'),
           backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
           elevation: 0,
+          scrolledUnderElevation: 0,
+          leading: Container(
+            margin: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: Icon(Icons.arrow_back, color: Colors.black),
+              padding: EdgeInsets.zero,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+          title: const Text('My Listings'),
+          foregroundColor: Colors.black,
         ),
         body: RefreshIndicator(
           color: Colors.black,

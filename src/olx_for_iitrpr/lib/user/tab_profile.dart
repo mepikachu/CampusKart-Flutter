@@ -158,6 +158,32 @@ class _ProfileTabState extends State<ProfileTab> {
 
   /// Handle user logout
   Future<void> _logout() async {
+    // Show confirmation dialog first
+    final bool confirm = await showDialog(
+      context: context,
+      builder: (BuildContext context) => Theme(
+        data: Theme.of(context).copyWith(
+          dialogBackgroundColor: Colors.white, // Force white background
+        ),
+        child: AlertDialog(
+          title: const Text('Logout'),
+          content: const Text('Are you sure you want to logout?'),
+          actions: [
+            TextButton(
+              child: Text('Cancel', style: TextStyle(color: Colors.grey[600])),
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+            TextButton(
+              child: Text('Logout', style: TextStyle(color: Colors.red[400])),
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        ),
+      ),
+    ) ?? false;
+
+    if (!confirm) return;
+
     try {
       // First, clear local storage and navigate
       final authCookie = await _secureStorage.read(key: 'authCookie');
@@ -214,59 +240,109 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 
   Widget _buildInfoCard(String title, String value) {
-    return Card(
-      elevation: 2,
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      child: Padding(
-        padding: const EdgeInsets.all(15),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                value,
-                textAlign: TextAlign.end,
-                style: const TextStyle(height: 1.5),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.w500,
+              color: Colors.grey.shade700,
+              fontSize: 14,
+            )
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: TextStyle(
+                height: 1.5,
+                color: Colors.grey.shade900,
+                fontSize: 14,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildSection(String title, IconData icon) {
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(title),
-      trailing: const Icon(Icons.arrow_forward_ios),
-      onTap: () {
-        if (title == 'My Listings') {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const MyListingsScreen()),
-          );
-        } else if (title == 'My Purchases') {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const MyPurchasesPage()),
-          );
-        } else if (title == 'My Donations') {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const MyDonationsPage()),
-          );
-        } else if (title == 'My Lost Items') {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const MyLostItemsPage()),
-          );
-        } else if (title == 'Settings') {
-          Navigator.pushNamed(context, '/settings');
-        }
-      },
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: Colors.black, size: 20),
+        ),
+        title: Text(
+          title,
+          style: const TextStyle(
+            fontWeight: FontWeight.w500,
+            fontSize: 15,
+          ),
+        ),
+        trailing: Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey.shade400),
+        onTap: () {
+          switch (title) {
+            case 'Edit Profile':
+              if (userData != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => EditProfileScreen(
+                      userData: userData!,
+                      onProfileUpdated: () => _loadUserData(),
+                    ),
+                  ),
+                );
+              }
+              break;
+            case 'My Listings':
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const MyListingsScreen()),
+              );
+              break;
+            case 'My Purchases':
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const MyPurchasesPage()),
+              );
+              break;
+            case 'My Donations':
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const MyDonationsPage()),
+              );
+              break;
+            case 'My Lost Items':
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const MyLostItemsPage()),
+              );
+              break;
+          }
+        },
+      ),
     );
   }
 
@@ -364,7 +440,6 @@ class _ProfileTabState extends State<ProfileTab> {
         _buildSection('My Purchases', Icons.shopping_bag),
         _buildSection('My Donations', Icons.volunteer_activism),
         _buildSection('My Lost Items', Icons.search),
-        _buildSection('Settings', Icons.settings),
         const SizedBox(height: 20),
         // Static logout button
         TextButton(
@@ -387,6 +462,33 @@ class _ProfileTabState extends State<ProfileTab> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            child: TextButton.icon(
+              onPressed: _logout,
+              icon: Icon(Icons.logout, color: Colors.red.shade400),
+              label: Text(
+                'Logout',
+                style: TextStyle(
+                  color: Colors.red.shade400,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.red.shade50,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         color: Colors.black,
         onRefresh: _loadUserData,
@@ -397,84 +499,57 @@ class _ProfileTabState extends State<ProfileTab> {
               : Column(
                   children: [
                     const SizedBox(height: 20),
-                    // Profile picture
+                    // Simple clean avatar without edit button
                     CircleAvatar(
                       radius: 50,
                       backgroundColor: Colors.grey.shade200,
-                      backgroundImage: _profileImageBytes != null
-                          ? MemoryImage(_profileImageBytes!)
-                          : null,
-                      child: _profileImageBytes == null
+                      backgroundImage: userData?['profilePicture']?['data'] != null
+                          ? MemoryImage(base64Decode(userData!['profilePicture']['data']))
+                          : (_profileImageBytes != null
+                              ? MemoryImage(_profileImageBytes!)
+                              : null),
+                      child: (userData?['profilePicture']?['data'] == null && 
+                             _profileImageBytes == null)
                           ? const Icon(Icons.person, size: 50, color: Colors.grey)
-                          : isLoadingImage 
-                              ? const CircularProgressIndicator()
-                              : null,
-                    ),
-                    const SizedBox(height: 8),
-                    // Edit Profile Button
-                    TextButton.icon(
-                      onPressed: () {
-                        if (userData != null) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => EditProfileScreen(
-                                userData: userData!,
-                                onProfileUpdated: () => _loadUserData(),
-                              ),
-                            ),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.edit, size: 16),
-                      label: const Text('Edit Profile'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.blue,
-                        textStyle: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
+                          : null,
                     ),
                     const SizedBox(height: 16),
-                    // Username
                     Text(
                       userData?['userName'] ?? 'User',
                       style: const TextStyle(
                         fontSize: 24,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black,
                       ),
                     ),
-                    // Email
                     Text(
                       userData?['email'] ?? '',
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 15,
                         color: Colors.grey.shade600,
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    // Info cards
+                    const SizedBox(height: 24),
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 20),
+                      child: const Divider(),
+                    ),
+                    const SizedBox(height: 8),
                     _buildInfoCard('Phone', userData?['phone'] ?? 'Not provided'),
                     _buildInfoCard('Address', _formatAddress(userData?['address'])),
                     _buildInfoCard('Member Since', _formatDate(userData?['registrationDate'])),
-                    const SizedBox(height: 20),
-                    // Sections
+                    const SizedBox(height: 16),
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 20),
+                      child: const Divider(),
+                    ),
+                    const SizedBox(height: 8),
+                    // Add Edit Profile section at the top of the list
+                    _buildSection('Edit Profile', Icons.edit),
                     _buildSection('My Listings', Icons.list),
                     _buildSection('My Purchases', Icons.shopping_bag),
                     _buildSection('My Donations', Icons.volunteer_activism),
                     _buildSection('My Lost Items', Icons.search),
-                    _buildSection('Settings', Icons.settings),
-                    const SizedBox(height: 20),
-                    // Logout button
-                    TextButton(
-                      onPressed: _logout,
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        textStyle: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      child: const Text('Logout'),
-                    ),
                     const SizedBox(height: 20),
                     if (errorMessage.isNotEmpty)
                       Padding(
@@ -484,10 +559,25 @@ class _ProfileTabState extends State<ProfileTab> {
                           style: const TextStyle(color: Colors.red),
                         ),
                       ),
+                    // Remove logout button from bottom
                   ],
                 ),
         ),
       ),
     );
+  }
+
+  void _navigateToEditProfile() {
+    if (userData != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => EditProfileScreen(
+            userData: userData!,
+            onProfileUpdated: () => _loadUserData(),
+          ),
+        ),
+      );
+    }
   }
 }

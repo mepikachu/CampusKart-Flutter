@@ -502,21 +502,34 @@ class _SignUpScreenState extends State<SignUpScreen> {
       final responseData = json.decode(responseBody);
       
       if (streamedResponse.statusCode == 201 && responseData['success'] == true) {
-        final authCookie = responseData['authCookie'];
-        await _secureStorage.write(key: 'authCookie', value: authCookie);
-
+        // Clear any stored auth data first
+        await _secureStorage.delete(key: 'authCookie');
         final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('identifier', _emailController.text);
+        await prefs.clear();
 
-        // Navigate based on role:
-        final role = responseData['user']?['role'] ?? 'user';
-        await prefs.setString('role', role);
-        if (role == 'admin') {
-          Navigator.pushReplacementNamed(context, '/admin_home');
-        } else if (role == 'volunteer') {
-          Navigator.pushReplacementNamed(context, '/volunteer_home');
-        } else {
-          Navigator.pushReplacementNamed(context, '/user_home');
+        if (mounted) {
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'Account successfully created! Please login to continue.',
+                style: TextStyle(color: Colors.white),
+              ),
+              backgroundColor: Colors.green.shade600,
+              behavior: SnackBarBehavior.floating,
+              margin: EdgeInsets.only(
+                bottom: MediaQuery.of(context).size.height - 100,
+                right: 20,
+                left: 20,
+              ),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+
+          // Navigate to login screen after a short delay
+          Future.delayed(const Duration(seconds: 1), () {
+            Navigator.pushReplacementNamed(context, '/login');
+          });
         }
       } else {
         _showTopSnackBar(responseData['error'] ?? 'Signup failed');

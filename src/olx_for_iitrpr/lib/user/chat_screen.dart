@@ -31,71 +31,71 @@ class ChatBubblesPainter extends CustomPainter {
       'message'
     ];
 
-    // Calculate grid dimensions based on screen size
-    final double cellWidth = 60.0;  // Width of each grid cell
-    final double cellHeight = 60.0; // Height of each grid cell
+    // Calculate grid dimensions for more even distribution
+    final double cellWidth = 40.0;  // Smaller cells for more density
+    final double cellHeight = 40.0; // Smaller cells for more density
     
     final int columns = (size.width / cellWidth).ceil();
     final int rows = (size.height / cellHeight).ceil();
     
-    // Used for consistent but random-looking rotations
+    // Used for consistent shape placement
     final random = Random(12345);
     
     // Draw shapes in a grid pattern
     for (int row = 0; row < rows; row++) {
       for (int col = 0; col < columns; col++) {
-        // Add slight offset within cell to avoid perfect grid alignment
-        final offsetX = random.nextDouble() * 20 - 10;
-        final offsetY = random.nextDouble() * 20 - 10;
+        // More controlled offset for better distribution
+        final offsetX = random.nextDouble() * 10 - 5;
+        final offsetY = random.nextDouble() * 10 - 5;
         
         final x = col * cellWidth + cellWidth / 2 + offsetX;
         final y = row * cellHeight + cellHeight / 2 + offsetY;
         
-        // Skip some cells randomly to create less dense areas
-        if (random.nextDouble() > 0.7) continue;
+        // Use more shapes (reduced skip probability)
+        if (random.nextDouble() > 0.3) {  // 70% chance to draw a shape
+          final item = items[((row * columns + col) * 13) % items.length];
+          final rotation = (random.nextDouble() * pi / 6) - (pi / 12); // Limited rotation
+          final scale = 0.5 + (random.nextDouble() * 0.3); // Larger size range
         
-        final item = items[((row + col) * 7) % items.length]; // Deterministic item selection
-        final rotation = random.nextDouble() * pi / 4; // Limited rotation range
-        final scale = 0.3 + (random.nextDouble() * 0.2); // Smaller size range
-        
-        canvas.save();
-        canvas.translate(x, y);
-        canvas.rotate(rotation);
-        canvas.scale(scale);
+          canvas.save();
+          canvas.translate(x, y);
+          canvas.rotate(rotation);
+          canvas.scale(scale);
 
-        final paint = Paint()
-          ..color = Colors.grey.withOpacity(0.12)
-          ..style = PaintingStyle.fill;
+          final paint = Paint()
+            ..color = Colors.grey.withOpacity(0.08)  // Slightly reduced opacity
+            ..style = PaintingStyle.fill;
 
-        // Draw shape based on item type
-        switch (item) {
-          case 'envelope':
-            _drawEnvelope(canvas, paint);
-            break;
-          case 'phone':
-            _drawPhone(canvas, paint);
-            break;
-          case 'camera':
-            _drawCamera(canvas, paint);
-            break;
-          case 'cup':
-            _drawCup(canvas, paint);
-            break;
-          case 'heart':
-            _drawHeart(canvas, paint);
-            break;
-          case 'music_note':
-            _drawMusicNote(canvas, paint);
-            break;
-          case 'star':
-            _drawStar(canvas, paint);
-            break;
-          case 'message':
-            _drawMessage(canvas, paint);
-            break;
+          // Draw the shape
+          switch (item) {
+            case 'envelope':
+              _drawEnvelope(canvas, paint);
+              break;
+            case 'phone':
+              _drawPhone(canvas, paint);
+              break;
+            case 'camera':
+              _drawCamera(canvas, paint);
+              break;
+            case 'cup':
+              _drawCup(canvas, paint);
+              break;
+            case 'heart':
+              _drawHeart(canvas, paint);
+              break;
+            case 'music_note':
+              _drawMusicNote(canvas, paint);
+              break;
+            case 'star':
+              _drawStar(canvas, paint);
+              break;
+            case 'message':
+              _drawMessage(canvas, paint);
+              break;
+          }
+
+          canvas.restore();
         }
-
-        canvas.restore();
       }
     }
   }

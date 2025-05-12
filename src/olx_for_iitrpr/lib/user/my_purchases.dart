@@ -161,31 +161,35 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
     Widget imageWidget;
     
     if (_loadedImages.containsKey(product['_id'])) {
-      // Use cached image
       imageWidget = Image.memory(
         _loadedImages[product['_id']]!,
         fit: BoxFit.cover,
         width: double.infinity,
-        height: 200,
+        height: 150, // Reduced from 200
       );
     } else if (_loadingProductIds.contains(product['_id'])) {
-      // Show loading indicator
       imageWidget = Container(
         color: Colors.grey[200],
-        height: 200,
+        height: 150, // Reduced from 200
         child: const Center(
           child: CircularProgressIndicator(color: Colors.black),
         ),
       );
     } else {
-      // No image available
       imageWidget = Container(
         color: Colors.grey[300],
-        height: 200,
+        height: 150, // Reduced from 200
         child: const Center(
           child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
         ),
       );
+    }
+
+    // Format the purchase date if available
+    String formattedDate = '';
+    if (product['purchaseDate'] != null) {
+      final date = DateTime.parse(product['purchaseDate']);
+      formattedDate = '${date.day}/${date.month}/${date.year}';
     }
 
     return GestureDetector(
@@ -201,63 +205,85 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
         );
       },
       child: Card(
-        elevation: 4,
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 2,
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image section
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
               child: imageWidget,
             ),
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Product name
-                  Text(
-                    product['name'] ?? 'Unknown Product',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
-                  // Product description
-                  Text(
-                    product['description'] ?? 'No description provided',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  // Price and seller row
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      Expanded(
+                        child: Text(
+                          product['name'] ?? 'Unknown Product',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                       Text(
                         '₹${product['price']?.toString() ?? '0'}',
                         style: const TextStyle(
                           fontSize: 16,
-                          color: Colors.green,
                           fontWeight: FontWeight.bold,
+                          color: Colors.black,
                         ),
                       ),
-                      Text(
-                        'Seller: ${product['seller']?['userName'] ?? 'Unknown'}',
-                        style: const TextStyle(
-                          color: Colors.blue,
-                          fontSize: 12,
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    product['description'] ?? 'No description provided',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey[600],
+                      height: 1.2,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Purchased',
+                          style: TextStyle(
+                            color: Colors.green[700],
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
+                      if (formattedDate.isNotEmpty)
+                        Text(
+                          formattedDate,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                        ),
                     ],
                   ),
                 ],
@@ -289,6 +315,18 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
           backgroundColor: Colors.white,
           foregroundColor: Colors.black,
           elevation: 0,
+          leading: Container(
+            margin: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: Icon(Icons.arrow_back, color: Colors.black),
+              padding: EdgeInsets.zero,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
         ),
         body: RefreshIndicator(
           color: Colors.black,

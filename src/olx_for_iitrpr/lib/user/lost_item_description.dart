@@ -8,6 +8,8 @@ import 'package:http/http.dart' as http;
 import 'chat_screen.dart';
 import '../services/lost_found_cache_service.dart';
 import 'server.dart';
+import 'view_profile.dart';
+import 'package:intl/intl.dart';
 
 class LostItemDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> item;
@@ -415,45 +417,31 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                         ],
                       ),
                       
-                    Container(
-                      padding: const EdgeInsets.all(16.0),
+                    Padding(
+                      padding: const EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Title and status badge on same line
+                          // Name and Status
                           Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Expanded(
                                 child: Text(
                                   item['name'] ?? 'Unknown Item',
-                                  style: TextStyle(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.black,
-                                    height: 1.2,
-                                  ),
+                                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
                                 ),
                               ),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                 decoration: BoxDecoration(
-                                  color: item['status'] == 'found'
-                                      ? Colors.green.shade50
-                                      : Colors.orange.shade50,
+                                  color: item['status'] == 'found' ? Colors.green.shade50 : Colors.orange.shade50,
                                   borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: item['status'] == 'found'
-                                        ? Colors.green.shade200
-                                        : Colors.orange.shade200,
-                                  ),
                                 ),
                                 child: Text(
-                                  item['status']?.toUpperCase() ?? 'LOST',
+                                  (item['status'] ?? 'LOST').toUpperCase(),
                                   style: TextStyle(
-                                    color: item['status'] == 'found'
-                                        ? Colors.green.shade700
-                                        : Colors.orange.shade700,
+                                    color: item['status'] == 'found' ? Colors.green.shade700 : Colors.orange.shade700,
                                     fontWeight: FontWeight.w600,
                                     fontSize: 13,
                                   ),
@@ -461,100 +449,164 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 16),
+                          SizedBox(height: 16),
 
-                          // Founder/Owner details (clickable)
-                          if (item['user'] != null)
-                            InkWell(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => ViewProfileScreen(userId: item['user']['_id']),
+                          // Tags Section with label on same line
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Tags: ',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    children: [
+                                      _buildTag('Lost Item'),
+                                      _buildTag('Campus'),
+                                      if (item['category'] != null) _buildTag(item['category']),
+                                    ],
                                   ),
-                                );
-                              },
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 24),
+
+                          // Founder Details Section
+                          Text(
+                            'Founder Details',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          SizedBox(height: 12),
+
+                          // Clickable Founder Box
+                          InkWell(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ViewProfileScreen(userId: item['user']['_id']),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              padding: EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.shade200),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
                               child: Row(
                                 children: [
                                   CircleAvatar(
                                     radius: 20,
                                     backgroundColor: Colors.grey.shade200,
                                     child: Text(
-                                      item['user']['userName']?.substring(0, 1).toUpperCase() ?? '?',
+                                      item['user']?['userName']?.substring(0, 1).toUpperCase() ?? '?',
                                       style: TextStyle(
                                         color: Colors.grey.shade700,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 12),
+                                  SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Row(
-                                          children: [
-                                            Text(
-                                              'Posted by ',
-                                              style: TextStyle(
-                                                fontSize: 15,
-                                                color: Colors.grey.shade600,
-                                              ),
-                                            ),
-                                            Text(
-                                              item['user']['userName'] ?? 'Unknown',
-                                              style: const TextStyle(
-                                                fontSize: 15,
-                                                fontWeight: FontWeight.w600,
-                                                color: Colors.black,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 2),
-                                        if (item['lastSeenLocation'] != null)
-                                          Text(
-                                            'Last seen at: ${item['lastSeenLocation']}',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.grey.shade600,
-                                            ),
+                                        Text(
+                                          item['user']?['userName'] ?? 'Unknown',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w500,
                                           ),
+                                        ),
+                                        SizedBox(height: 4),
+                                        Text(
+                                          'View Profile',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.blue,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ),
+                                  Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
                                 ],
                               ),
                             ),
+                          ),
+                          SizedBox(height: 24),
 
-                          const SizedBox(height: 16),
+                          // Last Seen Location (on same line)
+                          Row(
+                            children: [
+                              Text(
+                                'Last Seen at: ',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  item['lastSeenLocation'] ?? 'Unknown',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey[900],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 16),
 
-                          // Posted date
-                          Text(
-                            'Posted on ${_formatDate(item['createdAt'])}',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey.shade600,
+                          // Posted Date in full-width blue box
+                          Container(
+                            width: double.infinity,
+                            margin: EdgeInsets.symmetric(vertical: 16),
+                            padding: EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'Posted on ${_formatDateTime(item['createdAt'])}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.blue[700],
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ),
+                          SizedBox(height: 24),
 
-                          const SizedBox(height: 24),
-                          
-                          // Description section
+                          // About This Item
                           Text(
-                            'Description',
+                            'About This Item',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
-                              color: Colors.black,
                             ),
                           ),
-                          const SizedBox(height: 8),
+                          SizedBox(height: 12),
                           Text(
                             item['description'] ?? 'No description available',
                             style: TextStyle(
                               fontSize: 15,
-                              color: Colors.grey.shade800,
+                              color: Colors.grey[800],
                               height: 1.5,
                             ),
                           ),
@@ -657,6 +709,38 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
     } catch (e) {
       return date.toString();
+    }
+  }
+
+  // Update the tag builder method
+  Widget _buildTag(String text) {
+    return Container(
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.blue.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.blue.shade200),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          color: Colors.blue[700],
+        ),
+      ),
+    );
+  }
+
+  // Add formatDateTime method for date and time
+  String _formatDateTime(dynamic dateTime) {
+    if (dateTime == null) return 'N/A';
+    try {
+      final DateTime date = DateTime.parse(dateTime.toString());
+      return '${_formatDate(date)} • ${DateFormat('h:mm a').format(date)}';
+    } catch (e) {
+      return 'N/A';
     }
   }
 }

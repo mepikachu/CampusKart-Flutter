@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:typed_data';
@@ -205,40 +206,229 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(widget.product['name'] ?? 'Manage Product'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => EditProductScreen(product: widget.product),
-                  ),
-                );
-              },
-            ),
-          ],
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Product Details'),
-              Tab(text: 'Offers'),
-            ],
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          appBarTheme: AppBarTheme(
+            backgroundColor: Colors.white,
+            foregroundColor: Colors.black,
+            elevation: 0,
+            scrolledUnderElevation: 0, // Prevents color change on scroll
           ),
         ),
-        body: TabBarView(
-          children: [
-            _buildProductDetails(),
-            _buildOffersList(),
-          ],
+        child: Scaffold(
+          backgroundColor: Colors.white,
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            systemOverlayStyle: SystemUiOverlayStyle.dark,
+            leading: Container(
+              margin: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: Icon(Icons.arrow_back, color: Colors.black),
+                padding: EdgeInsets.zero,
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+            actions: [
+              Container(
+                margin: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  icon: Icon(Icons.edit, color: Colors.black),
+                  padding: EdgeInsets.zero,
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => EditProductScreen(product: widget.product),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+            title: Text(
+              'Product Details',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.black,
+              ),
+            ),
+            bottom: TabBar(
+              labelColor: Colors.black,
+              unselectedLabelColor: Colors.grey,
+              indicatorColor: Colors.black,
+              tabs: [
+                Tab(text: 'Details'),
+                Tab(text: 'Offers'),
+              ],
+            ),
+          ),
+          body: TabBarView(
+            children: [
+              SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildImageCarousel(),
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  widget.product['name'] ?? 'Unknown Product',
+                                  style: TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: widget.product['status'] == 'sold' 
+                                    ? Colors.orange.shade50 
+                                    : Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  (widget.product['status'] ?? 'AVAILABLE').toUpperCase(),
+                                  style: TextStyle(
+                                    color: widget.product['status'] == 'sold' 
+                                      ? Colors.orange.shade700 
+                                      : Colors.green.shade700,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 16),
+
+                          Text(
+                            '₹${widget.product['price']?.toString() ?? '0'}',
+                            style: TextStyle(
+                              fontSize: 24,
+                              color: Colors.green.shade700,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          SizedBox(height: 24),
+
+                          // Tags section with category
+                          Text(
+                            'Tags:',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            children: [
+                              _buildTag('For Sale'),
+                              _buildTag('Campus'),
+                              if (widget.product['category'] != null) 
+                                _buildTag(widget.product['category']),
+                            ],
+                          ),
+                          SizedBox(height: 24),
+
+                          // Posted date in blue box
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.blue.shade100),
+                            ),
+                            child: Text(
+                              'Posted on ${_formatDateWithTime(widget.product['createdAt'])}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.blue.shade700,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: 24),
+
+                          Text(
+                            'About This Product',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          SizedBox(height: 12),
+                          Text(
+                            widget.product['description'] ?? 'No description available',
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: Colors.grey[800],
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _buildOffersList(),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildProductDetails() {
+  Widget _buildTag(String text) {
+    return Container(
+      margin: EdgeInsets.only(right: 8, bottom: 8),
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Text(
+        text[0].toUpperCase() + text.substring(1),
+        style: TextStyle(
+          fontSize: 13,
+          color: Colors.grey.shade800,
+        ),
+      ),
+    );
+  }
+
+  String _formatDateWithTime(String? dateString) {
+    if (dateString == null) return 'Unknown date';
+    try {
+      final date = DateTime.parse(dateString);
+      return '${date.day}/${date.month}/${date.year} at ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return 'Invalid date';
+    }
+  }
+
+  Widget _buildImageCarousel() {
     List<Widget> imageSlides = [];
     
     if (_imageCache.containsKey(widget.product['_id'])) {
@@ -264,164 +454,40 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
       ];
     }
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (imageSlides.isNotEmpty)
-            Stack(
-              children: [
-                CarouselSlider(
-                  items: imageSlides,
-                  options: CarouselOptions(
-                    height: 300,
-                    viewportFraction: 1.0,
-                    enableInfiniteScroll: imageSlides.length > 1,
-                    autoPlay: imageSlides.length > 1,
-                    autoPlayInterval: const Duration(seconds: 3),
-                  ),
+    return Stack(
+      children: [
+        CarouselSlider(
+          items: imageSlides,
+          options: CarouselOptions(
+            height: 300,
+            viewportFraction: 1.0,
+            enableInfiniteScroll: imageSlides.length > 1,
+            autoPlay: imageSlides.length > 1,
+            autoPlayInterval: const Duration(seconds: 3),
+          ),
+        ),
+        if (_isLoadingImages)
+          Positioned(
+            top: 10,
+            right: 10,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation(Colors.white),
                 ),
-                if (_isLoadingImages)
-                  Positioned(
-                    top: 10,
-                    right: 10,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation(Colors.white),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        widget.product['name'] ?? 'Unknown Product',
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: widget.product['status'] == 'sold'
-                            ? Colors.red.withOpacity(0.1)
-                            : Colors.green.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        widget.product['status']?.toUpperCase() ?? 'AVAILABLE',
-                        style: TextStyle(
-                          color: widget.product['status'] == 'sold'
-                              ? Colors.red
-                              : Colors.green,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '₹${widget.product['price']?.toString() ?? '0'}',
-                  style: const TextStyle(
-                    fontSize: 24,
-                    color: Colors.green,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                // Category
-                if (widget.product['category'] != null) ...[
-                  const Text(
-                    'Category:',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    widget.product['category'].toString(),
-                    style: const TextStyle(fontSize: 16),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                // Description
-                const Text(
-                  'Description:',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  widget.product['description'] ?? 'No description available',
-                  style: const TextStyle(fontSize: 16),
-                ),
-                const SizedBox(height: 16),
-                // Additional details
-                const Text(
-                  'Additional Details:',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ListTile(
-                  leading: const Icon(Icons.calendar_today),
-                  title: const Text('Posted Date'),
-                  subtitle: Text(_formatDate(widget.product['createdAt'])),
-                ),
-                if (widget.product['lastUpdatedAt'] != null)
-                  ListTile(
-                    leading: const Icon(Icons.update),
-                    title: const Text('Last Updated'),
-                    subtitle: Text(_formatDate(widget.product['lastUpdatedAt'])),
-                  ),
-                if (widget.product['status'] == 'sold')
-                  ListTile(
-                    leading: const Icon(Icons.sell),
-                    title: const Text('Sold Date'),
-                    subtitle: Text(_formatDate(widget.product['soldDate'])),
-                  ),
-              ],
+              ),
             ),
           ),
-        ],
-      ),
+      ],
     );
-  }
-
-  String _formatDate(String? dateStr) {
-    if (dateStr == null) return 'N/A';
-    try {
-      final date = DateTime.parse(dateStr);
-      return '${date.day}/${date.month}/${date.year}';
-    } catch (e) {
-      return 'Invalid date';
-    }
   }
 
   Widget _buildOffersList() {

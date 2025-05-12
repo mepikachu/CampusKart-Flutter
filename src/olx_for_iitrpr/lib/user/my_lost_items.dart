@@ -158,115 +158,127 @@ class _MyLostItemsPageState extends State<MyLostItemsPage> {
   }
 
   Widget _buildLostItemCard(Map<String, dynamic> item) {
-    final status = item['status'] ?? 'lost';
-    final datePosted = DateTime.parse(item['createdAt']);
-    final formattedDate = "${datePosted.day}/${datePosted.month}/${datePosted.year}";
-    
     Widget imageWidget;
     
     if (_loadedImages.containsKey(item['_id'])) {
-      // Use cached image
       imageWidget = Image.memory(
         _loadedImages[item['_id']]!,
         fit: BoxFit.cover,
+        width: double.infinity,
+        height: 150,
       );
     } else if (_loadingItemIds.contains(item['_id'])) {
-      // Show loading indicator
       imageWidget = Container(
         color: Colors.grey[200],
+        height: 150,
         child: const Center(
           child: CircularProgressIndicator(color: Colors.black),
         ),
       );
     } else {
-      // No image available
       imageWidget = Container(
         color: Colors.grey[300],
+        height: 150,
         child: const Center(
           child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
         ),
       );
     }
 
-    return InkWell(
+    // Format the date
+    String formattedDate = '';
+    if (item['createdAt'] != null) {
+      final date = DateTime.parse(item['createdAt']);
+      formattedDate = '${date.day}/${date.month}/${date.year}';
+    }
+
+    return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => LostItemDetailsScreen(
-              item: item,
-              isOwner: true,
-            ),
+            builder: (context) => LostItemDetailsScreen(item: item),
           ),
-        ).then((result) {
-          if (result == true) {
-            _loadMyLostItems(); // Refresh list if item was updated
-          }
-        });
+        ).then((_) => _loadMyLostItems());
       },
       child: Card(
-        elevation: 4,
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 2,
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-              child: AspectRatio(
-                aspectRatio: 16 / 9,
-                child: imageWidget,
-              ),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+              child: imageWidget,
             ),
             Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    item['name'] ?? 'Untitled Item',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    item['description'] ?? 'No description provided',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
+                  // First row: Name and Status
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Posted on: $formattedDate',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 12,
+                      Expanded(
+                        child: Text(
+                          item['name'] ?? 'Unknown Item',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
-                          color: status == 'found' ? Colors.green[100] : Colors.orange[100],
+                          color: item['status'] == 'found'
+                              ? Colors.green.withOpacity(0.1)
+                              : Colors.orange.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          status.toUpperCase(),
+                          (item['status'] ?? 'lost').toUpperCase(),
                           style: TextStyle(
-                            color: status == 'found' ? Colors.green[900] : Colors.orange[900],
+                            color: item['status'] == 'found'
+                                ? Colors.green[700]
+                                : Colors.orange[700],
                             fontSize: 12,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w500,
                           ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  
+                  // Description (2 lines)
+                  Text(
+                    item['description'] ?? 'No description provided',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey[600],
+                      height: 1.2,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  
+                  // Date on the right
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Text(
+                        formattedDate,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
                         ),
                       ),
                     ],
@@ -296,10 +308,23 @@ class _MyLostItemsPageState extends State<MyLostItemsPage> {
       child: Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
-          title: const Text('My Lost Items'),
           backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
           elevation: 0,
+          scrolledUnderElevation: 0,
+          leading: Container(
+            margin: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: Icon(Icons.arrow_back, color: Colors.black),
+              padding: EdgeInsets.zero,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+          title: const Text('My Lost Items'),
+          foregroundColor: Colors.black,
         ),
         body: RefreshIndicator(
           color: Colors.black,
