@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:async';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:http/http.dart' as http;
 import '../services/lost_found_cache_service.dart';
@@ -33,10 +34,21 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
   bool _isLoadingImages = true;
   int _totalExpectedImages = 1;
 
+  // Add these state variables
+  String? errorMessageDisplay;
+  String? successMessage;
+  Timer? _messageTimer;
+
   @override
   void initState() {
     super.initState();
     _loadCachedImages();
+  }
+
+  @override
+  void dispose() {
+    _messageTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadCachedImages() async {
@@ -124,7 +136,122 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
     }
   }
 
+  // Add helper method for showing messages
+  void _showMessage({String? error, String? success}) {
+    _messageTimer?.cancel();
+    setState(() {
+      errorMessageDisplay = error;
+      successMessage = success;
+    });
+    _messageTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          errorMessageDisplay = null;
+          successMessage = null;
+        });
+      }
+    });
+  }
+
+  Future<bool?> _showConfirmationDialog() async {
+    return showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.check_circle_outline,
+                    size: 48,
+                    color: Colors.green.shade600,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Mark as Found?',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Are you sure you want to mark this item as found? This action cannot be undone.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(
+                            color: Colors.grey[700],
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text(
+                          'Confirm',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _markAsFound() async {
+    final bool? confirm = await _showConfirmationDialog();
+    if (confirm != true) return;
+
     try {
       setState(() => _isLoading = true);
       final authCookie = await _secureStorage.read(key: 'authCookie');
@@ -145,7 +272,6 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
       if (response.headers['content-type']?.contains('application/json') == true) {
         final responseData = json.decode(response.body);
         if (response.statusCode == 200 && responseData['success'] == true) {
-          // Update the item in cache with the new status
           final cachedItem = await LostFoundCacheService.getCachedItem(widget.item['_id']);
           if (cachedItem != null) {
             cachedItem['status'] = 'found';
@@ -154,10 +280,11 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
           }
           
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Item marked as found successfully')),
-            );
-            Navigator.pop(context, true);
+            _showMessage(success: 'Item marked as found successfully');
+            // Navigate back after a short delay
+            Future.delayed(const Duration(seconds: 2), () {
+              Navigator.pop(context, true);
+            });
           }
         } else {
           throw Exception(responseData['error'] ?? 'Failed to update item status');
@@ -166,12 +293,7 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
         throw Exception('Server returned invalid response');
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
-        print('Error updating status: ${e.toString()}');
-      }
+      _showMessage(error: e.toString().replaceAll('Exception: ', ''));
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -310,6 +432,43 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
         ),
         body: Column(
           children: [
+            // Add message boxes at the top
+            if (errorMessageDisplay != null)
+              Container(
+                width: double.infinity,
+                color: Colors.red.shade50,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline, color: Colors.red.shade700),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        errorMessageDisplay!,
+                        style: TextStyle(color: Colors.red.shade700),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (successMessage != null)
+              Container(
+                width: double.infinity,
+                color: Colors.green.shade50,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle_outline, color: Colors.green.shade700),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        successMessage!,
+                        style: TextStyle(color: Colors.green.shade700),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Expanded(
               child: SingleChildScrollView(
                 child: Column(
@@ -547,58 +706,40 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
                 ),
               ),
             ),
-            
-            // Mark as Found button with improved styling
-            if (widget.isOwner && status != 'found')
-              Container(
-                padding: const EdgeInsets.all(16.0),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      offset: const Offset(0, -4),
-                      blurRadius: 8,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _markAsFound,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: _isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : const Text(
-                              'Mark as Found',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
           ],
         ),
+        bottomNavigationBar: status == 'lost' ? Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16.0),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                offset: const Offset(0, -4),
+                blurRadius: 8,
+              ),
+            ],
+          ),
+          child: ElevatedButton(
+            onPressed: _markAsFound,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              'Mark as Found',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ) : null,
       ),
     );
   }

@@ -33,7 +33,7 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     'products': [],
     'purchasedProducts': [],
     'donations': [],
-    'lostitems': [], // Add lost items array
+    'lost_items': [], // Add lost items array
     'reportsFiled': {
       'user': [],
       'product': []
@@ -102,7 +102,7 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
               userActivity['products'] = data['activity']['products'] ?? [];
               userActivity['purchasedProducts'] = data['activity']['purchasedProducts'] ?? [];
               userActivity['donations'] = data['activity']['donations'] ?? [];
-              userActivity['lostitems'] = data['activity']['lostitems'] ?? []; // Add lost items
+              userActivity['lost_items'] = data['activity']['lost_items'] ?? []; // Add lost items
               
               if (data['activity']['reportsFiled'] != null) {
                 userActivity['reportsFiled']['user'] = data['activity']['reportsFiled']['user'] ?? [];
@@ -587,7 +587,7 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
   
   // Add Lost Items section widget
   Widget _buildLostItemsSection() {
-    final lostitems = userActivity['lostitems'] ?? [];
+    final lostitems = userActivity['lost_items'] ?? [];
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -867,7 +867,7 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
                 ],
                 
                 // Lost Items Section
-                if ((userActivity['lostitems'] as List).isNotEmpty) ...[
+                if ((userActivity['lost_items'] as List).isNotEmpty) ...[
                   _buildLostItemsSection(),
                   const SizedBox(height: 24),
                 ],

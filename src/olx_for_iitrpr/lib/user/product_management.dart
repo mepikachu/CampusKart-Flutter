@@ -9,6 +9,7 @@ import 'package:carousel_slider/carousel_slider.dart';
 import 'edit_product_screen.dart';
 import '../services/product_cache_service.dart';
 import 'server.dart';
+import 'view_profile.dart'; // Add this import
 
 class SellerOfferManagementScreen extends StatefulWidget {
   final Map<String, dynamic> product;
@@ -638,6 +639,76 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
               ],
             ),
           ),
+
+          // Add Buyer Details section for sold products
+          if (widget.product['status'] == 'sold' && widget.product['buyer'] != null) ...[
+            const SizedBox(height: 24),
+            Text(
+              'Buyer Details',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ViewProfileScreen(userId: widget.product['buyer']['_id']),
+                  ),
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade200),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Icon(
+                          Icons.person,
+                          color: Colors.grey.shade400,
+                          size: 30,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.product['buyer']['userName'] ?? 'Unknown Buyer',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right,
+                      color: Colors.grey[400],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 24),
         ],
       ),
     );

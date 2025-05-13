@@ -79,7 +79,6 @@ class ProfileService {
 
   /// Cache a user response containing profile and activity data
   static Future<void> cacheUserResponse(Map<String, dynamic> response) async {
-    print('start');
     if (response['user'] != null) {
       _profileData = response['user'];
       await _storage.write(
@@ -95,16 +94,14 @@ class ProfileService {
       _userActivityIds = {
         'products': _extractIds(activity['products'] as List?),
         'donations': _extractIds(activity['donations'] as List?),
-        'lost_items': _extractIds(activity['lostitems'] as List?),
+        'lost_items': _extractIds(activity['lost_items'] as List?),
         'purchasedProducts': _extractIds(activity['purchasedProducts'] as List?),
       };
       
-      print('start2');
       // Cache full objects in respective services
       if (activity['products'] != null) {
         for (var product in activity['products'] as List) {
           if (product is Map<String, dynamic> && product['_id'] != null) {
-            print(product);
             await ProductCacheService.cacheProduct(
               product['_id'].toString(),
               product
@@ -112,12 +109,10 @@ class ProfileService {
           }
         }
       }
-      print('start3');
       
       if (activity['donations'] != null) {
         for (var donation in activity['donations'] as List) {
           if (donation is Map<String, dynamic> && donation['_id'] != null) {
-            print(donation);
             await DonationCacheService.cacheDonation(
               donation['_id'].toString(),
               donation
@@ -126,9 +121,8 @@ class ProfileService {
         }
       }
       
-      print('start4');
-      if (activity['lostitems'] != null) {
-        for (var item in activity['lostitems'] as List) {
+      if (activity['lost_items'] != null) {
+        for (var item in activity['lost_items'] as List) {
           if (item is Map<String, dynamic> && item['_id'] != null) {
             print(item);
             await LostFoundCacheService.cacheItem(
@@ -156,7 +150,6 @@ class ProfileService {
         value: _lastActivitySync!.toIso8601String()
       );
     }
-    print('end');
   }
 
   /// Extract IDs from a list of items, ensuring string conversion

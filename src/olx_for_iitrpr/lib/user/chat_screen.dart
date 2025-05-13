@@ -31,9 +31,9 @@ class ChatBubblesPainter extends CustomPainter {
       'message'
     ];
 
-    // Increased spacing between shapes
-    final double cellWidth = 80.0;
-    final double cellHeight = 80.0;
+    // Fixed grid layout with more spacing
+    final double cellWidth = 100.0;
+    final double cellHeight = 100.0;
     
     final int columns = (size.width / cellWidth).ceil();
     final int rows = (size.height / cellHeight).ceil();
@@ -41,20 +41,20 @@ class ChatBubblesPainter extends CustomPainter {
     // Draw shapes in a fixed grid pattern
     for (int row = 0; row < rows; row++) {
       for (int col = 0; col < columns; col++) {
-        // Calculate center of each cell
+        // Calculate fixed center position for each cell
         final x = col * cellWidth + (cellWidth / 2);
         final y = row * cellHeight + (cellHeight / 2);
         
-        // Get shape type based on position
-        final item = items[(row + col) % items.length];
+        // Get shape type in sequence
+        final item = items[(row * columns + col) % items.length];
         
-        // Fixed small rotation for variety
+        // Fixed small rotation based on position
         final rotation = ((row + col) % 4) * (pi / 16);
         
         canvas.save();
         canvas.translate(x, y);
         canvas.rotate(rotation);
-        canvas.scale(0.4); // Smaller fixed scale to prevent collisions
+        canvas.scale(0.4); // Smaller fixed scale
 
         final paint = Paint()
           ..color = Colors.grey.withOpacity(0.06)
@@ -2376,9 +2376,16 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   // Update search AppBar 
   PreferredSizeWidget _buildSearchAppBar() {
     return AppBar(
-      backgroundColor: Colors.white, // Ensure white background
+      backgroundColor: Colors.white,
       elevation: 0,
-      systemOverlayStyle: SystemUiOverlayStyle.dark,
+      systemOverlayStyle: SystemUiOverlayStyle.dark.copyWith(
+        statusBarColor: Colors.white,
+      ),
+      flexibleSpace: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+        ),
+      ),
       leading: Container(
         margin: EdgeInsets.all(8),
         decoration: BoxDecoration(
@@ -2394,7 +2401,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       title: Container(
         height: 40,
         decoration: BoxDecoration(
-          color: Colors.grey.shade50,
+          color: Colors.grey.shade100,
           borderRadius: BorderRadius.circular(20),
         ),
         padding: EdgeInsets.symmetric(horizontal: 12),
@@ -2407,7 +2414,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 8),
             isDense: true,
             filled: true,
-            fillColor: Colors.grey.shade50,
+            fillColor: Colors.grey.shade100,
           ),
           onChanged: _filterMessages,
         ),
