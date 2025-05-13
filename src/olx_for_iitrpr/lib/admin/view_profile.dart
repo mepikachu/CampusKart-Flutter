@@ -10,6 +10,7 @@ import 'view_report.dart';
 import 'view_user_items.dart';
 import 'package:shimmer/shimmer.dart';
 import 'server.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ViewProfileScreen extends StatefulWidget {
   final String userId;
@@ -109,7 +110,7 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
   }
 
   Future<void> _fetchUserProfile() async {
-    if (allDataFetched) return; // Don't fetch if already loaded
+    if (allDataFetched) return;
     
     setState(() {
       isLoading = true;
@@ -117,8 +118,29 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     });
 
     try {
-      final authCookie = await _secureStorage.read(key: 'authCookie');
+      // Check cache first
+      final prefs = await SharedPreferences.getInstance();
+      final cachedProductsStr = prefs.getString('cached_products_${widget.userId}');
+      final cachedDonationsStr = prefs.getString('cached_donations_${widget.userId}');
+      final cachedLostItemsStr = prefs.getString('cached_lost_items_${widget.userId}');
+      
+      if (cachedProductsStr != null || cachedDonationsStr != null || cachedLostItemsStr != null) {
+        setState(() {
+          if (cachedProductsStr != null) {
+            userActivity['products'] = json.decode(cachedProductsStr);
+            userActivity['purchasedProducts'] = json.decode(cachedProductsStr).where((p) => p['buyer'] != null).toList();
+          }
+          if (cachedDonationsStr != null) {
+            userActivity['donations'] = json.decode(cachedDonationsStr);
+          }
+          if (cachedLostItemsStr != null) {
+            userActivity['lost_items'] = json.decode(cachedLostItemsStr);
+          }
+        });
+      }
 
+      // Continue with API fetch
+      final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
         Uri.parse('$serverUrl/api/admin/users/${widget.userId}'),
         headers: {
@@ -130,25 +152,38 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success']) {
+          // Cache the data
+          if (data['activity'] != null) {
+            if (data['activity']['products'] != null) {
+              await prefs.setString('cached_products_${widget.userId}', 
+                json.encode(data['activity']['products']));
+            }
+            if (data['activity']['donations'] != null) {
+              await prefs.setString('cached_donations_${widget.userId}', 
+                json.encode(data['activity']['donations']));
+            }
+            if (data['activity']['lost_items'] != null) {
+              await prefs.setString('cached_lost_items_${widget.userId}', 
+                json.encode(data['activity']['lost_items']));
+            }
+          }
+
           setState(() {
             userData = data['user'];
             if (data['activity'] != null) {
-              // Store all data from API
               userActivity['products'] = data['activity']['products'] ?? [];
               userActivity['purchasedProducts'] = data['activity']['purchasedProducts'] ?? [];
               userActivity['donations'] = data['activity']['donations'] ?? [];
-              userActivity['lost_items'] = data['activity']['lost_items'] ?? []; // Add lost items
+              userActivity['lost_items'] = data['activity']['lost_items'] ?? [];
               
               if (data['activity']['reportsFiled'] != null) {
                 userActivity['reportsFiled']['user'] = data['activity']['reportsFiled']['user'] ?? [];
                 userActivity['reportsFiled']['product'] = data['activity']['reportsFiled']['product'] ?? [];
               }
-              
               userActivity['reportsAgainst'] = data['activity']['reportsAgainst'] ?? [];
             }
-            
             isLoading = false;
-            allDataFetched = true; // Mark as fetched to prevent reloading
+            allDataFetched = true;
           });
 
           if (userData != null && userData!['profilePicture'] != null) {
@@ -159,7 +194,8 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
           await Future.wait([
             _loadProductImages(),
             _loadPurchasedProductImages(),
-            _loadDonationImages()
+            _loadDonationImages(),
+            _loadLostItemImages() // Add this line
           ]);
         } else {
           throw Exception(data['message'] ?? 'Failed to load user profile');
@@ -301,6 +337,41 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
         }
       } catch (e) {
         print('Error loading donation image: $e');
+      }
+    }
+  }
+
+  // Add this new function
+  Future<void> _loadLostItemImages() async {
+    final lostItems = userActivity['lost_items'] ?? [];
+    if (lostItems.isEmpty) return;
+
+    final authCookie = await _secureStorage.read(key: 'authCookie');
+    
+    for (var item in lostItems) {
+      if (item['_id'] == null) continue;
+      
+      try {
+        final response = await http.get(
+          Uri.parse('$serverUrl/api/lost-items/${item['_id']}/main_image'),
+          headers: {
+            'Content-Type': 'application/json',
+            'auth-cookie': authCookie ?? '',
+          },
+        );
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['success'] && data['image'] != null && data['image']['data'] != null) {
+            if (mounted) {
+              setState(() {
+                _loadedImages['lostitem_${item['_id']}'] = data['image']['data'];
+              });
+            }
+          }
+        }
+      } catch (e) {
+        print('Error loading lost item image: $e');
       }
     }
   }

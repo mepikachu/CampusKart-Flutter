@@ -26,11 +26,11 @@ class _ReportsTabState extends State<ReportsTab> {
   final bool _isPerformingAction = false;
   bool _isFilterExpanded = false;
   
-  // Pagination for initial fetch
-  int _currentPage = 1;
-  int _totalPages = 1;
-  final int _pageSize = 100; // Increased to fetch more reports at once
-  
+  // Remove these pagination variables
+  // int _currentPage = 1;
+  // int _totalPages = 1;
+  // final int _pageSize = 100;
+
   // Filters - now applied client-side
   String _selectedReportType = 'all';
   String _selectedStatus = 'all';
@@ -46,44 +46,32 @@ class _ReportsTabState extends State<ReportsTab> {
   void initState() {
     super.initState();
     _fetchAllReports();
-    _scrollController.addListener(_scrollListener);
+    // Remove scroll listener since we don't need pagination
+    // _scrollController.addListener(_scrollListener);
   }
   
   @override
   void dispose() {
-    _scrollController.removeListener(_scrollListener);
+    // Remove scroll listener cleanup
+    // _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     super.dispose();
   }
   
-  void _scrollListener() {
-    if (_scrollController.offset >= _scrollController.position.maxScrollExtent &&
-        !_scrollController.position.outOfRange) {
-      if (_currentPage < _totalPages && !_isLoading) {
-        _loadMoreReports();
-      }
-    }
-  }
+  // Remove _scrollListener method since we don't need pagination
+  // void _scrollListener() { ... }
 
   // Method to fetch all reports at once
   Future<void> _fetchAllReports() async {
     setState(() {
       _isLoading = true;
       _isError = false;
-      _currentPage = 1;
     });
 
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       
-      final uri = Uri.https(
-        'olx-for-iitrpr-backend.onrender.com',
-        '/api/admin/reports',
-        {
-          'page': '1',
-          'limit': '100', // Get more reports at once
-        }
-      );
+      final uri = Uri.parse('$serverUrl/api/admin/reports');
       
       final response = await http.get(
         uri,
@@ -98,8 +86,7 @@ class _ReportsTabState extends State<ReportsTab> {
       if (response.statusCode == 200) {
         setState(() {
           _allReports = data['reports'] ?? [];
-          _totalPages = data['totalPages'] ?? 1;
-          _applyFilters(); // Apply initial filters
+          _applyFilters();
           _isLoading = false;
         });
       } else {
@@ -118,58 +105,9 @@ class _ReportsTabState extends State<ReportsTab> {
     }
   }
   
-  Future<void> _loadMoreReports() async {
-    if (_isLoading) return;
-    
-    setState(() {
-      _isLoading = true;
-    });
-    
-    try {
-      final authCookie = await _secureStorage.read(key: 'authCookie');
-      
-      final uri = Uri.https(
-        'olx-for-iitrpr-backend.onrender.com',
-        '/api/admin/reports',
-        {
-          'page': (_currentPage + 1).toString(),
-          'limit': '100',
-        }
-      );
-      
-      final response = await http.get(
-        uri,
-        headers: {
-          'Content-Type': 'application/json',
-          'auth-cookie': authCookie ?? '',
-        },
-      );
+  // Remove _loadMoreReports method since we don't need pagination
+  // Future<void> _loadMoreReports() async { ... }
 
-      final data = json.decode(response.body);
-
-      if (response.statusCode == 200 && data['success'] == true) {
-        setState(() {
-          _allReports.addAll(data['reports'] ?? []);
-          _currentPage++;
-          _applyFilters(); // Reapply filters with new data
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _isError = true;
-          _errorMessage = data['message'] ?? 'Failed to load more reports';
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      setState(() {
-        _isError = true;
-        _errorMessage = e.toString();
-        _isLoading = false;
-      });
-    }
-  }
-  
   // New method to apply filters client-side
   void _applyFilters() {
     setState(() {
@@ -425,14 +363,9 @@ class _ReportsTabState extends State<ReportsTab> {
                                     ? _buildNoFilterResults()
                                     : ListView.builder(
                                         controller: _scrollController,
-                                        itemCount: _filteredReports.length + (_currentPage < _totalPages ? 1 : 0),
+                                        // Remove pagination loading indicator
+                                        itemCount: _filteredReports.length,
                                         itemBuilder: (context, index) {
-                                          if (index == _filteredReports.length) {
-                                            return const Padding(
-                                              padding: EdgeInsets.symmetric(vertical: 16.0),
-                                              child: Center(child: CircularProgressIndicator()),
-                                            );
-                                          }
                                           final report = _filteredReports[index];
                                           final bool isExpanded = _expandedReportId == report['_id'];
                                           return _buildReportItem(report, isExpanded);
@@ -1185,10 +1118,10 @@ class _ReportsTabState extends State<ReportsTab> {
             ? report['product']['name'] ?? 'Unknown Product'
             : 'Unknown Product';
     
-    // Updated to match the notification style
     return Card(
       elevation: 1,
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      color: Colors.white, // Added this line to ensure pure white background
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
       ),

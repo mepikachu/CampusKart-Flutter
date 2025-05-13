@@ -201,7 +201,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       
       final response = await http.post(
-        Uri.parse('$serverUrl/api/admin/reports/${widget.reportId}/resolve/dismiss'),
+        Uri.parse('$serverUrl/api/admin/reports/${widget.reportId}/dismiss'),
         headers: {
           'Content-Type': 'application/json',
           'auth-cookie': authCookie ?? '',
@@ -445,6 +445,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
+        backgroundColor: Colors.white, // Added this line
         title: const Text('Block User'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -503,6 +504,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
+        backgroundColor: Colors.white, // Added this line
         title: const Text('Send Warning'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -561,6 +563,7 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
+        backgroundColor: Colors.white, // Added this line
         title: const Text('Delete Product'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -613,7 +616,8 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
   void _showResolveActionSheet() {
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, // Prevents overflow
+      isScrollControlled: true,
+      backgroundColor: Colors.white, // Added this line
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),

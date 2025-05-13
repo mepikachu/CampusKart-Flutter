@@ -3,6 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shimmer/shimmer.dart';
+
+import 'product_description.dart';
+import 'lost_item_description.dart';
 
 import 'chat_screen.dart';
 import 'home.dart';
@@ -24,8 +29,17 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
   bool isError = false;
   String errorMessage = '';
   Map<String, dynamic>? userData;
-  List<dynamic> userDonations = [];
+  Map<String, dynamic> userActivity = {
+    'products': [],
+    'purchasedProducts': [],
+    'donations': [],
+    'lost_items': [],
+  };
   String currentUserId = '';
+  bool allDataFetched = false;
+
+  // Add cache map for images
+  final Map<String, String> _loadedImages = {};
 
   @override
   void initState() {
@@ -58,12 +72,35 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
   }
 
   Future<void> _fetchUserProfile() async {
+    if (allDataFetched) return;
+    
     setState(() {
       isLoading = true;
       isError = false;
     });
-    
+
     try {
+      // Check cache first
+      final prefs = await SharedPreferences.getInstance();
+      final cachedProductsStr = prefs.getString('cached_products_${widget.userId}');
+      final cachedDonationsStr = prefs.getString('cached_donations_${widget.userId}');
+      final cachedLostItemsStr = prefs.getString('cached_lost_items_${widget.userId}');
+      
+      if (cachedProductsStr != null || cachedDonationsStr != null || cachedLostItemsStr != null) {
+        setState(() {
+          if (cachedProductsStr != null) {
+            userActivity['products'] = json.decode(cachedProductsStr);
+            userActivity['purchasedProducts'] = json.decode(cachedProductsStr).where((p) => p['buyer'] != null).toList();
+          }
+          if (cachedDonationsStr != null) {
+            userActivity['donations'] = json.decode(cachedDonationsStr);
+          }
+          if (cachedLostItemsStr != null) {
+            userActivity['lost_items'] = json.decode(cachedLostItemsStr);
+          }
+        });
+      }
+
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
         Uri.parse('$serverUrl/api/users/profile/${widget.userId}'),
@@ -76,23 +113,45 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success']) {
+          // Cache the data
+          final prefs = await SharedPreferences.getInstance();
+          if (data['activity'] != null) {
+            if (data['activity']['products'] != null) {
+              await prefs.setString('cached_products_${widget.userId}', 
+                json.encode(data['activity']['products']));
+            }
+            if (data['activity']['donations'] != null) {
+              await prefs.setString('cached_donations_${widget.userId}', 
+                json.encode(data['activity']['donations']));
+            }
+            if (data['activity']['lost_items'] != null) {
+              await prefs.setString('cached_lost_items_${widget.userId}', 
+                json.encode(data['activity']['lost_items']));
+            }
+          }
+
           setState(() {
             userData = data['user'];
-            userDonations = data['donations'] ?? [];
+            if (data['activity'] != null) {
+              userActivity['products'] = data['activity']['products'] ?? [];
+              userActivity['purchasedProducts'] = data['activity']['purchasedProducts'] ?? [];
+              userActivity['donations'] = data['activity']['donations'] ?? [];
+              userActivity['lost_items'] = data['activity']['lost_items'] ?? [];
+            }
             isLoading = false;
+            allDataFetched = true;
           });
-          
-          // Load profile picture if available
-          if (userData != null && (userData!['profilePicture'] == true || 
-              (userData!['profilePicture'] is Map && userData!['profilePicture']['data'] != null))) {
+
+          if (userData != null && userData!['profilePicture'] != null) {
             _loadProfilePicture();
           }
-        } else {
-          setState(() {
-            isLoading = false;
-            isError = true;
-            errorMessage = data['error'] ?? 'Failed to load user profile';
-          });
+          
+          await Future.wait([
+            _loadProductImages(),
+            _loadPurchasedProductImages(),
+            _loadDonationImages(),
+            _loadLostItemImages()
+          ]);
         }
       } else {
         setState(() {
@@ -195,6 +254,166 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     }
   }
 
+  // Add image loading functions
+  Future<void> _loadProductImages() async {
+    final products = userActivity['products'] ?? [];
+    if (products.isEmpty) return;
+
+    final authCookie = await _secureStorage.read(key: 'authCookie');
+    
+    for (var product in products) {
+      if (product['_id'] == null) continue;
+      
+      try {
+        final response = await http.get(
+          Uri.parse('$serverUrl/api/products/${product['_id']}/main_image'),
+          headers: {
+            'Content-Type': 'application/json',
+            'auth-cookie': authCookie ?? '',
+          },
+        );
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['success'] && data['image'] != null && data['image']['data'] != null) {
+            if (mounted) {
+              setState(() {
+                _loadedImages['product_${product['_id']}'] = data['image']['data'];
+              });
+            }
+          }
+        }
+      } catch (e) {
+        print('Error loading product image: $e');
+      }
+    }
+  }
+
+  Future<void> _loadPurchasedProductImages() async {
+    final products = userActivity['purchasedProducts'] ?? [];
+    if (products.isEmpty) return;
+
+    final authCookie = await _secureStorage.read(key: 'authCookie');
+    
+    for (var product in products) {
+      if (product['_id'] == null) continue;
+      
+      try {
+        final response = await http.get(
+          Uri.parse('$serverUrl/api/products/${product['_id']}/main_image'),
+          headers: {
+            'Content-Type': 'application/json',
+            'auth-cookie': authCookie ?? '',
+          },
+        );
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['success'] && data['image'] != null && data['image']['data'] != null) {
+            if (mounted) {
+              setState(() {
+                _loadedImages['purchased_product_${product['_id']}'] = data['image']['data'];
+              });
+            }
+          }
+        }
+      } catch (e) {
+        print('Error loading purchased product image: $e');
+      }
+    }
+  }
+
+  Future<void> _loadDonationImages() async {
+    final donations = userActivity['donations'] ?? [];
+    if (donations.isEmpty) return;
+
+    final authCookie = await _secureStorage.read(key: 'authCookie');
+    
+    for (var donation in donations) {
+      if (donation['_id'] == null) continue;
+      
+      try {
+        final response = await http.get(
+          Uri.parse('$serverUrl/api/donations/${donation['_id']}/main_image'),
+          headers: {
+            'Content-Type': 'application/json',
+            'auth-cookie': authCookie ?? '',
+          },
+        );
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['success'] && data['image'] != null && data['image']['data'] != null) {
+            if (mounted) {
+              setState(() {
+                _loadedImages['donation_${donation['_id']}'] = data['image']['data'];
+              });
+            }
+          }
+        }
+      } catch (e) {
+        print('Error loading donation image: $e');
+      }
+    }
+  }
+
+  Future<void> _loadLostItemImages() async {
+    final lostItems = userActivity['lost_items'] ?? [];
+    if (lostItems.isEmpty) return;
+
+    final authCookie = await _secureStorage.read(key: 'authCookie');
+    
+    for (var item in lostItems) {
+      if (item['_id'] == null) continue;
+      
+      try {
+        final response = await http.get(
+          Uri.parse('$serverUrl/api/lost-items/${item['_id']}/main_image'),
+          headers: {
+            'Content-Type': 'application/json',
+            'auth-cookie': authCookie ?? '',
+          },
+        );
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['success'] && data['image'] != null && data['image']['data'] != null) {
+            if (mounted) {
+              setState(() {
+                _loadedImages['lostitem_${item['_id']}'] = data['image']['data'];
+              });
+            }
+          }
+        }
+      } catch (e) {
+        print('Error loading lost item image: $e');
+      }
+    }
+  }
+
+  // Add navigation methods
+  void _navigateToProduct(String productId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProductDetailsScreen(
+          product: {'_id': productId}
+        ),
+      ),
+    );
+  }
+
+  void _navigateToLostItem(Map<String, dynamic> item) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => LostItemDetailsScreen(
+          item: {'_id': item['_id']},
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -247,9 +466,7 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     }
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Profile Header with Picture
           Center(
@@ -350,59 +567,202 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
           const SizedBox(height: 24),
           const Divider(),
           
-          // Donations Section
+          // User Activity Sections
           const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Donations',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              Text(
-                '${userDonations.length} items',
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
+          // Removed donations section
           
-          userDonations.isEmpty
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
-                      children: [
-                        Icon(
-                          Icons.volunteer_activism_outlined,
-                          size: 48,
-                          color: Colors.grey.shade400,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No donations yet',
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              : ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: userDonations.length,
-                  itemBuilder: (context, index) => _buildDonationItem(userDonations[index]),
-                ),
+          // Products Section
+          const SizedBox(height: 24),
+          _buildSectionHeader('Products', userActivity['products']?.length ?? 0),
+          const SizedBox(height: 12),
+          _buildItemsHorizontalList(userActivity['products'] ?? [], 'product'),
+
+          // Purchased Products Section
+          const SizedBox(height: 24),
+          _buildSectionHeader('Purchased Products', userActivity['purchasedProducts']?.length ?? 0),
+          const SizedBox(height: 12),
+          _buildItemsHorizontalList(userActivity['purchasedProducts'] ?? [], 'purchased'),
+
+          // Donations Section - Added back
+          const SizedBox(height: 24),
+          _buildSectionHeader('Donations', userActivity['donations']?.length ?? 0),
+          const SizedBox(height: 12),
+          _buildItemsHorizontalList(userActivity['donations'] ?? [], 'donation', isClickable: false),
+
+          // Lost Items Section
+          const SizedBox(height: 24),
+          _buildSectionHeader('Lost Items', userActivity['lost_items']?.length ?? 0),
+          const SizedBox(height: 12),
+          _buildItemsHorizontalList(userActivity['lost_items'] ?? [], 'lostitem'),
+
+          const SizedBox(height: 32),
         ],
       ),
     );
   }
+
+  Widget _buildSectionHeader(String title, int count) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          Text(
+            '$count items',
+            style: TextStyle(
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildItemsHorizontalList(List items, String type, {bool isClickable = true}) {
+    return items.isEmpty
+        ? Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                children: [
+                  Icon(
+                    type == 'product' ? Icons.shopping_bag_outlined :
+                    type == 'purchased' ? Icons.receipt_long_outlined :
+                    type == 'donation' ? Icons.volunteer_activism_outlined :
+                    Icons.search_outlined,
+                    size: 48,
+                    color: Colors.grey.shade400,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No ${type}s yet',
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        : SizedBox(
+            height: 220,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                Widget itemPreview = _buildItemPreview(item, type);
+                
+                // Only wrap with GestureDetector if the item is clickable
+                if (isClickable) {
+                  return GestureDetector(
+                    onTap: () {
+                      if (type == 'product' || type == 'purchased') {
+                        _navigateToProduct(item['_id']);
+                      } else if (type == 'lostitem') {
+                        _navigateToLostItem(item);
+                      }
+                    },
+                    child: itemPreview,
+                  );
+                }
+                
+                return itemPreview;
+              },
+            ),
+          );
+  }
+
+  Widget _buildItemPreview(Map<String, dynamic> item, String type) {
+    final String itemId = item['_id'];
+    final String? imageData = _loadedImages['${type}_$itemId'];
+    final String title = item['name'] ?? 'Unnamed Item';
+    
+    return Container(
+      width: 160,
+      margin: const EdgeInsets.only(right: 12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[200]!),
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            child: AspectRatio(
+              aspectRatio: 1,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (imageData != null)
+                    Image.memory(
+                      base64Decode(imageData),
+                      fit: BoxFit.cover,
+                      gaplessPlayback: true,
+                      isAntiAlias: true,
+                      filterQuality: FilterQuality.medium,
+                      cacheWidth: 320,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Center(
+                          child: Icon(
+                            Icons.image_not_supported,
+                            size: 40,
+                            color: Colors.grey[400],
+                          ),
+                        );
+                      },
+                    )
+                  else
+                    Shimmer.fromColors(
+                      baseColor: Colors.grey[300]!,
+                      highlightColor: Colors.grey[100]!,
+                      child: Container(color: Colors.white),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Remove _navigateToDonation method
+  // ...existing code...
 
   Widget _buildInfoItem(IconData icon, String label, String value) {
     return Padding(
@@ -480,89 +840,6 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildDonationItem(Map<String, dynamic> donation) {
-    final status = donation['status'] ?? 'available';
-    
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12.0),
-      elevation: 1,
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                Icons.volunteer_activism,
-                size: 30,
-                color: Colors.blue.shade700,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    donation['name'] ?? 'Unnamed Donation',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    donation['description'] ?? 'No description',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.grey.shade700,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        _formatDate(donation['donationDate']),
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 12,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: status == 'available' ? Colors.green.shade100 : Colors.amber.shade100,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          status.toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: status == 'available' ? Colors.green.shade800 : Colors.amber.shade800,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
