@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -23,6 +24,11 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
   List<File> _images = [];
   bool _isLoading = false;
 
+  // Add these state variables
+  String? errorMessage;
+  String? successMessage;
+  Timer? _messageTimer;
+
   static const primaryColor = Color(0xFF1A73E8);
   static const surfaceColor = Color(0xFFFFFFFF); // Pure white
   static const backgroundColor = Color(0xFFFFFFFF); // Pure white
@@ -39,9 +45,7 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
         _images.addAll(pickedFiles.map((xfile) => File(xfile.path)));
         if (_images.length > 5) {
           _images = _images.sublist(0, 5);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Maximum 5 images allowed')),
-          );
+          _showMessage(error: 'Maximum 5 images allowed');
         }
       });
     }
@@ -50,9 +54,7 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
   Future<void> _submitLostItem() async {
     if (!_formKey.currentState!.validate()) return;
     if (_images.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select at least one image")),
-      );
+      _showMessage(error: "Please select at least one image");
       return;
     }
 
@@ -81,9 +83,7 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
         final resData = json.decode(response.body);
         if (resData['success'] == true) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Lost item posted successfully")),
-            );
+            _showMessage(success: "Lost item posted successfully");
             Navigator.pop(context, true);
           }
         } else {
@@ -94,15 +94,36 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: ${e.toString()}")),
-        );
+        _showMessage(error: "Error: ${e.toString()}");
       }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  @override
+  void dispose() {
+    _messageTimer?.cancel();
+    super.dispose();
+  }
+
+  // Add helper method
+  void _showMessage({String? error, String? success}) {
+    _messageTimer?.cancel();
+    setState(() {
+      errorMessage = error;
+      successMessage = success;
+    });
+    _messageTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          errorMessage = null;
+          successMessage = null;
+        });
+      }
+    });
   }
 
   Widget _buildImagePreviews() {
@@ -293,21 +314,64 @@ class _AddLostItemScreenState extends State<AddLostItemScreen> {
           ),
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildImagePreviews(),
-              const SizedBox(height: 24),
-              _buildFormFields(),
-              const SizedBox(height: 32),
-              _buildSubmitButton(),
-            ],
+      body: Column(
+        children: [
+          // Add message boxes at the top
+          if (errorMessage != null)
+            Container(
+              width: double.infinity,
+              color: Colors.red.shade50,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      errorMessage!,
+                      style: TextStyle(color: Colors.red.shade700),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (successMessage != null)
+            Container(
+              width: double.infinity,
+              color: Colors.green.shade50,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle_outline, color: Colors.green.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      successMessage!,
+                      style: TextStyle(color: Colors.green.shade700),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildImagePreviews(),
+                    const SizedBox(height: 24),
+                    _buildFormFields(),
+                    const SizedBox(height: 32),
+                    _buildSubmitButton(),
+                  ],
+                ),
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

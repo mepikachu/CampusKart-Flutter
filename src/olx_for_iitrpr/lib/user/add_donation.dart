@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -22,6 +23,19 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
   List<File> _images = [];
   bool _isLoading = false;
 
+  // Add these state variables
+  String? errorMessage;
+  String? successMessage;
+  Timer? _messageTimer;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    _messageTimer?.cancel();
+    super.dispose();
+  }
+
   Future<void> _pickImages() async {
     final ImagePicker picker = ImagePicker();
     final List<XFile>? pickedFiles = await picker.pickMultiImage();
@@ -31,20 +45,33 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
         _images.addAll(pickedFiles.map((xfile) => File(xfile.path)));
         if (_images.length > 5) {
           _images = _images.sublist(0, 5);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Maximum 5 images allowed')),
-          );
+          _showMessage(error: 'Maximum 5 images allowed');
         }
       });
     }
   }
 
+  // Add helper method
+  void _showMessage({String? error, String? success}) {
+    _messageTimer?.cancel();
+    setState(() {
+      errorMessage = error;
+      successMessage = success;
+    });
+    _messageTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          errorMessage = null;
+          successMessage = null;
+        });
+      }
+    });
+  }
+
   Future<void> _submitDonation() async {
     if (!_formKey.currentState!.validate()) return;
     if (_images.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select at least one image")),
-      );
+      _showMessage(error: "Please select at least one image");
       return;
     }
 
@@ -53,7 +80,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
     try {
       // Compress images before upload
       final compressedImages = await ImageProcessor.compressImages(_images);
-      
+
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final uri = Uri.parse('$serverUrl/api/donations');
       var request = http.MultipartRequest('POST', uri)
@@ -72,9 +99,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
       if (response.statusCode == 201) {
         final resData = json.decode(responseBody);
         if (resData['success'] == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Donation submitted successfully")),
-          );
+          _showMessage(success: "Donation submitted successfully");
           _nameController.clear();
           _descriptionController.clear();
           setState(() {
@@ -83,9 +108,7 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
         }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
+      _showMessage(error: "Error: $e");
     } finally {
       setState(() => _isLoading = false);
     }
@@ -293,117 +316,153 @@ class _AddDonationScreenState extends State<AddDonationScreen> {
           ),
         ),
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildImagePreviews(),
-                const SizedBox(height: 24),
-                TextFormField(
-                  controller: _nameController,
-                  decoration: InputDecoration(
-                    labelText: 'Item Name',
-                    hintText: 'Enter item name',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFE1E3E6)),
+      body: Column(
+        children: [
+          // Add message boxes at the top
+          if (errorMessage != null)
+            Container(
+              width: double.infinity,
+              color: Colors.red.shade50,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      errorMessage!,
+                      style: TextStyle(color: Colors.red.shade700),
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFE1E3E6)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF1A73E8), width: 2),
-                    ),
-                    filled: true,
-                    fillColor: Colors.white,
-                    labelStyle: const TextStyle(color: Color(0xFF5F6368)),
                   ),
-                  validator: (value) =>
-                      value?.isEmpty ?? true ? "Enter item name" : null,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _descriptionController,
-                  decoration: InputDecoration(
-                    labelText: 'Description',
-                    hintText: 'Enter description',
-                    alignLabelWithHint: true,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFE1E3E6)),
+                ],
+              ),
+            ),
+          if (successMessage != null)
+            Container(
+              width: double.infinity,
+              color: Colors.green.shade50,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle_outline, color: Colors.green.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      successMessage!,
+                      style: TextStyle(color: Colors.green.shade700),
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFFE1E3E6)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: Color(0xFF1A73E8), width: 2),
-                    ),
-                    filled: true,
-                    fillColor: Colors.white,
-                    labelStyle: const TextStyle(color: Color(0xFF5F6368)),
                   ),
-                  maxLines: null,
-                  minLines: 3,
-                  keyboardType: TextInputType.multiline,
-                  textInputAction: TextInputAction.newline,
-                  validator: (value) =>
-                      value?.isEmpty ?? true ? "Enter description" : null,
-                ),
-                const SizedBox(height: 32),
-                Container(
-                  width: double.infinity,
-                  height: 54,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _submitDonation,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2E7D32),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 24,
-                            width: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : const Text(
-                            'Submit Donation',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.5,
-                            ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildImagePreviews(),
+                      const SizedBox(height: 24),
+                      TextFormField(
+                        controller: _nameController,
+                        decoration: InputDecoration(
+                          labelText: 'Item Name',
+                          hintText: 'Enter item name',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFFE1E3E6)),
                           ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFFE1E3E6)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFF1A73E8), width: 2),
+                          ),
+                          filled: true,
+                          fillColor: Colors.white,
+                          labelStyle: const TextStyle(color: Color(0xFF5F6368)),
+                        ),
+                        validator: (value) =>
+                            value?.isEmpty ?? true ? "Enter item name" : null,
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _descriptionController,
+                        decoration: InputDecoration(
+                          labelText: 'Description',
+                          hintText: 'Enter description',
+                          alignLabelWithHint: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFFE1E3E6)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFFE1E3E6)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFF1A73E8), width: 2),
+                          ),
+                          filled: true,
+                          fillColor: Colors.white,
+                          labelStyle: const TextStyle(color: Color(0xFF5F6368)),
+                        ),
+                        maxLines: null,
+                        minLines: 3,
+                        keyboardType: TextInputType.multiline,
+                        textInputAction: TextInputAction.newline,
+                        validator: (value) =>
+                            value?.isEmpty ?? true ? "Enter description" : null,
+                      ),
+                      const SizedBox(height: 32),
+                      Container(
+                        width: double.infinity,
+                        height: 54,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _submitDonation,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2E7D32),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                          child: _isLoading
+                              ? const SizedBox(
+                                  height: 24,
+                                  width: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : const Text(
+                                  'Submit Donation',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _descriptionController.dispose();
-    super.dispose();
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:async';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'edit_product_screen.dart';
@@ -29,11 +30,39 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
   bool _isLoadingImages = true;
   int _totalExpectedImages = 1;
 
+  // Add these state variables at the top of the class
+  String? errorMessageDisplay;
+  String? successMessage;
+  Timer? _messageTimer;
+
   @override
   void initState() {
     super.initState();
     fetchOffers();
     _loadCachedImages();
+  }
+
+  @override
+  void dispose() {
+    _messageTimer?.cancel();
+    super.dispose();
+  }
+
+  // Add helper method for showing messages
+  void _showMessage({String? error, String? success}) {
+    _messageTimer?.cancel();
+    setState(() {
+      errorMessageDisplay = error;
+      successMessage = success;
+    });
+    _messageTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          errorMessageDisplay = null;
+          successMessage = null;
+        });
+      }
+    });
   }
 
   Future<void> fetchOffers() async {
@@ -90,18 +119,14 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
             await ProductCacheService.cacheProduct(widget.product['_id'], cachedProduct);
           }
           
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Offer accepted. Product marked as sold.')),
-          );
+          _showMessage(success: 'Offer accepted. Product marked as sold.');
           
           // Navigate back after a short delay
           Future.delayed(const Duration(seconds: 2), () {
             Navigator.of(context).pop();
           });
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Offer rejected successfully')),
-          );
+          _showMessage(success: 'Offer rejected successfully');
           fetchOffers(); // Refresh the offers list
         }
       } else {
@@ -109,9 +134,7 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
         throw Exception(errorData['error'] ?? 'Failed to $action offer');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
-      );
+      _showMessage(error: 'Error: ${e.toString()}');
     }
   }
 
@@ -213,34 +236,37 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
         },
       );
 
-      if (response.statusCode == 200) {
-        setState(() {
-          widget.product['status'] = 'closed';
-        });
-        
-        // Update cache
-        final cachedProduct = await ProductCacheService.getCachedProduct(widget.product['_id']);
-        if (cachedProduct != null) {
-          cachedProduct['status'] = 'closed';
-          await ProductCacheService.cacheProduct(widget.product['_id'], cachedProduct);
+      // Check if response is JSON by looking at content-type header
+      final isJson = response.headers['content-type']?.contains('application/json') ?? false;
+
+      if (response.statusCode == 200 && isJson) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          setState(() {
+            widget.product['status'] = 'closed';
+          });
+          
+          // Update cache
+          final cachedProduct = await ProductCacheService.getCachedProduct(widget.product['_id']);
+          if (cachedProduct != null) {
+            cachedProduct['status'] = 'closed';
+            await ProductCacheService.cacheProduct(widget.product['_id'], cachedProduct);
+          }
+
+          _showMessage(success: 'Product closed successfully');
+
+          // Navigate back after a short delay
+          Future.delayed(const Duration(seconds: 2), () {
+            Navigator.of(context).pop();
+          });
+        } else {
+          throw Exception(data['error'] ?? 'Failed to close product');
         }
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Product closed successfully')),
-        );
-
-        // Navigate back after a short delay
-        Future.delayed(const Duration(seconds: 2), () {
-          Navigator.of(context).pop();
-        });
       } else {
-        final errorData = json.decode(response.body);
-        throw Exception(errorData['error'] ?? 'Failed to close product');
+        throw Exception('Server error: Please try again later');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
-      );
+      _showMessage(error: e.toString().replaceAll('Exception: ', ''));
     }
   }
 
@@ -388,10 +414,53 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
               ],
             ),
           ),
-          body: TabBarView(
+          body: Column(
             children: [
-              _buildDetailsTab(),
-              _buildOffersList(),
+              // Add message boxes at the top
+              if (errorMessageDisplay != null)
+                Container(
+                  width: double.infinity,
+                  color: Colors.red.shade50,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.error_outline, color: Colors.red.shade700),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          errorMessageDisplay!,
+                          style: TextStyle(color: Colors.red.shade700),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (successMessage != null)
+                Container(
+                  width: double.infinity,
+                  color: Colors.green.shade50,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.check_circle_outline, color: Colors.green.shade700),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          successMessage!,
+                          style: TextStyle(color: Colors.green.shade700),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _buildDetailsTab(),
+                    _buildOffersList(),
+                  ],
+                ),
+              ),
             ],
           ),
           bottomNavigationBar: widget.product['status'] == 'available' 

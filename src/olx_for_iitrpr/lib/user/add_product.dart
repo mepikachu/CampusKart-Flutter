@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http_parser/http_parser.dart';
 import 'server.dart';
 import '../utils/image_processor.dart';
+
 class SellTab extends StatefulWidget {
   const SellTab({super.key});
 
@@ -44,9 +46,7 @@ class _SellTabState extends State<SellTab> {
         _images.addAll(pickedFiles.map((xfile) => File(xfile.path)));
         if (_images.length > 5) {
           _images = _images.sublist(0, 5); // Limit to 5 images
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Maximum 5 images allowed')),
-          );
+          _showMessage(error: 'Maximum 5 images allowed');
         }
       });
     }
@@ -56,9 +56,7 @@ class _SellTabState extends State<SellTab> {
   Future<void> _submitProduct() async {
     if (!_formKey.currentState!.validate()) return;
     if (_images.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select at least one image")),
-      );
+      _showMessage(error: "Please select at least one image");
       return;
     }
     setState(() {
@@ -71,9 +69,7 @@ class _SellTabState extends State<SellTab> {
       
       final authCookie = await _secureStorage.read(key: 'authCookie');
       if (authCookie == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Not authenticated")),
-        );
+        _showMessage(error: "Not authenticated");
         return;
       }
       final uri = Uri.parse('$serverUrl/api/products');
@@ -105,9 +101,8 @@ class _SellTabState extends State<SellTab> {
       if (response.statusCode == 201) {
         final resData = json.decode(responseBody);
         if (resData['success'] == true) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Product posted successfully")),
-          );
+          _showMessage(success: "Product posted successfully");
+          
           // Clear form fields on success
           _nameController.clear();
           _descriptionController.clear();
@@ -117,19 +112,13 @@ class _SellTabState extends State<SellTab> {
             _selectedCategory = _categories.first;
           });
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(resData['error'] ?? "Product submission failed")),
-          );
+          _showMessage(error: resData['error'] ?? "Product submission failed");
         }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Server error: ${response.statusCode}")),
-        );
+        _showMessage(error: "Server error: ${response.statusCode}");
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
+      _showMessage(error: "Error: $e");
     } finally {
       if (mounted) {
         setState(() {
@@ -139,12 +128,35 @@ class _SellTabState extends State<SellTab> {
     }
   }
 
+  // Add these state variables
+  String? errorMessage;
+  String? successMessage;
+  Timer? _messageTimer;
+
   @override
   void dispose() {
     _nameController.dispose();
     _descriptionController.dispose();
     _priceController.dispose();
+    _messageTimer?.cancel();
     super.dispose();
+  }
+
+  // Add helper method
+  void _showMessage({String? error, String? success}) {
+    _messageTimer?.cancel();
+    setState(() {
+      errorMessage = error;
+      successMessage = success;
+    });
+    _messageTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          errorMessage = null;
+          successMessage = null;
+        });
+      }
+    });
   }
 
   Widget _buildImagePreviews() {
@@ -349,143 +361,182 @@ class _SellTabState extends State<SellTab> {
           ),
         ),
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Form(
-                key: _formKey,
-                child: Column(
-                  children: [
-                    Center(child: _buildImagePreviews()),
-                    const SizedBox(height: 24),
-                    TextFormField(
-                      controller: _nameController,
-                      decoration: InputDecoration(
-                        labelText: "Product Name",
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white, // Changed to pure white
-                      ),
-                      validator: (value) => 
-                          (value?.isEmpty ?? true) ? "Enter product name" : null,
+      body: Column(
+        children: [
+          // Add message boxes at the top
+          if (errorMessage != null)
+            Container(
+              width: double.infinity,
+              color: Colors.red.shade50,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      errorMessage!,
+                      style: TextStyle(color: Colors.red.shade700),
                     ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _descriptionController,
-                      decoration: InputDecoration(
-                        labelText: "Description",
-                        alignLabelWithHint: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white, // Changed to pure white
-                      ),
-                      maxLines: null,
-                      minLines: 3,
-                      keyboardType: TextInputType.multiline,
-                      textInputAction: TextInputAction.newline,
-                      validator: (value) => 
-                          (value?.isEmpty ?? true) ? "Enter description" : null,
+                  ),
+                ],
+              ),
+            ),
+          if (successMessage != null)
+            Container(
+              width: double.infinity,
+              color: Colors.green.shade50,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle_outline, color: Colors.green.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      successMessage!,
+                      style: TextStyle(color: Colors.green.shade700),
                     ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: TextFormField(
-                            controller: _priceController,
-                            decoration: InputDecoration(
-                              labelText: "Price",
-                              prefixText: '₹ ',
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              filled: true,
-                              fillColor: Colors.white, // Changed to pure white
-                            ),
-                            keyboardType: TextInputType.number,
-                            validator: (value) => 
-                                (value?.isEmpty ?? true) ? "Enter price" : null,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          flex: 3,
-                          child: DropdownButtonFormField<String>(
-                            value: _selectedCategory,
-                            decoration: InputDecoration(
-                              labelText: "Category",
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              filled: true,
-                              fillColor: Colors.white, // Changed to pure white
-                            ),
-                            items: _categories.map((cat) {
-                              return DropdownMenuItem(
-                                value: cat,
-                                child: Text(
-                                  cat[0].toUpperCase() + cat.substring(1),
-                                ),
-                              );
-                            }).toList(),
-                            onChanged: (value) {
-                              if (value != null) {
-                                setState(() => _selectedCategory = value);
-                              }
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 32),
-                    // List for Sale button at the bottom of content
-                    Container(
-                      width: double.infinity,
-                      height: 54,
-                      margin: const EdgeInsets.only(bottom: 16),
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _submitProduct,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2E7D32),
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
+                  ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Center(child: _buildImagePreviews()),
+                      const SizedBox(height: 24),
+                      TextFormField(
+                        controller: _nameController,
+                        decoration: InputDecoration(
+                          labelText: "Product Name",
+                          border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          filled: true,
+                          fillColor: Colors.white, // Changed to pure white
                         ),
-                        child: _isLoading
-                            ? const SizedBox(
-                                height: 24,
-                                width: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                ),
-                              )
-                            : const Text(
-                                'List for Sale',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
+                        validator: (value) => 
+                            (value?.isEmpty ?? true) ? "Enter product name" : null,
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _descriptionController,
+                        decoration: InputDecoration(
+                          labelText: "Description",
+                          alignLabelWithHint: true,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          filled: true,
+                          fillColor: Colors.white, // Changed to pure white
+                        ),
+                        maxLines: null,
+                        minLines: 3,
+                        keyboardType: TextInputType.multiline,
+                        textInputAction: TextInputAction.newline,
+                        validator: (value) => 
+                            (value?.isEmpty ?? true) ? "Enter description" : null,
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: TextFormField(
+                              controller: _priceController,
+                              decoration: InputDecoration(
+                                labelText: "Price",
+                                prefixText: '₹ ',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                filled: true,
+                                fillColor: Colors.white, // Changed to pure white
+                              ),
+                              keyboardType: TextInputType.number,
+                              validator: (value) => 
+                                  (value?.isEmpty ?? true) ? "Enter price" : null,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            flex: 3,
+                            child: DropdownButtonFormField<String>(
+                              value: _selectedCategory,
+                              decoration: InputDecoration(
+                                labelText: "Category",
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                filled: true,
+                                fillColor: Colors.white, // Changed to pure white
+                              ),
+                              items: _categories.map((cat) {
+                                return DropdownMenuItem(
+                                  value: cat,
+                                  child: Text(
+                                    cat[0].toUpperCase() + cat.substring(1),
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (value) {
+                                if (value != null) {
+                                  setState(() => _selectedCategory = value);
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 32),
+                      // List for Sale button at the bottom of content
+                      Container(
+                        width: double.infinity,
+                        height: 54,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        child: ElevatedButton(
+                          onPressed: _isLoading ? null : _submitProduct,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2E7D32),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                          child: _isLoading
+                              ? const SizedBox(
+                                  height: 24,
+                                  width: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : const Text(
+                                  'List for Sale',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

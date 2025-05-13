@@ -292,19 +292,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             ),
                             const SizedBox(height: 16),
                             TextFormField(
-                              controller: _fullNameController,
-                              decoration: InputDecoration(
-                                labelText: 'Full Name',
-                                prefixIcon: const Icon(Icons.person_outline),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
-                              validator: (value) =>
-                                  value?.isEmpty ?? true ? 'Full name is required' : null,
-                            ),
-                            const SizedBox(height: 16),
-                            TextFormField(
                               controller: _phoneController,
                               decoration: InputDecoration(
                                 labelText: 'Phone',
