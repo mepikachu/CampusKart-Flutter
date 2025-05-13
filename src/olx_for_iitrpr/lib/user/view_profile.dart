@@ -31,7 +31,6 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
   Map<String, dynamic>? userData;
   Map<String, dynamic> userActivity = {
     'products': [],
-    'purchasedProducts': [],
     'donations': [],
     'lost_items': [],
   };
@@ -40,10 +39,13 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
 
   // Add cache map for images
   final Map<String, String> _loadedImages = {};
+  final ScrollController _scrollController = ScrollController();
+  bool isAppBarCollapsed = false;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _loadCurrentUserInfo().then((_) {
       // Check if viewing own profile, redirect to tab_profile if so
       if (currentUserId == widget.userId) {
@@ -56,6 +58,23 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
         _fetchUserProfile();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    final double offset = _scrollController.offset;
+    final bool collapsed = offset > 120;
+    if (collapsed != isAppBarCollapsed) {
+      setState(() {
+        isAppBarCollapsed = collapsed;
+      });
+    }
   }
 
   Future<void> _loadCurrentUserInfo() async {
@@ -134,7 +153,6 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
             userData = data['user'];
             if (data['activity'] != null) {
               userActivity['products'] = data['activity']['products'] ?? [];
-              userActivity['purchasedProducts'] = data['activity']['purchasedProducts'] ?? [];
               userActivity['donations'] = data['activity']['donations'] ?? [];
               userActivity['lost_items'] = data['activity']['lost_items'] ?? [];
             }
@@ -148,7 +166,6 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
           
           await Future.wait([
             _loadProductImages(),
-            _loadPurchasedProductImages(),
             _loadDonationImages(),
             _loadLostItemImages()
           ]);
@@ -289,40 +306,6 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     }
   }
 
-  Future<void> _loadPurchasedProductImages() async {
-    final products = userActivity['purchasedProducts'] ?? [];
-    if (products.isEmpty) return;
-
-    final authCookie = await _secureStorage.read(key: 'authCookie');
-    
-    for (var product in products) {
-      if (product['_id'] == null) continue;
-      
-      try {
-        final response = await http.get(
-          Uri.parse('$serverUrl/api/products/${product['_id']}/main_image'),
-          headers: {
-            'Content-Type': 'application/json',
-            'auth-cookie': authCookie ?? '',
-          },
-        );
-
-        if (response.statusCode == 200) {
-          final data = json.decode(response.body);
-          if (data['success'] && data['image'] != null && data['image']['data'] != null) {
-            if (mounted) {
-              setState(() {
-                _loadedImages['purchased_product_${product['_id']}'] = data['image']['data'];
-              });
-            }
-          }
-        }
-      } catch (e) {
-        print('Error loading purchased product image: $e');
-      }
-    }
-  }
-
   Future<void> _loadDonationImages() async {
     final donations = userActivity['donations'] ?? [];
     if (donations.isEmpty) return;
@@ -419,13 +402,13 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
+        backgroundColor: isAppBarCollapsed ? Colors.white : Colors.transparent,
+        elevation: isAppBarCollapsed ? 2 : 0,
         leading: Container(
           margin: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.grey.shade100,
+            color: isAppBarCollapsed ? Colors.transparent : Colors.grey.shade100,
           ),
           child: IconButton(
             icon: const Icon(Icons.arrow_back, color: Colors.black),
@@ -466,6 +449,7 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     }
 
     return SingleChildScrollView(
+      controller: _scrollController,  // Add controller here
       child: Column(
         children: [
           // Profile Header with Picture
@@ -534,56 +518,56 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
           
           const SizedBox(height: 24),
           const Divider(),
-          
-          // Only show personal contact info if viewing own profile
-          if (currentUserId == widget.userId) ...[
-            const SizedBox(height: 16),
-            const Text(
-              'Contact Information',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+
+          // Contact Information Section
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Contact Information',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                if (userData!['email'] != null)
+                  _buildInfoItem(Icons.email_outlined, 'Email', userData!['email']),
+                if (userData!['phone'] != null)
+                  _buildInfoItem(Icons.phone_outlined, 'Phone', userData!['phone']),
+              ],
             ),
-            const SizedBox(height: 12),
-            
-            if (userData!['email'] != null)
-              _buildInfoItem(Icons.email_outlined, 'Email', userData!['email']),
-            
-            if (userData!['phone'] != null)
-              _buildInfoItem(Icons.phone_outlined, 'Phone', userData!['phone']),
-          ],
-          
-          // Address information (visible to everyone)
+          ),
+
+          // Address Section
           if (userData!['address'] != null) ...[
-            if (currentUserId != widget.userId) ...[
-              const SizedBox(height: 16),
-              const Text(
-                'Location',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Address',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildAddressSection(userData!['address']),
+                ],
               ),
-              const SizedBox(height: 12),
-            ],
-            _buildAddressSection(userData!['address']),
+            ),
           ],
-          
+
           const SizedBox(height: 24),
           const Divider(),
-          
-          // User Activity Sections
-          const SizedBox(height: 16),
-          // Removed donations section
-          
+
           // Products Section
           const SizedBox(height: 24),
           _buildSectionHeader('Products', userActivity['products']?.length ?? 0),
           const SizedBox(height: 12),
           _buildItemsHorizontalList(userActivity['products'] ?? [], 'product'),
 
-          // Purchased Products Section
-          const SizedBox(height: 24),
-          _buildSectionHeader('Purchased Products', userActivity['purchasedProducts']?.length ?? 0),
-          const SizedBox(height: 12),
-          _buildItemsHorizontalList(userActivity['purchasedProducts'] ?? [], 'purchased'),
-
-          // Donations Section - Added back
+          // Donations Section
           const SizedBox(height: 24),
           _buildSectionHeader('Donations', userActivity['donations']?.length ?? 0),
           const SizedBox(height: 12),
@@ -632,7 +616,6 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
                 children: [
                   Icon(
                     type == 'product' ? Icons.shopping_bag_outlined :
-                    type == 'purchased' ? Icons.receipt_long_outlined :
                     type == 'donation' ? Icons.volunteer_activism_outlined :
                     Icons.search_outlined,
                     size: 48,
@@ -760,9 +743,6 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
       ),
     );
   }
-
-  // Remove _navigateToDonation method
-  // ...existing code...
 
   Widget _buildInfoItem(IconData icon, String label, String value) {
     return Padding(
