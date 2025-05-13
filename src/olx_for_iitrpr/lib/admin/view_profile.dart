@@ -1,16 +1,23 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
-import 'view_product.dart';
-import 'view_donation.dart';
-import 'view_report.dart';
-import 'view_user_items.dart';
 import 'package:shimmer/shimmer.dart';
 import 'server.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'view_product.dart';
+import 'view_donation.dart';
+import 'view_lost_item.dart';
+import 'view_report.dart';
+import 'view_user_items.dart';
+import '../services/profile_service.dart';
+import '../services/product_cache_service.dart';
+import '../services/donation_cache_service.dart';
+import '../services/lost_found_cache_service.dart';
 
 class ViewProfileScreen extends StatefulWidget {
   final String userId;
@@ -48,7 +55,8 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
   bool allDataFetched = false;
   
   // Cache for loaded images
-  final Map<String, String> _loadedImages = {};
+  // Change the type from Map<String, String> to Map<String, Uint8List>
+  final Map<String, Uint8List> _loadedImages = {};
 
   // Add these new state variables
   final double expandedHeight = 200.0;
@@ -87,11 +95,17 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
   void initState() {
     super.initState();
     _fetchUserProfile();
-    
-    // Listen to scroll events to determine when to collapse
     _scrollController.addListener(_onScroll);
   }
-  
+
+  // Add this new method to load all images
+  Future<void> _loadAllImages() async {
+    await _loadProductImages();
+    await _loadPurchasedProductImages();
+    await _loadDonationImages();
+    await _loadLostItemImages();
+  }
+
   void _onScroll() {
     final double offset = _scrollController.offset;
     // Get the height of the app bar to determine collapsed state
@@ -118,28 +132,17 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     });
 
     try {
-      // Check cache first
-      final prefs = await SharedPreferences.getInstance();
-      final cachedProductsStr = prefs.getString('cached_products_${widget.userId}');
-      final cachedDonationsStr = prefs.getString('cached_donations_${widget.userId}');
-      final cachedLostItemsStr = prefs.getString('cached_lost_items_${widget.userId}');
-      
-      if (cachedProductsStr != null || cachedDonationsStr != null || cachedLostItemsStr != null) {
+      // Try to load from cache first
+      final cachedData = await ProfileService.getCachedUserProfile(widget.userId);
+      if (cachedData != null) {
         setState(() {
-          if (cachedProductsStr != null) {
-            userActivity['products'] = json.decode(cachedProductsStr);
-            userActivity['purchasedProducts'] = json.decode(cachedProductsStr).where((p) => p['buyer'] != null).toList();
-          }
-          if (cachedDonationsStr != null) {
-            userActivity['donations'] = json.decode(cachedDonationsStr);
-          }
-          if (cachedLostItemsStr != null) {
-            userActivity['lost_items'] = json.decode(cachedLostItemsStr);
-          }
+          userData = cachedData;
+          // profilePictureData is already included in cachedData
+          isLoading = false;
         });
       }
 
-      // Continue with API fetch
+      // Fetch fresh data
       final authCookie = await _secureStorage.read(key: 'authCookie');
       final response = await http.get(
         Uri.parse('$serverUrl/api/admin/users/${widget.userId}'),
@@ -152,51 +155,21 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success']) {
-          // Cache the data
-          if (data['activity'] != null) {
-            if (data['activity']['products'] != null) {
-              await prefs.setString('cached_products_${widget.userId}', 
-                json.encode(data['activity']['products']));
-            }
-            if (data['activity']['donations'] != null) {
-              await prefs.setString('cached_donations_${widget.userId}', 
-                json.encode(data['activity']['donations']));
-            }
-            if (data['activity']['lost_items'] != null) {
-              await prefs.setString('cached_lost_items_${widget.userId}', 
-                json.encode(data['activity']['lost_items']));
-            }
-          }
+          // Cache the complete response
+          await ProfileService.cacheUserProfile(widget.userId, data);
 
           setState(() {
             userData = data['user'];
-            if (data['activity'] != null) {
-              userActivity['products'] = data['activity']['products'] ?? [];
-              userActivity['purchasedProducts'] = data['activity']['purchasedProducts'] ?? [];
-              userActivity['donations'] = data['activity']['donations'] ?? [];
-              userActivity['lost_items'] = data['activity']['lost_items'] ?? [];
-              
-              if (data['activity']['reportsFiled'] != null) {
-                userActivity['reportsFiled']['user'] = data['activity']['reportsFiled']['user'] ?? [];
-                userActivity['reportsFiled']['product'] = data['activity']['reportsFiled']['product'] ?? [];
-              }
-              userActivity['reportsAgainst'] = data['activity']['reportsAgainst'] ?? [];
+            // profilePictureData comes directly from data['user']['profilePicture']
+            if (userData!['profilePicture']?.containsKey('data') ?? false) {
+              userData!['profilePictureData'] = userData!['profilePicture']['data'];
             }
+            userActivity = data['activity'] ?? userActivity;
             isLoading = false;
             allDataFetched = true;
           });
-
-          if (userData != null && userData!['profilePicture'] != null) {
-            _loadProfilePicture();
-          }
-          
-          // Load all images in parallel
-          await Future.wait([
-            _loadProductImages(),
-            _loadPurchasedProductImages(),
-            _loadDonationImages(),
-            _loadLostItemImages() // Add this line
-          ]);
+          // Load images only after userActivity is updated
+          await _loadAllImages();
         } else {
           throw Exception(data['message'] ?? 'Failed to load user profile');
         }
@@ -212,33 +185,6 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     }
   }
 
-  Future<void> _loadProfilePicture() async {
-    try {
-      final authCookie = await _secureStorage.read(key: 'authCookie');
-      final response = await http.get(
-        Uri.parse('$serverUrl/api/users/profile-picture/${widget.userId}'),
-        headers: {
-          'Content-Type': 'application/json',
-          'auth-cookie': authCookie ?? '',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        if (response.headers['content-type']?.contains('application/json') != true) {
-          if (mounted) {
-            setState(() {
-              if (userData != null) {
-                userData!['profilePictureData'] = base64Encode(response.bodyBytes);
-              }
-            });
-          }
-        }
-      }
-    } catch (e) {
-      print('Error loading profile picture: $e');
-    }
-  }
-
   Future<void> _loadProductImages() async {
     final products = userActivity['products'] ?? [];
     if (products.isEmpty) return;
@@ -249,6 +195,17 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
       if (product['_id'] == null) continue;
       
       try {
+        // Try to get from cache first
+        final cachedImage = await ProductCacheService.getCachedImage(product['_id']);
+        if (cachedImage != null) {
+          if (mounted) {
+            setState(() {
+              _loadedImages['product_${product['_id']}'] = cachedImage;
+            });
+          }
+          continue; // Skip API call if we have cached image
+        }
+
         final response = await http.get(
           Uri.parse('$serverUrl/api/products/${product['_id']}/main_image'),
           headers: {
@@ -257,13 +214,25 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
           },
         );
 
+        print("Image received for the product");
+
         if (response.statusCode == 200) {
           final data = json.decode(response.body);
-          if (data['success'] && data['image'] != null && data['image']['data'] != null) {
-            if (mounted) {
-              setState(() {
-                _loadedImages['product_${product['_id']}'] = data['image']['data'];
-              });
+          if (data['success'] && data['image'] != null) {
+            final image = data['image'];
+            final numImages = data['numImages'] ?? 1;
+            
+            if (image != null && image['data'] != null) {
+              final bytes = base64Decode(image['data']);
+              
+              // Cache the image
+              await ProductCacheService.cacheImage(product['_id'], bytes, numImages);
+              
+              if (mounted) {
+                setState(() {
+                  _loadedImages['product_${product['_id']}'] = bytes;
+                });
+              }
             }
           }
         }
@@ -294,9 +263,11 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
         if (response.statusCode == 200) {
           final data = json.decode(response.body);
           if (data['success'] && data['image'] != null && data['image']['data'] != null) {
+            // Fix: decode the base64 string to Uint8List
+            final bytes = base64Decode(data['image']['data']);
             if (mounted) {
               setState(() {
-                _loadedImages['purchased_${product['_id']}'] = data['image']['data'];
+                _loadedImages['purchased_${product['_id']}'] = bytes;
               });
             }
           }
@@ -317,6 +288,17 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
       if (donation['_id'] == null) continue;
       
       try {
+        // Try to get from cache first
+        final cachedImage = await DonationCacheService.getCachedImage(donation['_id']);
+        if (cachedImage != null) {
+          if (mounted) {
+            setState(() {
+              _loadedImages['donation_${donation['_id']}'] = cachedImage;
+            });
+          }
+          continue; // Skip API call if we have cached image
+        }
+
         final response = await http.get(
           Uri.parse('$serverUrl/api/donations/${donation['_id']}/main_image'),
           headers: {
@@ -327,11 +309,21 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
 
         if (response.statusCode == 200) {
           final data = json.decode(response.body);
-          if (data['success'] && data['image'] != null && data['image']['data'] != null) {
-            if (mounted) {
-              setState(() {
-                _loadedImages['donation_${donation['_id']}'] = data['image']['data'];
-              });
+          if (data['success'] && data['image'] != null) {
+            final image = data['image'];
+            final numImages = data['numImages'] ?? 1;
+            
+            if (image != null && image['data'] != null) {
+              final bytes = base64Decode(image['data']);
+              
+              // Cache the image
+              await DonationCacheService.cacheImage(donation['_id'], bytes, numImages);
+              
+              if (mounted) {
+                setState(() {
+                  _loadedImages['donation_${donation['_id']}'] = bytes;
+                });
+              }
             }
           }
         }
@@ -352,6 +344,17 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
       if (item['_id'] == null) continue;
       
       try {
+        // Try to get from cache first
+        final cachedImage = await LostFoundCacheService.getCachedImage(item['_id']);
+        if (cachedImage != null) {
+          if (mounted) {
+            setState(() {
+              _loadedImages['lostitem_${item['_id']}'] = cachedImage;
+            });
+          }
+          continue; // Skip API call if we have cached image
+        }
+
         final response = await http.get(
           Uri.parse('$serverUrl/api/lost-items/${item['_id']}/main_image'),
           headers: {
@@ -362,11 +365,21 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
 
         if (response.statusCode == 200) {
           final data = json.decode(response.body);
-          if (data['success'] && data['image'] != null && data['image']['data'] != null) {
-            if (mounted) {
-              setState(() {
-                _loadedImages['lostitem_${item['_id']}'] = data['image']['data'];
-              });
+          if (data['success'] && data['image'] != null) {
+            final image = data['image'];
+            final numImages = data['numImages'] ?? 1;
+            
+            if (image != null && image['data'] != null) {
+              final bytes = base64Decode(image['data']);
+              
+              // Cache the image
+              await LostFoundCacheService.cacheImage(item['_id'], bytes, numImages);
+              
+              if (mounted) {
+                setState(() {
+                  _loadedImages['lostitem_${item['_id']}'] = bytes;
+                });
+              }
             }
           }
         }
@@ -444,9 +457,10 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     }
   }
 
+  // Update _buildItemPreview to center align text
   Widget _buildItemPreview(Map<String, dynamic> item, String type, String idPrefix, Function onTap) {
     final String itemId = item['_id'];
-    final String? imageData = _loadedImages['${idPrefix}_$itemId'];
+    final Uint8List? imageData = _loadedImages['${idPrefix}_$itemId'];
     final String title = item['name'] ?? 'Unnamed ${ViewReportStringExtension(type).capitalize()}';
     
     return GestureDetector(
@@ -467,7 +481,6 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
           ],
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
               borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
@@ -478,7 +491,7 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
                   children: [
                     if (imageData != null)
                       Image.memory(
-                        base64Decode(imageData),
+                        imageData,  // No need for base64Decode here
                         fit: BoxFit.cover,
                         gaplessPlayback: true,
                         isAntiAlias: true,
@@ -507,17 +520,18 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
             Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                   ),
                   if (type == 'purchased' && item['seller'] != null)
                     Text(
                       'Seller: ${item['seller']['userName'] ?? 'Unknown'}',
+                      textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -674,6 +688,13 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
         : _buildItemsHorizontalList(products, 'product');
   }
 
+  Widget _buildPurchasedProductsSection() {  // New method specifically for purchased products
+    final purchasedProducts = userActivity['purchasedProducts'] ?? [];
+    return purchasedProducts.isEmpty
+        ? _buildEmptyStateCard('User has not purchased any products yet')
+        : _buildItemsHorizontalList(purchasedProducts, 'purchased');
+  }
+
   Widget _buildDonationsSection() {
     final donations = userActivity['donations'] ?? [];
     return donations.isEmpty
@@ -688,6 +709,7 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
         : _buildItemsHorizontalList(lostitems, 'lostitem');
   }
 
+  // Update _buildItemsHorizontalList method
   Widget _buildItemsHorizontalList(List items, String type) {
     return SizedBox(
       height: 220,
@@ -696,20 +718,33 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
         scrollDirection: Axis.horizontal,
         itemCount: items.length,
         itemBuilder: (context, index) {
-          if (type == 'donation') {
-            return GestureDetector(
-              onTap: () {
-                Navigator.push(
+          switch(type) {
+            case 'donation':
+              return _buildItemPreview(
+                items[index], 
+                type, 
+                type,
+                (id) => Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (context) => DonationDetailsScreen(donation: items[index]),
                   ),
-                );
-              },
-              child: _buildItemPreview(items[index], type, type, (_) {}),
-            );
-          } else {
-            return _buildItemPreview(items[index], type, type, _navigateToProduct);
+                ),
+              );
+            case 'lostitem':
+              return _buildItemPreview(
+                items[index], 
+                type, 
+                type,
+                (id) => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => LostItemDetailsScreen(item: items[index]),
+                  ),
+                ),
+              );
+            default:
+              return _buildItemPreview(items[index], type, type, _navigateToProduct);
           }
         },
       ),
@@ -743,6 +778,12 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
           ),
           child: Card(
             margin: EdgeInsets.only(bottom: 8),
+            elevation: 0,
+            color: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(color: Colors.grey[200]!),
+            ),
             child: ListTile(
               contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               title: Text('Against User: ${report['reportedUser']?['userName'] ?? 'Unknown'}'),
@@ -779,6 +820,12 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
           ),
           child: Card(
             margin: EdgeInsets.only(bottom: 8),
+            elevation: 0,
+            color: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(color: Colors.grey[200]!),
+            ),
             child: ListTile(
               contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               title: Text('Against Product: ${report['product']?['name'] ?? 'Unknown'}'),
@@ -834,6 +881,12 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
           ),
           child: Card(
             margin: EdgeInsets.only(bottom: 8),
+            elevation: 0,
+            color: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(color: Colors.grey[200]!),
+            ),
             child: ListTile(
               contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               title: Text('From: ${report['reporter']?['userName'] ?? 'Unknown'}'),
@@ -1028,7 +1081,7 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
               // Purchased Products Section
               _buildInfoBox(
                 'Purchased Products',
-                [_buildProductsSection()],
+                [_buildPurchasedProductsSection()], // Changed from _buildProductsSection()
               ),
               
               // Donations Section

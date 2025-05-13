@@ -570,6 +570,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           backgroundColor: Colors.white,
           foregroundColor: Colors.black,
           elevation: 0,
+          scrolledUnderElevation: 0, // Add this
         ),
         body: const Center(child: CircularProgressIndicator()),
       );
@@ -582,6 +583,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
+        scrolledUnderElevation: 0, // Add this
         leading: Container(
           margin: EdgeInsets.all(8),
           decoration: BoxDecoration(
@@ -795,6 +797,61 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             ),
                           ],
                         ),
+                        
+                        // Add Buyer Details if product is sold
+                        if (product['status'] == 'sold' && product['buyer'] != null) ...[
+                          const SizedBox(height: 24),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Buyer Details',
+                                style: TextStyle(fontSize: 16),
+                              ),
+                              const SizedBox(height: 8),
+                              InkWell(
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ViewProfileScreen(
+                                      userId: product['buyer']?['_id'] ?? '',
+                                    ),
+                                  ),
+                                ),
+                                child: Container(
+                                  padding: EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[50],
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.grey[200]!),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 20,
+                                        backgroundColor: Colors.grey[200],
+                                        child: Icon(Icons.person, color: Colors.grey[400]),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            product['buyer']?['userName'] ?? 'Unknown',
+                                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                                          ),
+                                          Text(
+                                            'Purchased on: ${_formatDateTime(product['soldAt'] ?? product['lastUpdatedAt'])}',
+                                            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                         const SizedBox(height: 24),
 
                         // Product timestamps

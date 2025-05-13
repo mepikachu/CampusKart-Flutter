@@ -123,6 +123,7 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
       }
 
       final authCookie = await _secureStorage.read(key: 'authCookie');
+      // Use new API endpoint for user profile viewing
       final response = await http.get(
         Uri.parse('$serverUrl/api/users/profile/${widget.userId}'),
         headers: {
@@ -130,62 +131,36 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
           'auth-cookie': authCookie ?? '',
         },
       );
-
+      
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success']) {
-          // Cache the data
-          final prefs = await SharedPreferences.getInstance();
-          if (data['activity'] != null) {
-            if (data['activity']['products'] != null) {
-              await prefs.setString('cached_products_${widget.userId}', 
-                json.encode(data['activity']['products']));
-            }
-            if (data['activity']['donations'] != null) {
-              await prefs.setString('cached_donations_${widget.userId}', 
-                json.encode(data['activity']['donations']));
-            }
-            if (data['activity']['lost_items'] != null) {
-              await prefs.setString('cached_lost_items_${widget.userId}', 
-                json.encode(data['activity']['lost_items']));
-            }
-          }
-
+          // Cache the complete response if needed
           setState(() {
             userData = data['user'];
-            if (data['activity'] != null) {
-              userActivity['products'] = data['activity']['products'] ?? [];
-              userActivity['donations'] = data['activity']['donations'] ?? [];
-              userActivity['lost_items'] = data['activity']['lost_items'] ?? [];
+            if (userData!['profilePicture']?.containsKey('data') ?? false) {
+              userData!['profilePictureData'] = userData!['profilePicture']['data'];
             }
+            userActivity = data['activity'] ?? userActivity;
+            // Remove purchasedProducts for privacy reasons
+            userActivity.remove('purchasedProducts');
             isLoading = false;
             allDataFetched = true;
           });
-
-          if (userData != null && userData!['profilePicture'] != null) {
-            _loadProfilePicture();
-          }
-          
-          await Future.wait([
-            _loadProductImages(),
-            _loadDonationImages(),
-            _loadLostItemImages()
-          ]);
+          // Load images only after activity is updated
+          await _loadAllImages();
+        } else {
+          throw Exception(data['message'] ?? 'Failed to load user profile');
         }
       } else {
-        setState(() {
-          isLoading = false;
-          isError = true;
-          errorMessage = 'Failed to load user profile. Status: ${response.statusCode}';
-        });
+        throw Exception('Failed to load user profile. Status: ${response.statusCode}');
       }
     } catch (e) {
       setState(() {
-        isLoading = false;
         isError = true;
-        errorMessage = 'Error: $e';
+        errorMessage = e.toString();
+        isLoading = false;
       });
-      print('Error fetching profile: $e');
     }
   }
 
@@ -374,6 +349,14 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
         print('Error loading lost item image: $e');
       }
     }
+  }
+
+  Future<void> _loadAllImages() async {
+    await Future.wait([
+      _loadProductImages(),
+      _loadDonationImages(),
+      _loadLostItemImages()
+    ]);
   }
 
   // Add navigation methods

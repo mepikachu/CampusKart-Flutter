@@ -25,6 +25,15 @@ class ProfileService {
   static const String _activityIdsKey = 'user_activity_ids';
   static const String _activitySyncKey = 'last_activity_sync';
 
+  // Constants for storage
+  static const _currentUserKey = 'current_user_profile';
+  static const _otherUsersPrefix = 'user_profile_';
+  static const _profilesCacheLifetime = Duration(hours: 1);
+  
+  // In-memory cache for other users
+  static final Map<String, Map<String, dynamic>> _otherUsersCache = {};
+  static final Map<String, DateTime> _otherUsersCacheTimestamp = {};
+
   factory ProfileService() => _instance;
 
   ProfileService._internal();
@@ -198,5 +207,106 @@ class ProfileService {
     await _storage.delete(key: _profileKey);
     await _storage.delete(key: _activityIdsKey);
     await _storage.delete(key: _activitySyncKey);
+  }
+
+  /// Get cached profile for any user
+  static Future<Map<String, dynamic>?> getCachedUserProfile(String userId) async {
+    // If it's current user, use existing cache
+    if (userId == _profileData?['_id']) {
+      return _profileData;
+    }
+
+    // Check in-memory cache first
+    if (_otherUsersCache.containsKey(userId)) {
+      final timestamp = _otherUsersCacheTimestamp[userId];
+      if (timestamp != null && 
+          DateTime.now().difference(timestamp) <= _profilesCacheLifetime) {
+        return _otherUsersCache[userId];
+      }
+    }
+
+    // Check secure storage
+    try {
+      final data = await _storage.read(key: '$_otherUsersPrefix$userId');
+      if (data != null) {
+        final profile = json.decode(data);
+        _otherUsersCache[userId] = profile;
+        _otherUsersCacheTimestamp[userId] = DateTime.now();
+        return profile;
+      }
+    } catch (e) {
+      print('Error loading cached profile for user $userId: $e');
+    }
+    return null;
+  }
+
+  /// Cache a user's profile data
+  static Future<void> cacheUserProfile(String userId, Map<String, dynamic> data) async {
+    // For current user, use existing caching
+    if (_profileData != null && userId == _profileData!['_id']) {
+      return cacheUserResponse(data);
+    }
+
+    try {
+      // Cache user data
+      if (data['user'] != null) {
+        _otherUsersCache[userId] = data['user'];
+        _otherUsersCacheTimestamp[userId] = DateTime.now();
+        await _storage.write(
+          key: '$_otherUsersPrefix$userId',
+          value: json.encode(data['user'])
+        );
+      }
+
+      // Cache activities in respective services
+      if (data['activity'] != null) {
+        final activity = data['activity'];
+        
+        // Cache products
+        if (activity['products'] != null) {
+          for (var product in activity['products'] as List) {
+            if (product is Map<String, dynamic> && product['_id'] != null) {
+              await ProductCacheService.cacheProduct(
+                product['_id'].toString(),
+                product
+              );
+            }
+          }
+        }
+        
+        // Cache donations
+        if (activity['donations'] != null) {
+          for (var donation in activity['donations'] as List) {
+            if (donation is Map<String, dynamic> && donation['_id'] != null) {
+              await DonationCacheService.cacheDonation(
+                donation['_id'].toString(),
+                donation
+              );
+            }
+          }
+        }
+
+        // Cache lost items
+        if (activity['lost_items'] != null) {
+          for (var item in activity['lost_items'] as List) {
+            if (item is Map<String, dynamic> && item['_id'] != null) {
+              await LostFoundCacheService.cacheItem(
+                item['_id'].toString(),
+                item
+              );
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error caching profile for user $userId: $e');
+    }
+  }
+
+  /// Clear cache for a specific user
+  static Future<void> clearUserCache(String userId) async {
+    _otherUsersCache.remove(userId);
+    _otherUsersCacheTimestamp.remove(userId);
+    await _storage.delete(key: '$_otherUsersPrefix$userId');
   }
 }

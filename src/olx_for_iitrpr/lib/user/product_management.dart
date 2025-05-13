@@ -881,11 +881,25 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
                                         ),
                                       ),
                                       const SizedBox(height: 8),
-                                      Text(
-                                        'From: ${offer['buyer']?['userName'] ?? 'Unknown'}',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          color: Colors.grey[700],
+                                      // Wrap buyer details with InkWell:
+                                      InkWell(
+                                        onTap: () {
+                                          if (offer['buyer'] != null && offer['buyer']['_id'] != null) {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => ViewProfileScreen(userId: offer['buyer']['_id']),
+                                              ),
+                                            );
+                                          }
+                                        },
+                                        child: Text(
+                                          'From: ${offer['buyer']?['userName'] ?? 'Unknown'}',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            color: Colors.blue, // indicate it's clickable
+                                            decoration: TextDecoration.underline,
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(height: 4),

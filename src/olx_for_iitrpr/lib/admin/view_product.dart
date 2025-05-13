@@ -388,6 +388,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           backgroundColor: Colors.white,
           foregroundColor: Colors.black,
           elevation: 0,
+          scrolledUnderElevation: 0,
         ),
         body: const Center(child: CircularProgressIndicator()),
       );
@@ -395,102 +396,64 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
     final product = productDetails ?? widget.product;
     
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        leading: Container(
-          margin: EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade100,
-            shape: BoxShape.circle,
-          ),
-          child: IconButton(
-            icon: Icon(Icons.arrow_back, color: Colors.black),
-            padding: EdgeInsets.zero,
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ),
-        title: Text(product['name'] ?? 'Product Details', 
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)
+    return Theme(
+      data: Theme.of(context).copyWith(
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+          scrolledUnderElevation: 0,
         ),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Image carousel
-                  _buildImageCarousel(),
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          leading: Container(
+            margin: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: Icon(Icons.arrow_back, color: Colors.black),
+              padding: EdgeInsets.zero,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+          title: Text(
+            product['name'] ?? 'Product Details', 
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)
+          ),
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Image carousel
+                    _buildImageCarousel(),
 
-                  // Main content section
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Product name and status
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                product['name'] ?? 'Unknown Product',
-                                style: const TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.green.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                '${product['status']?.toUpperCase() ?? "AVAILABLE"}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.green,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Category tags - replace the existing tag section with this
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
+                    // Main content section
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Product name and status
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                'Tags: ',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.grey[700],
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              Container(
-                                margin: const EdgeInsets.only(right: 8),
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: Colors.blue.withOpacity(0.2)),
-                                ),
+                              Expanded(
                                 child: Text(
-                                  'Electronics',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.blue[700],
-                                    fontWeight: FontWeight.w500,
+                                  product['name'] ?? 'Unknown Product',
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ),
@@ -499,159 +462,260 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 decoration: BoxDecoration(
                                   color: Colors.green.withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(color: Colors.green.withOpacity(0.2)),
                                 ),
                                 child: Text(
-                                  'Campus',
+                                  '${product['status']?.toUpperCase() ?? "AVAILABLE"}',
                                   style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.green[700],
-                                    fontWeight: FontWeight.w500,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.green,
                                   ),
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                        const SizedBox(height: 24),
+                          const SizedBox(height: 16),
 
-                        // Price section
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+                          // Category tags - replace the existing tag section with this
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
                               children: [
                                 Text(
-                                  'Price: ',
-                                  style: TextStyle(fontSize: 16),
-                                ),
-                                Text(
-                                  '₹${product['price']?.toString() ?? "0"}',
+                                  'Tags: ',
                                   style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.green,
+                                    fontSize: 14,
+                                    color: Colors.grey[700],
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Container(
+                                  margin: const EdgeInsets.only(right: 8),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                                  ),
+                                  child: Text(
+                                    'Electronics',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.blue[700],
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: Colors.green.withOpacity(0.2)),
+                                  ),
+                                  child: Text(
+                                    'Campus',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.green[700],
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
+                          ),
+                          const SizedBox(height: 24),
 
-                        // Seller details section with API data
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Seller Details',
-                              style: TextStyle(fontSize: 16),
-                            ),
-                            const SizedBox(height: 8),
-                            InkWell(
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ViewProfileScreen(
-                                    userId: product['seller']?['_id'] ?? '',
+                          // Price section
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    'Price: ',
+                                    style: TextStyle(fontSize: 16),
+                                  ),
+                                  Text(
+                                    '₹${product['price']?.toString() ?? "0"}',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.green,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Seller details section
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Seller Details',
+                                style: TextStyle(fontSize: 16),
+                              ),
+                              const SizedBox(height: 8),
+                              InkWell(
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ViewProfileScreen(
+                                      userId: product['seller']?['_id'] ?? '',
+                                    ),
+                                  ),
+                                ),
+                                child: Container(
+                                  padding: EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[50],
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.grey[200]!),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          CircleAvatar(
+                                            radius: 20,
+                                            backgroundColor: Colors.grey[200],
+                                            child: Icon(Icons.person, color: Colors.grey[400]),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                product['seller']?['userName'] ?? 'Unknown',
+                                                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                                              ),
+                                              if (sellerProfile != null) ...[
+                                                Text(
+                                                  'Last online: ${_formatDateTime(sellerProfile!['lastSeen'])}',
+                                                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                                ),
+                                                Text(
+                                                  'Member since: ${_formatDateTime(sellerProfile!['createdAt'])}',
+                                                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
-                              child: Container(
-                                padding: EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[50],
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.grey[200]!),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Add Buyer details section if product is sold
+                          if (product['status']?.toLowerCase() == 'sold' && product['buyer'] != null) ...[
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Buyer Details',
+                                  style: TextStyle(fontSize: 16),
                                 ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
+                                const SizedBox(height: 8),
+                                InkWell(
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ViewProfileScreen(
+                                        userId: product['buyer']?['_id'] ?? '',
+                                      ),
+                                    ),
+                                  ),
+                                  child: Container(
+                                    padding: EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[50],
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.grey[200]!),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        CircleAvatar(
-                                          radius: 20,
-                                          backgroundColor: Colors.grey[200],
-                                          child: Icon(Icons.person, color: Colors.grey[400]),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                        Row(
                                           children: [
-                                            Text(
-                                              product['seller']?['userName'] ?? 'Unknown',
-                                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                                            CircleAvatar(
+                                              radius: 20,
+                                              backgroundColor: Colors.grey[200],
+                                              child: Icon(Icons.person, color: Colors.grey[400]),
                                             ),
-                                            if (sellerProfile != null) ...[
-                                              Text(
-                                                'Last online: ${_formatDateTime(sellerProfile!['lastSeen'])}',
-                                                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                                              ),
-                                              Text(
-                                                'Member since: ${_formatDateTime(sellerProfile!['createdAt'])}',
-                                                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                                              ),
-                                              if (sellerProfile!['address'] != null)
+                                            const SizedBox(width: 12),
+                                            Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
                                                 Text(
-                                                  'Address: ${sellerProfile!['address']}',
-                                                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                                  product['buyer']?['userName'] ?? 'Unknown',
+                                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
                                                 ),
-                                            ],
+                                              ],
+                                            ),
                                           ],
                                         ),
                                       ],
                                     ),
-                                  ],
+                                  ),
                                 ),
-                              ),
+                              ],
                             ),
+                            const SizedBox(height: 24),
                           ],
-                        ),
-                        const SizedBox(height: 24),
 
-                        // Product timestamps
-                        Container(
-                          padding: EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.withOpacity(0.05),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.blue.withOpacity(0.1)),
+                          // Product timestamps
+                          Container(
+                            padding: EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.05),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.blue.withOpacity(0.1)),
+                            ),
+                            child: Column(
+                              children: [
+                                _buildTimeDetail('Posted on', _formatDateTime(product['createdAt'])),
+                                const SizedBox(height: 8),
+                                _buildTimeDetail('Last updated', _formatDateTime(product['lastUpdatedAt'])),
+                              ],
+                            ),
                           ),
-                          child: Column(
-                            children: [
-                              _buildTimeDetail('Posted on', _formatDateTime(product['createdAt'])),
-                              const SizedBox(height: 8),
-                              _buildTimeDetail('Last updated', _formatDateTime(product['lastUpdatedAt'])),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 24),
+                          const SizedBox(height: 24),
 
-                        // Description section
-                        Text(
-                          'About this item',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey[800],
+                          // Description section
+                          Text(
+                            'About this item',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[800],
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          product['description'] ?? 'No description available',
-                          style: TextStyle(
-                            fontSize: 15,
-                            height: 1.5,
-                            color: Colors.grey[800],
+                          const SizedBox(height: 12),
+                          Text(
+                            product['description'] ?? 'No description available',
+                            style: TextStyle(
+                              fontSize: 15,
+                              height: 1.5,
+                              color: Colors.grey[800],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        )
       )
     );
   }

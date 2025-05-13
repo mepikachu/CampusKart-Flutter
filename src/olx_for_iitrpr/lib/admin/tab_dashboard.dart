@@ -258,7 +258,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Widget _buildSummaryCard(String title, String value, IconData icon, Color color, String subtitle) {
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: Colors.white, // Set pure white background
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey[200]!), // Add subtle border
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
