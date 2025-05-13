@@ -1211,12 +1211,23 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     };
     
     // Add replyTo information if replying to something
-    if (replyToData != null) {
+    if (replyToData != null && replyToData['text'] != null) {
+      final replyText = replyToData['text'].toString();
+      
+      // Store reply data in both nested and flat format for redundancy
       tempMessage['replyTo'] = {
         'id': replyToData['id'],
         'type': replyToData['type'],
-        'text': replyToData['text'] ?? 'Item',
+        'text': replyText,
+        'senderId': replyToData['senderId'],
       };
+      
+      // Also store at root level for compatibility
+      tempMessage['replyToMessageId'] = replyToData['id'];
+      tempMessage['replyText'] = replyText;
+      tempMessage['replySenderId'] = replyToData['senderId'];
+      
+      print('Created message with reply to: ${replyToData['id']} with text: $replyText');
     }
     
     setState(() {
@@ -1444,11 +1455,26 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   // Handle reply to a message
   void _handleReply(dynamic message) {
+    String? senderId;
+    if (message['sender'] != null) {
+      if (message['sender'] is String) {
+        senderId = message['sender'];
+      } else if (message['sender'] is Map && message['sender']['_id'] != null) {
+        senderId = message['sender']['_id'];
+      }
+    }
+    
+    final messageText = message['text'] ?? '';
+    final messageId = message['messageId'] ?? message['_id'];
+    
+    print('Setting up reply to message: $messageId with text: $messageText');
+    
     setState(() {
       _replyingTo = {
-        'id': message['messageId'],
-        'type': 'message',
-        'text': message['text'],
+        'id': messageId,
+        'type': 'message', 
+        'text': messageText,
+        'senderId': senderId,
       };
     });
     
@@ -2559,11 +2585,63 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   // Build reply preview inside a message
   Widget _buildReplyPreview(dynamic message) {
     try {
-      final replyTo = message['replyTo'];
-      if (replyTo == null) return SizedBox.shrink();
-
-      // Handle donation and product replies
-      if (replyTo['type'] == 'donation' || replyTo['type'] == 'product') {
+      print('Building reply preview for message: ${message['messageId'] ?? message['_id']}');
+      
+      // Check multiple locations for reply data
+      Map<String, dynamic>? replyTo;
+      String? replyText;
+      String? replyId;
+      String? replySenderId;
+      
+      // First check replyTo object
+      if (message['replyTo'] != null && message['replyTo'] is Map) {
+        replyTo = Map<String, dynamic>.from(message['replyTo']);
+        replyId = replyTo['id']?.toString();
+        replyText = replyTo['text']?.toString();
+        replySenderId = replyTo['senderId']?.toString();
+      }
+      
+      // Then check flat fields
+      if ((replyText == null || replyText.isEmpty) && message['replyText'] != null) {
+        replyText = message['replyText'].toString();
+      }
+      
+      if (replyId == null && message['replyToMessageId'] != null) {
+        replyId = message['replyToMessageId'].toString();
+      }
+      
+      if (replySenderId == null && message['replySenderId'] != null) {
+        replySenderId = message['replySenderId'].toString();
+      }
+      
+      // If still no reply ID, return empty widget
+      if (replyId == null || replyId.isEmpty) {
+        return const SizedBox.shrink();
+      }
+      
+      // If no text found, try to find original message
+      if ((replyText == null || replyText.isEmpty) && replyId.isNotEmpty) {
+        final originalIndex = messages.indexWhere((m) => 
+          m['messageId']?.toString() == replyId || 
+          m['_id']?.toString() == replyId
+        );
+        
+        if (originalIndex >= 0) {
+          final originalMessage = messages[originalIndex];
+          if (originalMessage['text'] != null) {
+            replyText = originalMessage['text'].toString();
+            
+            // Cache found text for future
+            if (message['replyTo'] != null && message['replyTo'] is Map) {
+              message['replyTo']['text'] = replyText;
+            }
+            message['replyText'] = replyText;
+          }
+        }
+      }
+      
+      // Handle product/donation replies
+      if (replyTo != null && (replyTo['type'] == 'donation' || replyTo['type'] == 'product')) {
         final itemId = replyTo['id'];
         final itemType = replyTo['type'];
 
@@ -2616,66 +2694,45 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       }
 
       // Handle regular message replies
-      final replyToMessage = messages.firstWhere(
-        (m) => m['_id']?.toString() == message['replyToMessageId']?.toString(),
-        orElse: () => {'text': 'Original message not found', 'sender': currentUserId},
-      );
-
-      final messageText = replyToMessage['text'] ?? 'Message unavailable';
-
-      bool isOriginalSenderMe = false;
-      if (replyToMessage['sender'] != null) {
-        if (replyToMessage['sender'] is String) {
-          isOriginalSenderMe = replyToMessage['sender'].toString() == currentUserId.toString();
-        } else if (replyToMessage['sender'] is Map && replyToMessage['sender']['_id'] != null) {
-          isOriginalSenderMe = replyToMessage['sender']['_id'].toString() == currentUserId.toString();
-        }
-      }
-
-      return GestureDetector(
-        onTap: () {
-          _scrollToMessage(replyToMessage['_id'].toString());
-        },
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 6),
-          padding: const EdgeInsets.all(6),
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.05),
-            borderRadius: BorderRadius.circular(8),
-            border: Border(
-              left: BorderSide(
-                color: Colors.blue.shade700,
-                width: 4,
-              ),
+      return Container(
+        margin: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.all(6),
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(8),
+          border: Border(
+            left: BorderSide(
+              color: Colors.blue.shade700,
+              width: 4,
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                isOriginalSenderMe ? 'You' : widget.partnerNames,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                  color: Colors.blue.shade700,
-                ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              replySenderId == currentUserId ? 'You' : widget.partnerNames,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                color: Colors.blue.shade700,
               ),
-              const SizedBox(height: 2),
-              Text(
-                messageText,
-                style: const TextStyle(fontSize: 12),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              replyText ?? 'Message unavailable',
+              style: const TextStyle(fontSize: 12),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
       );
     } catch (e) {
       print('Error building reply preview: $e');
-      return SizedBox.shrink();
+      return const SizedBox.shrink();
     }
   }
 
