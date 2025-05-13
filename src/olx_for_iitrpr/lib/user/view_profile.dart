@@ -12,6 +12,7 @@ import 'lost_item_description.dart';
 import 'chat_screen.dart';
 import 'home.dart';
 import 'server.dart';
+import 'report_user.dart';
 
 class ViewProfileScreen extends StatefulWidget {
   final String userId;
@@ -41,6 +42,7 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
   final Map<String, String> _loadedImages = {};
   final ScrollController _scrollController = ScrollController();
   bool isAppBarCollapsed = false;
+  bool isBlocked = false;
 
   @override
   void initState() {
@@ -397,49 +399,197 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     );
   }
 
+  // Add this method to show modern snackbar
+  void _showMessage(String message, {bool isError = false}) {
+    if (!mounted) return;
+    
+    final snackBar = SnackBar(
+      content: Text(message),
+      backgroundColor: isError ? Colors.red : Colors.green,
+      duration: Duration(seconds: isError ? 4 : 2),
+      behavior: SnackBarBehavior.floating,
+      margin: EdgeInsets.only(
+        bottom: MediaQuery.of(context).size.height - 100,
+        right: 20,
+        left: 20,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10.0),
+      ),
+    );
+    
+    ScaffoldMessenger.of(context).showSnackBar(snackBar);
+  }
+
+  // Add block user functionality
+  Future<void> _blockUser() async {
+    bool confirmed = await showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
+          title: Text(
+            'Block User',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: Text(
+            'Are you sure you want to block ${userData?['userName'] ?? 'this user'}?',
+            style: TextStyle(color: Colors.black87),
+          ),
+          actions: [
+            TextButton(
+              child: Text('Cancel', style: TextStyle(color: Colors.grey[700])),
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+            TextButton(
+              child: Text('Block', style: TextStyle(color: Colors.red)),
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        );
+      },
+    ) ?? false;
+    
+    if (!confirmed) return;
+    
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      final response = await http.post(
+        Uri.parse('$serverUrl/api/users/block/${widget.userId}'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        setState(() {
+          isBlocked = true;
+        });
+        _showMessage('User blocked successfully');
+      } else {
+        _showMessage('Failed to block user', isError: true);
+      }
+    } catch (e) {
+      _showMessage('Error: $e', isError: true);
+    }
+  }
+
+  // Add unblock user functionality
+  Future<void> _unblockUser() async {
+    bool confirmed = await showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
+          title: Text(
+            'Unblock User',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: Text(
+            'Are you sure you want to unblock ${userData?['userName'] ?? 'this user'}?',
+            style: TextStyle(color: Colors.black87),
+          ),
+          actions: [
+            TextButton(
+              child: Text('Cancel', style: TextStyle(color: Colors.grey[700])),
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+            TextButton(
+              child: Text('Unblock', style: TextStyle(color: Colors.blue)),
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        );
+      },
+    ) ?? false;
+    
+    if (!confirmed) return;
+    
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      final response = await http.delete(
+        Uri.parse('$serverUrl/api/users/unblock/${widget.userId}'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        setState(() {
+          isBlocked = false;
+        });
+        _showMessage('User unblocked successfully');
+      } else {
+        _showMessage('Failed to unblock user', isError: true);
+      }
+    } catch (e) {
+      _showMessage('Error: $e', isError: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: isAppBarCollapsed ? Colors.white : Colors.transparent,
-        elevation: isAppBarCollapsed ? 2 : 0,
-        leading: Container(
-          margin: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: isAppBarCollapsed ? Colors.transparent : Colors.grey.shade100,
-          ),
-          child: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.black),
-            onPressed: () => Navigator.pop(context),
-            padding: EdgeInsets.zero,
-          ),
-        ),
-        title: Text(
-          userData != null ? userData!['userName'] ?? 'User Profile' : 'User Profile',
-          style: const TextStyle(color: Colors.black),
+    return Theme(
+      data: Theme.of(context).copyWith(
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+          elevation: 0,
+          scrolledUnderElevation: 0, // Prevents color change on scroll
         ),
       ),
-      body: isLoading 
-          ? const Center(child: CircularProgressIndicator())
-          : isError
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                      const SizedBox(height: 16),
-                      Text(errorMessage, textAlign: TextAlign.center),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _fetchUserProfile,
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                )
-              : _buildUserProfileContent(),
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: isAppBarCollapsed ? Colors.white : Colors.transparent,
+          elevation: 0,
+          leading: Container(
+            margin: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isAppBarCollapsed ? Colors.transparent : Colors.grey.shade100,
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.black),
+              onPressed: () => Navigator.pop(context),
+              padding: EdgeInsets.zero,
+            ),
+          ),
+          title: Text(
+            userData != null ? userData!['userName'] ?? 'User Profile' : 'User Profile',
+            style: const TextStyle(color: Colors.black),
+          ),
+        ),
+        body: isLoading 
+            ? const Center(child: CircularProgressIndicator())
+            : isError
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                        const SizedBox(height: 16),
+                        Text(errorMessage, textAlign: TextAlign.center),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _fetchUserProfile,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  )
+                : _buildUserProfileContent(),
+      ),
     );
   }
 
@@ -449,7 +599,7 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     }
 
     return SingleChildScrollView(
-      controller: _scrollController,  // Add controller here
+      controller: _scrollController,
       child: Column(
         children: [
           // Profile Header with Picture
@@ -498,18 +648,81 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                // Message Button - New addition
-                ElevatedButton.icon(
-                  onPressed: _messageUser,
-                  icon: const Icon(Icons.message),
-                  label: const Text('Message'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
+                
+                // Action Buttons Row
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _messageUser,
+                          icon: const Icon(Icons.message, size: 20),
+                          label: const Text('Message'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            minimumSize: const Size(0, 45), // Fixed height
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: isBlocked ? _unblockUser : _blockUser,
+                          icon: Icon(isBlocked ? Icons.lock_open : Icons.block, size: 20),
+                          label: Text(isBlocked ? 'Unblock' : 'Block'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: isBlocked ? Colors.orange : Colors.red,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            minimumSize: const Size(0, 45), // Fixed height
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (context) => Theme(
+                                data: Theme.of(context).copyWith(
+                                  dialogBackgroundColor: Colors.white,
+                                  dialogTheme: DialogTheme(
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(15),
+                                    ),
+                                  ),
+                                ),
+                                child: ReportDialog(
+                                  userId: widget.userId,
+                                  conversationId: '',
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.report_problem, size: 20),
+                          label: const Text('Report'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.grey.shade700,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            minimumSize: const Size(0, 45), // Fixed height
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
