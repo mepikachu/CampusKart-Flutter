@@ -406,7 +406,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                           elevation: 1,
-                          backgroundColor: Theme.of(context).primaryColor,
+                          backgroundColor: Colors.blue, // Changed from Theme.of(context).primaryColor
                         ),
                         child: _isLoading
                             ? const SizedBox(

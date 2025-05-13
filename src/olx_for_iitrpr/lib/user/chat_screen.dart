@@ -31,133 +31,126 @@ class ChatBubblesPainter extends CustomPainter {
       'message'
     ];
 
-    // Calculate grid dimensions for more even distribution
-    final double cellWidth = 40.0;  // Smaller cells for more density
-    final double cellHeight = 40.0; // Smaller cells for more density
+    // Increased spacing between shapes
+    final double cellWidth = 80.0;
+    final double cellHeight = 80.0;
     
     final int columns = (size.width / cellWidth).ceil();
     final int rows = (size.height / cellHeight).ceil();
     
-    // Used for consistent shape placement
-    final random = Random(12345);
-    
-    // Draw shapes in a grid pattern
+    // Draw shapes in a fixed grid pattern
     for (int row = 0; row < rows; row++) {
       for (int col = 0; col < columns; col++) {
-        // More controlled offset for better distribution
-        final offsetX = random.nextDouble() * 10 - 5;
-        final offsetY = random.nextDouble() * 10 - 5;
+        // Calculate center of each cell
+        final x = col * cellWidth + (cellWidth / 2);
+        final y = row * cellHeight + (cellHeight / 2);
         
-        final x = col * cellWidth + cellWidth / 2 + offsetX;
-        final y = row * cellHeight + cellHeight / 2 + offsetY;
+        // Get shape type based on position
+        final item = items[(row + col) % items.length];
         
-        // Use more shapes (reduced skip probability)
-        if (random.nextDouble() > 0.3) {  // 70% chance to draw a shape
-          final item = items[((row * columns + col) * 13) % items.length];
-          final rotation = (random.nextDouble() * pi / 6) - (pi / 12); // Limited rotation
-          final scale = 0.5 + (random.nextDouble() * 0.3); // Larger size range
+        // Fixed small rotation for variety
+        final rotation = ((row + col) % 4) * (pi / 16);
         
-          canvas.save();
-          canvas.translate(x, y);
-          canvas.rotate(rotation);
-          canvas.scale(scale);
+        canvas.save();
+        canvas.translate(x, y);
+        canvas.rotate(rotation);
+        canvas.scale(0.4); // Smaller fixed scale to prevent collisions
 
-          final paint = Paint()
-            ..color = Colors.grey.withOpacity(0.08)  // Slightly reduced opacity
-            ..style = PaintingStyle.fill;
+        final paint = Paint()
+          ..color = Colors.grey.withOpacity(0.06)
+          ..style = PaintingStyle.fill;
 
-          // Draw the shape
-          switch (item) {
-            case 'envelope':
-              _drawEnvelope(canvas, paint);
-              break;
-            case 'phone':
-              _drawPhone(canvas, paint);
-              break;
-            case 'camera':
-              _drawCamera(canvas, paint);
-              break;
-            case 'cup':
-              _drawCup(canvas, paint);
-              break;
-            case 'heart':
-              _drawHeart(canvas, paint);
-              break;
-            case 'music_note':
-              _drawMusicNote(canvas, paint);
-              break;
-            case 'star':
-              _drawStar(canvas, paint);
-              break;
-            case 'message':
-              _drawMessage(canvas, paint);
-              break;
-          }
-
-          canvas.restore();
+        // Draw the shape
+        switch (item) {
+          case 'envelope':
+            _drawEnvelope(canvas, paint);
+            break;
+          case 'phone':
+            _drawPhone(canvas, paint);
+            break;
+          case 'camera':
+            _drawCamera(canvas, paint);
+            break;
+          case 'cup':
+            _drawCup(canvas, paint);
+            break;
+          case 'heart':
+            _drawHeart(canvas, paint);
+            break;
+          case 'music_note':
+            _drawMusicNote(canvas, paint);
+            break;
+          case 'star':
+            _drawStar(canvas, paint);
+            break;
+          case 'message':
+            _drawMessage(canvas, paint);
+            break;
         }
+
+        canvas.restore();
       }
     }
   }
 
   void _drawEnvelope(Canvas canvas, Paint paint) {
     final path = Path()
-      ..moveTo(-15, -10)
-      ..lineTo(15, -10)
-      ..lineTo(15, 10)
-      ..lineTo(-15, 10)
+      ..moveTo(-30, -20)
+      ..lineTo(30, -20)
+      ..lineTo(30, 20)
+      ..lineTo(-30, 20)
       ..close();
     canvas.drawPath(path, paint);
     
     final flapPath = Path()
-      ..moveTo(-15, -10)
+      ..moveTo(-30, -20)
       ..lineTo(0, 0)
-      ..lineTo(15, -10);
+      ..lineTo(30, -20);
     canvas.drawPath(flapPath, paint);
   }
 
   void _drawPhone(Canvas canvas, Paint paint) {
     final path = Path()
       ..addRRect(RRect.fromRectAndRadius(
-        Rect.fromLTWH(-10, -20, 20, 40),
-        Radius.circular(5),
+        Rect.fromLTWH(-20, -40, 40, 80),
+        Radius.circular(10),
       ));
     canvas.drawPath(path, paint);
   }
 
   void _drawCamera(Canvas canvas, Paint paint) {
-    canvas.drawCircle(Offset(0, 0), 15, paint);
-    canvas.drawCircle(Offset(0, 0), 8, paint);
+    canvas.drawCircle(Offset(0, 0), 30, paint);
+    canvas.drawCircle(Offset(0, 0), 16, paint);
   }
 
   void _drawCup(Canvas canvas, Paint paint) {
     final path = Path()
-      ..moveTo(-12, -15)
-      ..lineTo(12, -15)
-      ..lineTo(10, 15)
-      ..lineTo(-10, 15)
+      ..moveTo(-24, -30)
+      ..lineTo(24, -30)
+      ..lineTo(20, 30)
+      ..lineTo(-20, 30)
       ..close();
     canvas.drawPath(path, paint);
   }
 
   void _drawHeart(Canvas canvas, Paint paint) {
     final path = Path()
-      ..moveTo(0, 10)
-      ..cubicTo(-15, -8, -15, -15, 0, -5)
-      ..cubicTo(15, -15, 15, -8, 0, 10);
+      ..moveTo(0, 20)
+      ..cubicTo(-30, -16, -30, -30, 0, -10)
+      ..cubicTo(30, -30, 30, -16, 0, 20);
     canvas.drawPath(path, paint);
   }
 
   void _drawMusicNote(Canvas canvas, Paint paint) {
-    canvas.drawCircle(Offset(5, 5), 6, paint);
-    canvas.drawRect(Rect.fromLTWH(0, -15, 4, 20), paint);
+    canvas.drawCircle(Offset(10, 10), 12, paint);
+    canvas.drawRect(Rect.fromLTWH(0, -30, 8, 40), paint);
   }
 
   void _drawStar(Canvas canvas, Paint paint) {
     final path = Path();
     for (var i = 0; i < 5; i++) {
       final angle = -pi / 2 + 2 * pi * i / 5;
-      final point = Offset(cos(angle) * 15, sin(angle) * 15);
+      final point = Offset(cos(angle) * 30, sin(angle) * 30);
       i == 0 ? path.moveTo(point.dx, point.dy) : path.lineTo(point.dx, point.dy);
     }
     path.close();
@@ -167,8 +160,8 @@ class ChatBubblesPainter extends CustomPainter {
   void _drawMessage(Canvas canvas, Paint paint) {
     final path = Path()
       ..addRRect(RRect.fromRectAndRadius(
-        Rect.fromLTWH(-15, -10, 30, 20),
-        Radius.circular(10),
+        Rect.fromLTWH(-30, -20, 60, 40),
+        Radius.circular(20),
       ));
     canvas.drawPath(path, paint);
   }
@@ -791,13 +784,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       // Save updated messages locally
       await _saveMessagesLocally();
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Messages deleted successfully')),
-      );
+      _showMessage('Messages deleted successfully');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error deleting messages: $e')),
-      );
+      _showMessage('Error deleting messages: $e', isError: true);
     }
   }
 
@@ -842,13 +831,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       
       await _saveMessagesLocally();
       
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Chat cleared successfully')),
-      );
+      _showMessage('Chat cleared successfully');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error clearing chat: $e')),
-      );
+      _showMessage('Error clearing chat: $e', isError: true);
     }
   }
 
@@ -1084,6 +1069,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               
               await _saveMessagesLocally();
             }
+          }
+        } else {
+          // Set loading to false on error
+          if (mounted) {
+            setState(() {
+              isLoading = false;
+            });
           }
         }
       } else {
@@ -1535,19 +1527,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         });
         
         await _saveBlockStatus(true);
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('User blocked successfully')),
-        );
+        _showMessage('User blocked successfully');
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to block user')),
-        );
+        _showMessage('Failed to block user', isError: true);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      _showMessage('Error: $e', isError: true);
     }
   }
 
@@ -1593,18 +1578,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         
         await _saveBlockStatus(false);
         
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('User unblocked successfully')),
-        );
+        _showMessage('User unblocked successfully');
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to unblock user')),
-        );
+        _showMessage('Failed to unblock user', isError: true);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      _showMessage('Error: $e', isError: true);
     }
   }
 
@@ -1727,6 +1706,28 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
     
     throw Exception('Failed to load details');
+  }
+
+  // Add this method after the variable declarations
+  void _showMessage(String message, {bool isError = false}) {
+    if (!mounted) return;
+    
+    final snackBar = SnackBar(
+      content: Text(message),
+      backgroundColor: isError ? Colors.red : Colors.green,
+      duration: Duration(seconds: isError ? 4 : 2),
+      behavior: SnackBarBehavior.floating,
+      margin: EdgeInsets.only(
+        bottom: MediaQuery.of(context).size.height - 100,
+        right: 20,
+        left: 20,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10.0),
+      ),
+    );
+    
+    ScaffoldMessenger.of(context).showSnackBar(snackBar);
   }
 
   @override
@@ -1977,6 +1978,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                       child: Text('Unblock User'),
                       style: ElevatedButton.styleFrom(
                         padding: EdgeInsets.symmetric(vertical: 16),
+                        backgroundColor: Colors.blue, // Changed background color
+                        foregroundColor: Colors.white, // Text color
                       ),
                     ),
                   )
@@ -2373,7 +2376,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   // Update search AppBar 
   PreferredSizeWidget _buildSearchAppBar() {
     return AppBar(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.white, // Ensure white background
       elevation: 0,
       systemOverlayStyle: SystemUiOverlayStyle.dark,
       leading: Container(
@@ -2391,7 +2394,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       title: Container(
         height: 40,
         decoration: BoxDecoration(
-          color: Colors.grey.shade50, // Very light grey
+          color: Colors.grey.shade50,
           borderRadius: BorderRadius.circular(20),
         ),
         padding: EdgeInsets.symmetric(horizontal: 12),
@@ -2404,7 +2407,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 8),
             isDense: true,
             filled: true,
-            fillColor: Colors.grey.shade50, // Very light grey
+            fillColor: Colors.grey.shade50,
           ),
           onChanged: _filterMessages,
         ),
