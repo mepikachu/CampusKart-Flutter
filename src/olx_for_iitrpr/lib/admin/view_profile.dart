@@ -6,9 +6,11 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:intl/intl.dart';
 import 'view_product.dart';
 import 'view_donation.dart';
+import 'view_report.dart';
 import 'view_user_items.dart';
 import 'package:shimmer/shimmer.dart';
 import 'server.dart';
+
 class ViewProfileScreen extends StatefulWidget {
   final String userId;
 
@@ -46,6 +48,39 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
   
   // Cache for loaded images
   final Map<String, String> _loadedImages = {};
+
+  // Add these new state variables
+  final double expandedHeight = 200.0;
+  final double collapsedHeight = kToolbarHeight;
+  final double profilePicHeightExpanded = 100.0;
+  final double profilePicHeightCollapsed = 32.0;
+
+  double _getProfilePicSize(double t) {
+    // t is between 0.0 (expanded) and 1.0 (collapsed)
+    return Tween<double>(
+      begin: profilePicHeightExpanded,
+      end: profilePicHeightCollapsed,
+    ).transform(t);
+  }
+
+  double _getProfilePicLeftPadding(double t) {
+    // Move from center to left
+    return Tween<double>(
+      begin: MediaQuery.of(context).size.width / 2 - profilePicHeightExpanded / 2,
+      end: 56.0, // Left padding when collapsed
+    ).transform(t);
+  }
+
+  late final double safeAreaTop;
+  
+  double _getNameTopPadding(double t) {
+    safeAreaTop = MediaQuery.of(context).padding.top;
+    // Reduce the gap between profile picture and name
+    return Tween<double>(
+      begin: profilePicHeightExpanded + 8, // Reduced from 16 to 8
+      end: safeAreaTop,
+    ).transform(t);
+  }
 
   @override
   void initState() {
@@ -341,40 +376,43 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
   Widget _buildItemPreview(Map<String, dynamic> item, String type, String idPrefix, Function onTap) {
     final String itemId = item['_id'];
     final String? imageData = _loadedImages['${idPrefix}_$itemId'];
-    final String title = item['name'] ?? 'Unnamed ${type.capitalize()}';
+    final String title = item['name'] ?? 'Unnamed ${ViewReportStringExtension(type).capitalize()}';
     
     return GestureDetector(
       onTap: () => onTap(itemId),
       child: Container(
         width: 160,
         margin: const EdgeInsets.only(right: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[200]!),
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 4,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
               child: AspectRatio(
                 aspectRatio: 1,
                 child: Stack(
+                  fit: StackFit.expand,
                   children: [
-                    // Always show shimmer background
-                    Shimmer.fromColors(
-                      baseColor: Colors.grey[300]!,
-                      highlightColor: Colors.grey[100]!,
-                      child: Container(
-                        color: Colors.white,
-                      ),
-                    ),
-                    // Show image if loaded
                     if (imageData != null)
                       Image.memory(
                         base64Decode(imageData),
                         fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: double.infinity,
-                        // Keep in memory to prevent disappearing on scroll
-                        cacheWidth: 320, // Specify cache size
-                        // In case of image error, show fallback
+                        gaplessPlayback: true,
+                        isAntiAlias: true,
+                        filterQuality: FilterQuality.medium,
+                        cacheWidth: 320,
                         errorBuilder: (context, error, stackTrace) {
                           return Center(
                             child: Icon(
@@ -384,26 +422,38 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
                             ),
                           );
                         },
+                      )
+                    else
+                      Shimmer.fromColors(
+                        baseColor: Colors.grey[300]!,
+                        highlightColor: Colors.grey[100]!,
+                        child: Container(color: Colors.white),
                       ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 14),
-            ),
-            // Show seller for purchased products
-            if (type == 'purchased' && item['seller'] != null)
-              Text(
-                'Seller: ${item['seller']['userName'] ?? 'Unknown'}',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                  ),
+                  if (type == 'purchased' && item['seller'] != null)
+                    Text(
+                      'Seller: ${item['seller']['userName'] ?? 'Unknown'}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
               ),
+            ),
           ],
         ),
       ),
@@ -453,16 +503,23 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
             width: 120,
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w500,
-                color: Colors.grey,
+                color: Colors.grey[600],
+                fontSize: 14,
               ),
             ),
           ),
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(fontSize: 16),
+              style: TextStyle(
+                fontSize: 14,
+                color: label == 'Status' && value == 'BLOCKED' 
+                    ? Colors.red 
+                    : Colors.black87,
+                fontWeight: label == 'Status' ? FontWeight.w600 : FontWeight.normal,
+              ),
             ),
           ),
         ],
@@ -541,72 +598,23 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
   
   Widget _buildProductsSection() {
     final products = userActivity['products'] ?? [];
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Products (${products.length})',
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Divider(),
-        const SizedBox(height: 8),
-        products.isEmpty
-            ? _buildEmptyStateCard('No products listed')
-            : _buildItemsHorizontalList(products, 'product'),
-      ],
-    );
+    return products.isEmpty
+        ? _buildEmptyStateCard('User has not listed any products yet')
+        : _buildItemsHorizontalList(products, 'product');
   }
 
   Widget _buildDonationsSection() {
     final donations = userActivity['donations'] ?? [];
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Donations (${donations.length})',
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Divider(),
-        const SizedBox(height: 8),
-        donations.isEmpty
-            ? _buildEmptyStateCard('No donations listed')
-            : _buildItemsHorizontalList(donations, 'donation'),
-      ],
-    );
+    return donations.isEmpty
+        ? _buildEmptyStateCard('User has not made any donations yet')
+        : _buildItemsHorizontalList(donations, 'donation');
   }
   
-  // Add Lost Items section widget
   Widget _buildLostItemsSection() {
     final lostitems = userActivity['lost_items'] ?? [];
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Lost Items (${lostitems.length})',
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 8),
-        const Divider(),
-        const SizedBox(height: 8),
-        lostitems.isEmpty
-            ? _buildEmptyStateCard('No lost items posted')
-            : _buildItemsHorizontalList(lostitems, 'lostitem'),
-      ],
-    );
+    return lostitems.isEmpty
+        ? _buildEmptyStateCard('User has not reported any lost items')
+        : _buildItemsHorizontalList(lostitems, 'lostitem');
   }
 
   Widget _buildItemsHorizontalList(List items, String type) {
@@ -637,6 +645,140 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     );
   }
   
+  Widget _buildReportsFiledSection() {
+    final userReports = userActivity['reportsFiled']['user'] as List;
+    final productReports = userActivity['reportsFiled']['product'] as List;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Reports Filed',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...userReports.map((report) => GestureDetector(
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ReportDetailScreen(
+                reportId: report['_id'],
+                reportType: 'user',
+              ),
+            ),
+          ),
+          child: Card(
+            margin: EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              title: Text('Against User: ${report['reportedUser']?['userName'] ?? 'Unknown'}'),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    report['reason'] ?? 'No reason provided',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    'Filed on: ${_formatDate(report['createdAt'])}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+              trailing: _buildReportStatusBadge(report['status']),
+            ),
+          ),
+        )).toList(),
+        ...productReports.map((report) => GestureDetector(
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ReportDetailScreen(
+                reportId: report['_id'],
+                reportType: 'product',
+              ),
+            ),
+          ),
+          child: Card(
+            margin: EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              title: Text('Against Product: ${report['product']?['name'] ?? 'Unknown'}'),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    report['reason'] ?? 'No reason provided',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    'Filed on: ${_formatDate(report['createdAt'])}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ],
+              ),
+              trailing: _buildReportStatusBadge(report['status']),
+            ),
+          ),
+        )).toList(),
+      ],
+    );
+  }
+
+  Widget _buildReportsAgainstSection() {
+    final reports = userActivity['reportsAgainst'] as List;
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (reports.isNotEmpty) const Divider(height: 32),
+        Text(
+          'Reports Against User',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 12),
+        ...reports.map((report) => GestureDetector(
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ReportDetailScreen(
+                reportId: report['_id'],
+                reportType: 'user',
+              ),
+            ),
+          ),
+          child: Card(
+            margin: EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              title: Text('From: ${report['reporter']?['userName'] ?? 'Unknown'}'),
+              subtitle: Text(
+                report['reason'] ?? 'No reason provided',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: _buildReportStatusBadge(report['status']),
+            ),
+          ),
+        )).toList(),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -667,264 +809,196 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     if (userData == null) {
       return const Center(child: Text('No user data available'));
     }
+
+    final safeAreaTop = MediaQuery.of(context).padding.top;
     
-    final double statusBarHeight = MediaQuery.of(context).padding.top;
-    final double appBarHeight = kToolbarHeight;
-    
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        // Update collapsed status based on scroll
-        final bool wasCollapsed = isAppBarCollapsed;
-        if (notification.metrics.pixels > 140 && !isAppBarCollapsed) {
-          setState(() {
-            isAppBarCollapsed = true;
-          });
-        } else if (notification.metrics.pixels <= 140 && isAppBarCollapsed) {
-          setState(() {
-            isAppBarCollapsed = false;
-          });
-        }
-        
-        return false;
-      },
-      child: CustomScrollView(
-        controller: _scrollController,
-        slivers: [
-          SliverAppBar(
-            expandedHeight: 200,
-            floating: false,
-            pinned: true,
-            backgroundColor: Colors.white,
-            elevation: isAppBarCollapsed ? 4 : 0,
-            // This ensures the back button stays visible
-            leading: BackButton(color: Colors.black87),
-            // Add the profile pic at right of the back button when collapsed
-            title: AnimatedOpacity(
-              duration: Duration(milliseconds: 200),
-              opacity: isAppBarCollapsed ? 1.0 : 0.0,
-              child: Row(
-                children: [
-                  // Only show small avatar when collapsed
-                  CircleAvatar(
-                    radius: 16,
-                    backgroundColor: Colors.grey[200],
-                    backgroundImage: userData!['profilePictureData'] != null
-                        ? MemoryImage(base64Decode(userData!['profilePictureData']))
-                        : null,
-                    child: userData!['profilePictureData'] == null
-                        ? const Icon(Icons.person, size: 16, color: Colors.grey)
-                        : null,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      userData!['userName'] ?? 'Unknown User',
-                      style: TextStyle(
-                        color: Colors.black87,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
+    return CustomScrollView(
+      controller: _scrollController,
+      slivers: [
+        SliverAppBar(
+          expandedHeight: expandedHeight,
+          pinned: true,
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black87,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          leading: Container(
+            margin: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: isAppBarCollapsed ? Colors.transparent : Colors.grey.shade100,
+              shape: BoxShape.circle,
             ),
-            flexibleSpace: FlexibleSpaceBar(
-              background: Center(
-                child: AnimatedOpacity(
-                  duration: Duration(milliseconds: 200),
-                  opacity: isAppBarCollapsed ? 0.0 : 1.0,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(height: statusBarHeight + 20),
-                      Hero(
-                        tag: 'profile-${widget.userId}',
-                        child: CircleAvatar(
-                          radius: 50,
-                          backgroundColor: Colors.grey[200],
-                          backgroundImage: userData!['profilePictureData'] != null
-                              ? MemoryImage(base64Decode(userData!['profilePictureData']))
-                              : null,
+            child: IconButton(
+              icon: Icon(Icons.arrow_back),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+          flexibleSpace: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              final minHeight = safeAreaTop + kToolbarHeight;
+              final maxHeight = expandedHeight + safeAreaTop;
+              
+              final progress = ((maxHeight - constraints.maxHeight) / (maxHeight - minHeight))
+                  .clamp(0.0, 1.0);
+
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Profile Picture with animation
+                  Positioned(
+                    top: safeAreaTop + (kToolbarHeight - profilePicHeightCollapsed) / 2,
+                    left: _getProfilePicLeftPadding(progress),
+                    child: Column(
+                      children: [
+                        Container(
+                          height: _getProfilePicSize(progress),
+                          width: _getProfilePicSize(progress),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.grey[200],
+                            image: userData!['profilePictureData'] != null
+                                ? DecorationImage(
+                                    image: MemoryImage(
+                                      base64Decode(userData!['profilePictureData']),
+                                    ),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
+                          ),
                           child: userData!['profilePictureData'] == null
-                              ? const Icon(Icons.person, size: 50, color: Colors.grey)
+                              ? Icon(
+                                  Icons.person,
+                                  size: _getProfilePicSize(progress) * 0.5,
+                                  color: Colors.grey,
+                                )
                               : null,
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: AnimatedOpacity(
-              duration: Duration(milliseconds: 200),
-              opacity: isAppBarCollapsed ? 0.0 : 1.0,
-              child: Column(
-                children: [
-                  const SizedBox(height: 16),
-                  Text(
-                    userData!['userName'] ?? 'Unknown User',
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
+                        if (!isAppBarCollapsed) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            userData!['userName'] ?? 'Unknown User',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.blue[50],
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              userData!['role']?.toUpperCase() ?? 'USER',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.blue[700],
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                    textAlign: TextAlign.center,
                   ),
-                  Center(
-                    child: Container(
-                      margin: EdgeInsets.only(top: 4),
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.blue[50],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        userData!['role']?.toUpperCase() ?? 'USER',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.blue[700],
-                          fontWeight: FontWeight.bold,
+                  
+                  // Collapsed state username
+                  if (isAppBarCollapsed)
+                    Positioned(
+                      top: safeAreaTop,
+                      left: _getProfilePicLeftPadding(progress) + _getProfilePicSize(progress) + 12,
+                      child: Container(
+                        height: kToolbarHeight,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          userData!['userName'] ?? 'Unknown User',
+                          style: TextStyle(
+                            color: Colors.black87,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Last seen: ${_formatTimeAgo(userData!['lastSeen'])}',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
                 ],
-              ),
-            ),
+              );
+            },
           ),
-          SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 24),
-                
-                // User Info Box
-                _buildInfoBox(
-                  'User Information',
-                  [
-                    _buildDetailRow('Email', userData!['email'] ?? 'N/A'),
-                    _buildDetailRow('User ID', widget.userId),
-                    _buildDetailRow('Member since', _formatDate(userData!['registrationDate'])),
-                    if (userData!['phone'] != null)
-                      _buildDetailRow('Phone', userData!['phone']),
+        ),
+        
+        // Rest of the content
+        SliverToBoxAdapter(
+          child: Column(
+            children: [
+              // User Info Section (add this before Products section)
+              _buildInfoBox(
+                'User Information',
+                [
+                  _buildDetailRow('Email', userData!['email'] ?? 'N/A'),
+                  _buildDetailRow('Phone', userData!['phone'] ?? 'N/A'),
+                  _buildDetailRow('Role', userData!['role']?.toUpperCase() ?? 'N/A'),
+                  _buildDetailRow('Joined', _formatDate(userData!['createdAt'])),
+                  _buildDetailRow('Last Active', _formatTimeAgo(userData!['lastSeen'])),
+                  _buildDetailRow('Status', userData!['isBlocked'] == true ? 'BLOCKED' : 'ACTIVE'),
+                  if (userData!['isBlocked'] == true) ...[
+                    _buildDetailRow('Blocked At', _formatDate(userData!['blockedAt'])),
+                    _buildDetailRow('Block Reason', userData!['blockReason'] ?? 'N/A'),
                   ],
-                ),
-                
-                // Academic Info Box
-                if (userData!['department'] != null || userData!['entryNumber'] != null)
-                  _buildInfoBox(
-                    'Academic Information',
-                    [
-                      if (userData!['department'] != null)
-                        _buildDetailRow('Department', userData!['department']),
-                      if (userData!['entryNumber'] != null)
-                        _buildDetailRow('Entry Number', userData!['entryNumber']),
-                    ],
-                  ),
-                
-                // Products Section
-                if ((userActivity['products'] as List).isNotEmpty) ...[
-                  _buildProductsSection(),
-                  const SizedBox(height: 24),
                 ],
-                
-                // Purchased Products Section
-                if ((userActivity['purchasedProducts'] as List).isNotEmpty) ...[
-                  _buildSectionHeader('Purchased Products', () {}),
-                  SizedBox(
-                    height: 220,
-                    child: ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      scrollDirection: Axis.horizontal,
-                      itemCount: math.min((userActivity['purchasedProducts'] as List).length, 10),
-                      itemBuilder: (context, index) => _buildItemPreview(
-                        (userActivity['purchasedProducts'] as List)[index],
-                        'purchased',
-                        'purchased',
-                        _navigateToProduct,
-                      ),
+              ),
+
+              // Products Section
+              _buildInfoBox(
+                'Products',
+                [_buildProductsSection()],
+              ),
+              
+              // Purchased Products Section
+              _buildInfoBox(
+                'Purchased Products',
+                [_buildProductsSection()],
+              ),
+              
+              // Donations Section
+              _buildInfoBox(
+                'Donations',
+                [_buildDonationsSection()],
+              ),
+              
+              // Lost Items Section
+              _buildInfoBox(
+                'Lost Items',
+                [_buildLostItemsSection()],
+              ),
+
+              // Reports Section
+              _buildInfoBox(
+                'Reports',
+                [
+                  if (userActivity['reportsFiled']['user'].isEmpty && 
+                      userActivity['reportsFiled']['product'].isEmpty &&
+                      userActivity['reportsAgainst'].isEmpty)
+                    _buildEmptyStateCard('No reports associated with this user')
+                  else
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if ((userActivity['reportsFiled']['user'] as List).isNotEmpty ||
+                            (userActivity['reportsFiled']['product'] as List).isNotEmpty)
+                          _buildReportsFiledSection(),
+                        if ((userActivity['reportsAgainst'] as List).isNotEmpty)
+                          _buildReportsAgainstSection(),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 24),
                 ],
-                
-                // Donations Section
-                if ((userActivity['donations'] as List).isNotEmpty) ...[
-                  _buildDonationsSection(),
-                  const SizedBox(height: 24),
-                ],
-                
-                // Lost Items Section
-                if ((userActivity['lost_items'] as List).isNotEmpty) ...[
-                  _buildLostItemsSection(),
-                  const SizedBox(height: 24),
-                ],
-                
-                // Reports Filed Section
-                if ((userActivity['reportsFiled']['user'] as List).isNotEmpty || 
-                    (userActivity['reportsFiled']['product'] as List).isNotEmpty) ...[
-                  _buildInfoBox(
-                    'Reports Filed',
-                    [
-                      ...(userActivity['reportsFiled']['user'] as List).map((report) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8.0),
-                        child: ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text('Against user: ${report['reportedUser']?['userName'] ?? 'Unknown'}'),
-                          subtitle: Text(report['reason'] ?? 'No reason provided'),
-                          trailing: _buildReportStatusBadge(report['status']),
-                        ),
-                      )).toList(),
-                      
-                      ...(userActivity['reportsFiled']['product'] as List).map((report) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8.0),
-                        child: ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text('Against product: ${report['product']?['name'] ?? 'Unknown'}'),
-                          subtitle: Text(report['reason'] ?? 'No reason provided'),
-                          trailing: _buildReportStatusBadge(report['status']),
-                        ),
-                      )).toList(),
-                    ],
-                  ),
-                ],
-                
-                // Reports Against User Section
-                if ((userActivity['reportsAgainst'] as List).isNotEmpty) ...[
-                  _buildInfoBox(
-                    'Reports Against User',
-                    [
-                      ...(userActivity['reportsAgainst'] as List).map((report) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8.0),
-                        child: ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text('From: ${report['reporter']?['userName'] ?? 'Unknown'}'),
-                          subtitle: Text(report['reason'] ?? 'No reason provided'),
-                          trailing: _buildReportStatusBadge(report['status']),
-                        ),
-                      )).toList(),
-                    ],
-                  ),
-                ],
-                
-                const SizedBox(height: 32),
-              ],
-            ),
+              ),
+              
+              const SizedBox(height: 32),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

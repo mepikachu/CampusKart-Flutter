@@ -90,88 +90,277 @@ class _AllUsersScreenState extends State<AllUsersScreen> {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
       
-      // Create a reason controller for the dialog
-      final TextEditingController reasonController = TextEditingController();
-      reasonController.text = 'Blocked by administrator';
-      
-      // If blocking, show dialog to get reason
-      String blockReason = 'Blocked by administrator';
       if (!user.isBlocked) {
-        await showDialog(
+        // Show dialog for block reason
+        final TextEditingController reasonController = TextEditingController();
+        reasonController.text = 'Blocked by administrator';
+        
+        final bool? shouldBlock = await showDialog<bool>(
           context: context,
-          builder: (context) => AlertDialog(
-            title: Text('Block ${user.userName}?'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Please provide a reason for blocking this user:'),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: reasonController,
-                  maxLines: 2,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    hintText: 'Reason for blocking',
-                  ),
-                ),
-              ],
+          builder: (context) => Dialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('CANCEL'),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.block, color: Colors.red.shade700),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Block User',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red.shade700,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              user.userName,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Reason for blocking:',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: reasonController,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.red.shade300),
+                      ),
+                      hintText: 'Enter reason for blocking',
+                      contentPadding: const EdgeInsets.all(16),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        ),
+                        child: Text(
+                          'CANCEL',
+                          style: TextStyle(color: Colors.grey.shade700),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red.shade600,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('BLOCK USER'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-              ElevatedButton(
-                onPressed: () {
-                  blockReason = reasonController.text;
-                  Navigator.pop(context);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                ),
-                child: const Text('BLOCK'),
-              ),
-            ],
+            ),
           ),
         );
-      }
-      
-      // Prepare the request body based on whether we're blocking or unblocking
-      final Map<String, dynamic> requestBody = {
-        'action': user.isBlocked ? 'unblock' : 'block',
-        // Include reason if blocking
-        if (!user.isBlocked) 'blockReason': blockReason
-      };
-      
-      final response = await http.patch(
-        Uri.parse('$serverUrl/api/admin/users/${user.id}'),
-        headers: {
-          'Content-Type': 'application/json',
-          'auth-cookie': authCookie ?? '',
-        },
-        body: json.encode(requestBody),
-      );
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] == true) {
-          // Show success message
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(user.isBlocked 
-                  ? 'User ${user.userName} has been unblocked' 
-                  : 'User ${user.userName} has been blocked'),
-              backgroundColor: user.isBlocked ? Colors.green : Colors.red,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          // Refresh user list
-          _fetchUsers();
+        if (shouldBlock != true) return;
+
+        // Make block request
+        final response = await http.post(
+          Uri.parse('$serverUrl/api/admin/users/${user.id}/block'),
+          headers: {
+            'Content-Type': 'application/json',
+            'auth-cookie': authCookie ?? '',
+          },
+          body: json.encode({
+            'reason': reasonController.text,
+          }),
+        );
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['success']) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('User ${user.userName} has been blocked'),
+                backgroundColor: Colors.red,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            _fetchUsers();
+          } else {
+            throw Exception(data['message'] ?? 'Failed to block user');
+          }
         } else {
-          throw Exception(data['message'] ?? 'Failed to update user');
+          throw Exception('Server returned ${response.statusCode}');
         }
       } else {
-        throw Exception('Server returned ${response.statusCode}');
+        // Show unblock confirmation dialog
+        final bool? shouldUnblock = await showDialog<bool>(
+          context: context,
+          builder: (context) => Dialog(
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade50,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.lock_open, color: Colors.green.shade700),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Unblock User',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green.shade700,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              user.userName,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                color: Colors.black87,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Are you sure you want to unblock this user? They will regain access to all platform features.',
+                    style: TextStyle(
+                      color: Colors.grey.shade700,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        ),
+                        child: Text(
+                          'CANCEL',
+                          style: TextStyle(color: Colors.grey.shade700),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green.shade600,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('UNBLOCK USER'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+
+        if (shouldUnblock != true) return;
+
+        // Make unblock request
+        final response = await http.post(
+          Uri.parse('$serverUrl/api/admin/users/${user.id}/unblock'),
+          headers: {
+            'Content-Type': 'application/json',
+            'auth-cookie': authCookie ?? '',
+          },
+        );
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['success']) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('User ${user.userName} has been unblocked'),
+                backgroundColor: Colors.green,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            _fetchUsers();
+          } else {
+            throw Exception(data['message'] ?? 'Failed to unblock user');
+          }
+        } else {
+          throw Exception('Server returned ${response.statusCode}');
+        }
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(

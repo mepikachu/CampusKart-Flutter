@@ -20,10 +20,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   void initState() {
     super.initState();
-    fetchNotifications();
+    _loadNotifications();
+    // Save read timestamp when opening notifications
+    _saveLastReadTime();
   }
 
-  Future<void> fetchNotifications() async {
+  Future<void> _saveLastReadTime() async {
+    try {
+      await _secureStorage.write(
+        key: 'last_read_notification_time',
+        value: DateTime.now().toIso8601String(),
+      );
+    } catch (e) {
+      print('Error saving notification read time: $e');
+    }
+  }
+
+  Future<void> _loadNotifications() async {
     setState(() => isLoading = true);
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
@@ -129,7 +142,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ),
                 )
               : RefreshIndicator(
-                  onRefresh: fetchNotifications,
+                  onRefresh: _loadNotifications,
                   child: ListView.builder(
                     itemCount: notifications.length,
                     itemBuilder: (context, index) {

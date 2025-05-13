@@ -13,13 +13,19 @@ import 'view_profile.dart'; // Add this import
 
 class SellerOfferManagementScreen extends StatefulWidget {
   final Map<String, dynamic> product;
-  const SellerOfferManagementScreen({super.key, required this.product});
+  final int initialTab; // Add this parameter
+
+  const SellerOfferManagementScreen({
+    Key? key,
+    required this.product,
+    this.initialTab = 0, // Default to first tab
+  }) : super(key: key);
 
   @override
   State<SellerOfferManagementScreen> createState() => _SellerOfferManagementScreenState();
 }
 
-class _SellerOfferManagementScreenState extends State<SellerOfferManagementScreen> {
+class _SellerOfferManagementScreenState extends State<SellerOfferManagementScreen> with SingleTickerProviderStateMixin {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   List<dynamic> offers = [];
   bool isLoading = true;
@@ -36,9 +42,16 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
   String? successMessage;
   Timer? _messageTimer;
 
+  late TabController _tabController;
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+      initialIndex: widget.initialTab, // Use the initialTab parameter
+    );
     fetchOffers();
     _loadCachedImages();
   }
@@ -46,6 +59,7 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
   @override
   void dispose() {
     _messageTimer?.cancel();
+    _tabController.dispose();
     super.dispose();
   }
 
@@ -406,6 +420,7 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
               ),
             ),
             bottom: TabBar(
+              controller: _tabController,
               labelColor: Colors.black,
               unselectedLabelColor: Colors.grey,
               indicatorColor: Colors.black,
@@ -456,6 +471,7 @@ class _SellerOfferManagementScreenState extends State<SellerOfferManagementScree
                 ),
               Expanded(
                 child: TabBarView(
+                  controller: _tabController,
                   children: [
                     _buildDetailsTab(),
                     _buildOffersList(),

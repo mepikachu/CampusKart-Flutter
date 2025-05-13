@@ -25,19 +25,34 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     {'value': 'all', 'label': 'All Notifications'},
     {'value': 'offer_accepted', 'label': 'Accepted Offers'},
     {'value': 'offer_rejected', 'label': 'Rejected Offers'},
-    {'value': 'new_offer', 'label': 'New Offers'},
+    {'value': 'offer_received', 'label': 'Received Offers'},
     {'value': 'product_updated', 'label': 'Product Updates'},
+    {'value': 'report_reviewed', 'label': 'Report Reviews'},
+    {'value': 'user_blocked', 'label': 'Account Blocks'},
+    {'value': 'user_unblocked', 'label': 'Account Unblocks'},
+    {'value': 'product_deleted', 'label': 'Deleted Products'},
+    {'value': 'warnings_received', 'label': 'Warnings'},
   ];
 
   List<dynamic> get filteredNotifications {
     if (selectedFilter == 'all') return notifications;
-    if (selectedFilter == 'new_offer') {
+    
+    // Special grouping for account-related notifications
+    if (selectedFilter == 'user_blocked') {
       return notifications.where((notification) => 
-        notification['type'] == 'offer_received' ||
-        notification['type'] == 'received_offer' ||
-        notification['type'] == 'new_offer'
+        notification['type'] == 'user_blocked' ||
+        notification['type'] == 'account_blocked'
       ).toList();
     }
+    
+    // Special grouping for warning notifications
+    if (selectedFilter == 'warnings_received') {
+      return notifications.where((notification) => 
+        notification['type'] == 'warnings_received' ||
+        notification['type'] == 'warning_issued'
+      ).toList();
+    }
+    
     return notifications.where((notification) => 
       notification['type'] == selectedFilter
     ).toList();
@@ -51,6 +66,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Future<void> _loadNotifications() async {
     try {
+      // Clear old notifications first
+      await _secureStorage.delete(key: 'notifications');
+      
+      setState(() {
+        notifications = []; // Clear in-memory notifications
+      });
+
       final notificationsJson = await _secureStorage.read(key: 'notifications');
       
       if (mounted) {
@@ -66,6 +88,20 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         error = e.toString();
         isLoading = false;
       });
+    }
+  }
+
+  @override
+  void dispose() {
+    _clearOldNotifications();
+    super.dispose();
+  }
+
+  Future<void> _clearOldNotifications() async {
+    try {
+      await _secureStorage.delete(key: 'notifications');
+    } catch (e) {
+      print('Error clearing old notifications: $e');
     }
   }
 
@@ -257,12 +293,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                                   
                                                   if (productData['success'] && mounted) {
                                                     if (productData['product']['status'] == 'available') {
-                                                      // Navigate to product management if both product and offer are valid
+                                                      // Navigate to product management with offers tab selected
                                                       Navigator.push(
                                                         context,
                                                         MaterialPageRoute(
                                                           builder: (context) => SellerOfferManagementScreen(
                                                             product: productData['product'],
+                                                            initialTab: 1, // Index for offers tab
                                                           ),
                                                         ),
                                                       );
@@ -354,11 +391,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'offer_rejected':
         return Icons.cancel;
       case 'offer_received':
-      case 'received_offer':
-      case 'new_offer':
         return Icons.local_offer;
       case 'product_updated':
         return Icons.update;
+      case 'report_reviewed':
+        return Icons.report;
+      case 'user_blocked':
+      case 'account_blocked':
+        return Icons.block;
+      case 'user_unblocked':
+        return Icons.lock_open;
+      case 'product_deleted':
+        return Icons.delete;
+      case 'warnings_received':
+      case 'warning_issued':
+        return Icons.warning;
       default:
         return Icons.notifications;
     }
@@ -371,11 +418,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'offer_rejected':
         return Colors.red;
       case 'offer_received':
-      case 'received_offer':
-      case 'new_offer':
         return Colors.orange;
       case 'product_updated':
         return Colors.blue;
+      case 'report_reviewed':
+        return Colors.purple;
+      case 'user_blocked':
+      case 'account_blocked':
+        return Colors.red;
+      case 'user_unblocked':
+        return Colors.green;
+      case 'product_deleted':
+        return Colors.red.shade700;
+      case 'warnings_received':
+      case 'warning_issued':
+        return Colors.amber.shade700;
       default:
         return Colors.grey;
     }

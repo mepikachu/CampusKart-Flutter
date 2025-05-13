@@ -158,7 +158,6 @@ class _ProfileTabState extends State<ProfileTab> {
 
   /// Handle user logout
   Future<void> _logout() async {
-    // Show confirmation dialog first
     final bool confirm = await showDialog(
       context: context,
       builder: (BuildContext context) => Theme(
@@ -185,31 +184,36 @@ class _ProfileTabState extends State<ProfileTab> {
     if (!confirm) return;
 
     try {
-      // First, clear local storage and navigate
       final authCookie = await _secureStorage.read(key: 'authCookie');
       
-      // Clear all caches
-      await ProfileService.clearProfile();
-      await _secureStorage.delete(key: 'authCookie');
+      // Clear all secure storage
+      await _secureStorage.deleteAll();
       
+      // Clear SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       await prefs.clear();
+
+      // Clear specific chat and notification data
+      await _secureStorage.delete(key: 'notifications');
+      await _secureStorage.delete(key: 'last_read_notification_time');
+      await _secureStorage.delete(key: 'lastReadMessageIds');
+      await _secureStorage.delete(key: 'conversations');
       
-      if (mounted) {
-        setState(() {
-          userData = null;
-          errorMessage = '';
-          _profileImageBytes = null;
-        });
-        
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          '/login',
-          (route) => false,
-        );
+      // Delete all message caches
+      final allKeys = await _secureStorage.readAll();
+      for (String key in allKeys.keys) {
+        if (key.startsWith('messages_') || 
+            key.startsWith('last_message_id_') ||
+            key.startsWith('profile_pic_')) {
+          await _secureStorage.delete(key: key);
+        }
       }
 
-      // Then, make the API call in the background
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+      }
+
+      // Call server logout
       if (authCookie != null) {
         await http.post(
           Uri.parse('$serverUrl/api/logout'),
@@ -220,7 +224,10 @@ class _ProfileTabState extends State<ProfileTab> {
         );
       }
     } catch (e) {
-      print("Logout error: $e");
+      print('Logout error: $e');
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+      }
     }
   }
 

@@ -82,6 +82,26 @@ class _VolunteerLeaderboardTabState extends State<VolunteerLeaderboardTab> {
   Future<void> _fetchLeaderboard() async {
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
+      
+      // Check if user is blocked
+      final userResponse = await http.get(
+        Uri.parse('$serverUrl/api/users/me'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+
+      if (userResponse.statusCode == 403) {
+        final userData = json.decode(userResponse.body);
+        _showBlockedDialog(
+          blockedAt: userData['blockedAt'],
+          reason: userData['blockedReason'],
+        );
+        return;
+      }
+
+      // Continue with existing leaderboard fetch
       final response = await http.get(
         Uri.parse('$serverUrl/api/donations/leaderboard'),
         headers: {
@@ -105,6 +125,155 @@ class _VolunteerLeaderboardTabState extends State<VolunteerLeaderboardTab> {
         _errorMessage = e.toString();
         _isLoading = false;
       });
+    }
+  }
+
+  void _showBlockedDialog({String? blockedAt, String? reason}) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.block_rounded,
+                  size: 48,
+                  color: Colors.red.shade700,
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Volunteer Access Blocked',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Your volunteer access has been suspended by the administrator.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey.shade700,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (reason != null) ...[
+                      Text(
+                        'Reason:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey.shade800,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        reason,
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (blockedAt != null) ...[
+                      Text(
+                        'Blocked on:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey.shade800,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _formatDate(blockedAt),
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Please contact the administrator to discuss further about restoring your volunteer access.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade600,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    await _secureStorage.delete(key: 'authCookie');
+                    if (mounted) {
+                      Navigator.of(context).pushNamedAndRemoveUntil(
+                        '/login',
+                        (route) => false,
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red.shade600,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Logout',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(String? dateString) {
+    if (dateString == null) return 'N/A';
+    try {
+      final date = DateTime.parse(dateString);
+      return '${date.day}/${date.month}/${date.year}';
+    } catch (e) {
+      return dateString;
     }
   }
 
