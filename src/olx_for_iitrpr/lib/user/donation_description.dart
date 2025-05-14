@@ -721,16 +721,26 @@ class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
   }
 
   List<Widget> _buildImageSlides() {
-    final List<dynamic> images = donationDetails?['images'] ?? [];
+    final List images = donationDetails?['images'] ?? [];
     return images.map<Widget>((image) {
-      if (image != null && image['data'] != null) {
+      String? imageData;
+      
+      // Handle different image data structures
+      if (image is Map) {
+        imageData = image['data']?.toString();
+      } else if (image is String) {
+        imageData = image;
+      }
+      
+      if (imageData != null) {
         try {
-          final bytes = base64Decode(image['data']);
+          final bytes = base64Decode(imageData);
           return Container(
             width: double.infinity,
             child: Image.memory(bytes, fit: BoxFit.cover),
           );
         } catch (e) {
+          print('Error decoding image: $e');
           return const Center(child: Icon(Icons.error));
         }
       }

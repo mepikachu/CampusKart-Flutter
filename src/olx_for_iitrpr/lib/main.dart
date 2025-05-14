@@ -6,7 +6,6 @@ import 'login/forgot_password.dart';
 
 import 'user/home.dart';
 import 'admin/home.dart';
-import 'volunteer/home.dart';
 
 void main() {
   runApp(const MyApp());
@@ -23,7 +22,6 @@ class MyApp extends StatelessWidget {
       routes: {
         '/user_home': (context) => const UserHomeScreen(),
         '/admin_home': (context) => const AdminHomeScreen(),
-        '/volunteer_home': (context) => const VolunteerHomeScreen(),
         '/signup': (context) => const SignUpScreen(),
         '/forgot_password': (context) => const ForgotPasswordScreen(),
         '/login': (context) {
