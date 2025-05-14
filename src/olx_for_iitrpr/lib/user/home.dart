@@ -279,10 +279,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObse
   late AnimationController _animationController;
   late Animation<double> _expandAnimation;
 
-  // Add these new variables
-  bool hasUnreadNotifications = false;
-  bool hasUnreadChats = false;
-
   // List of tabs displayed in the home screen
   final List<Widget> _tabs = const [
     ProductsTab(),
@@ -439,70 +435,6 @@ class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObse
     } catch (e) {
       print('Error refreshing notifications: $e');
     }
-
-    // Check unread notifications
-    _checkUnreadNotifications();
-  }
-
-  // Add these new methods
-  Future<void> _checkUnreadNotifications() async {
-    try {
-      final notificationsJson = await _secureStorage.read(key: 'notifications');
-      final lastReadTime = await _secureStorage.read(key: 'last_read_notification_time');
-      
-      if (notificationsJson != null) {
-        final notifications = json.decode(notificationsJson);
-        if (notifications.isNotEmpty) {
-          final DateTime lastRead = lastReadTime != null 
-            ? DateTime.parse(lastReadTime)
-            : DateTime.fromMillisecondsSinceEpoch(0);
-            
-          final hasUnread = notifications.any((notification) {
-            return DateTime.parse(notification['createdAt']).isAfter(lastRead);
-          });
-          
-          setState(() {
-            hasUnreadNotifications = hasUnread;
-          });
-        }
-      }
-    } catch (e) {
-      print('Error checking unread notifications: $e');
-    }
-  }
-
-  Future<void> _checkUnreadChats() async {
-    try {
-      final conversationsJson = await _secureStorage.read(key: 'conversations');
-      final lastReadMsgIds = await _secureStorage.read(key: 'lastReadMessageIds');
-      
-      if (conversationsJson != null) {
-        final conversations = json.decode(conversationsJson);
-        final Map<String, String> readIds = lastReadMsgIds != null 
-          ? Map<String, String>.from(json.decode(lastReadMsgIds))
-          : {};
-          
-        bool hasUnread = false;
-        
-        for (var conversation in conversations) {
-          if (conversation['messages']?.isNotEmpty == true) {
-            final lastMsgId = conversation['messages'].last['messageId'].toString();
-            final lastReadId = readIds[conversation['_id']];
-            
-            if (lastReadId != lastMsgId) {
-              hasUnread = true;
-              break;
-            }
-          }
-        }
-        
-        setState(() {
-          hasUnreadChats = hasUnread;
-        });
-      }
-    } catch (e) {
-      print('Error checking unread chats: $e');
-    }
   }
 
   @override
@@ -576,63 +508,23 @@ class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObse
           ),
           centerTitle: false,
           actions: [
-            Stack(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.notifications, color: Colors.black),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-                    ).then((_) {
-                      _checkUnreadNotifications();
-                    });
-                  },
-                ),
-                if (hasUnreadNotifications)
-                  Positioned(
-                    right: 8,
-                    top: 8,
-                    child: Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: Colors.blue,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                    ),
-                  ),
-              ],
+            IconButton(
+              icon: const Icon(Icons.notifications, color: Colors.black),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                );
+              },
             ),
-            Stack(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.chat_bubble, color: Colors.black),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const ChatListScreen()),
-                    ).then((_) {
-                      _checkUnreadChats();
-                    });
-                  },
-                ),
-                if (hasUnreadChats)
-                  Positioned(
-                    right: 8,
-                    top: 8,
-                    child: Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: Colors.blue,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                      ),
-                    ),
-                  ),
-              ],
+            IconButton(
+              icon: const Icon(Icons.chat_bubble, color: Colors.black),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ChatListScreen()),
+                );
+              },
             ),
           ],
         ),
