@@ -11,15 +11,13 @@ import 'add_donation.dart';
 import 'tab_profile.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'volunteer_donations.dart';
 import 'notifications_screen.dart';
 import 'tab_leaderboard.dart';
 import 'tab_lost&found.dart';
 import 'add_lost_item.dart';
 import 'server.dart';
 import '../services/profile_service.dart';
-import '../services/product_cache_service.dart';
-import '../services/donation_cache_service.dart';
-import '../services/lost_found_cache_service.dart';
 
 // Chat refresh service to manage periodic updates
 class ChatRefreshService {
@@ -39,7 +37,34 @@ class ChatRefreshService {
   
   // Initialize the service
   void initialize() {
+    _loadCurrentUser();
     _startForegroundRefresh();
+    
+  }
+
+  Future<void> _loadCurrentUser() async {
+    try {
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      final response = await http.get(
+        Uri.parse('$serverUrl/api/users/me'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] && data['user'] != null) {
+          await _secureStorage.write(key: 'userId', value: data['user']['_id']);
+          await _secureStorage.write(key: 'userName', value: data['user']['userName']);
+          await _secureStorage.write(key: 'userRole', value: data['user']['role']);
+          await ProfileService.cacheUserProfile(data);
+        }
+      }
+    } catch (e) {
+      print('Error loading user: $e');
+    }
   }
   
   // Notify the service when app state changes
@@ -273,6 +298,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObse
   Timer? _profileRefreshTimer;
   String? _lastNotificationId;
   bool _isInitialized = false;
+  String? _userRole;
 
   // Add these variables for FAB animation
   bool _isAddButtonExpanded = false;
@@ -292,6 +318,7 @@ class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObse
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initializeApp();
+    _loadUserRole();
     
     // Initialize animation controller
     _animationController = AnimationController(
@@ -437,6 +464,13 @@ class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObse
     }
   }
 
+  Future<void> _loadUserRole() async {
+    final userRole = await _secureStorage.read(key: 'userRole');
+    setState(() {
+      _userRole = userRole;
+    });
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -508,6 +542,16 @@ class _UserHomeScreenState extends State<UserHomeScreen> with WidgetsBindingObse
           ),
           centerTitle: false,
           actions: [
+            if (_userRole == 'volunteer')
+              IconButton(
+                icon: const Icon(Icons.volunteer_activism, color: Colors.black),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const VolunteerDonationsPage()),
+                  );
+                },
+              ),
             IconButton(
               icon: const Icon(Icons.notifications, color: Colors.black),
               onPressed: () {

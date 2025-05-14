@@ -3,12 +3,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:async';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:http/http.dart' as http;
 import '../services/donation_cache_service.dart';
 import 'server.dart';
 import 'view_profile.dart';
 import 'package:intl/intl.dart';
+import 'chat_screen.dart';
 
 class DonationDetailsScreen extends StatefulWidget {
   final Map<String, dynamic> donation;
@@ -33,6 +35,11 @@ class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
   List<Uint8List> donationImages = [];
   Map<String, dynamic>? donationDetails;
   int totalNumImages = 1;
+  String? userRole; // Add this line
+  bool isProcessing = false; // Add this line
+  String? errorMessage;
+  String? successMessage;
+  Timer? _messageTimer;
 
   @override
   void initState() {
@@ -45,8 +52,39 @@ class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
       }
     });
 
+    _loadUserRole(); // Add this line
     _checkCachedImages();
     _fetchDonationDetails();
+  }
+
+  @override
+  void dispose() {
+    _messageTimer?.cancel();
+    super.dispose();
+  }
+
+  // Add this function
+  Future<void> _loadUserRole() async {
+    final role = await _secureStorage.read(key: 'userRole');
+    setState(() {
+      userRole = role;
+    });
+  }
+
+  void _showMessage({String? error, String? success}) {
+    _messageTimer?.cancel();
+    setState(() {
+      errorMessage = error;
+      successMessage = success;
+    });
+    _messageTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          errorMessage = null;
+          successMessage = null;
+        });
+      }
+    });
   }
 
   Future<void> _checkCachedImages() async {
@@ -161,6 +199,151 @@ class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
     }
   }
 
+  // Add this function
+  Future<void> _collectDonation() async {
+    bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.volunteer_activism,
+                  size: 48,
+                  color: Colors.green,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Confirm Collection',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Are you sure you want to mark this donation as collected?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(true),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('Confirm'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      setState(() => isProcessing = true);
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      final donationId = widget.donation['_id'];
+      final response = await http.post(
+        Uri.parse('$serverUrl/api/donations/$donationId/collect'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+      );
+      final data = json.decode(response.body);
+      if (response.statusCode == 200 && data['success'] == true) {
+        _showMessage(success: 'Donation collected successfully');
+        Navigator.pop(context);
+      } else {
+        throw Exception(data['error'] ?? 'Collection failed');
+      }
+    } catch (e) {
+      _showMessage(error: e.toString());
+    } finally {
+      setState(() => isProcessing = false);
+    }
+  }
+
+  // Add this function
+  Future<void> _startChat() async {
+    try {
+      if (donationDetails?['donatedBy']?['_id'] == null) return;
+      
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      final response = await http.post(
+        Uri.parse('$serverUrl/api/conversations'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie ?? '',
+        },
+        body: json.encode({
+          'participantId': donationDetails!['donatedBy']['_id'],
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ChatScreen(
+                conversationId: data['conversation']['_id'],
+                partnerNames: donationDetails!['donatedBy']['userName'],
+                partnerId: donationDetails!['donatedBy']['_id'],
+                initialDonation: donationDetails,
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error starting chat: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error starting chat. Please try again.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final donation = donationDetails ?? widget.donation;
@@ -203,165 +386,228 @@ class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
             ),
           ),
         ),
-        body: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Images Carousel
-              _buildImageCarousel(),
-
-              // Main content
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        body: Column(
+          children: [
+            if (errorMessage != null)
+              Container(
+                width: double.infinity,
+                color: Colors.red.shade50,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
                   children: [
-                    // Donation name and status
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            donation['name'] ?? 'Unknown Donation',
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '${donation['status']?.toUpperCase() ?? "AVAILABLE"}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.green,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Donor Details Section
-                    Text(
-                      'Donated By',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[700],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Clickable Donor Box
-                    InkWell(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ViewProfileScreen(userId: donation['donatedBy']['_id']),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        padding: EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade200),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 20,
-                              backgroundColor: Colors.grey.shade200,
-                              child: Text(
-                                donation['donatedBy']?['userName']?.substring(0, 1).toUpperCase() ?? '?',
-                                style: TextStyle(
-                                  color: Colors.grey.shade700,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    donation['donatedBy']?['userName'] ?? 'Unknown',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  SizedBox(height: 4),
-                                  Text(
-                                    'View Profile',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.blue,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Timestamps in blue box
-                    Container(
-                      width: double.infinity,
-                      padding: EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.blue.withOpacity(0.1)),
-                      ),
-                      child: Column(
-                        children: [
-                          _buildTimeDetail('Posted on', _formatDateTime(donation['createdAt'])),
-                          if (donation['lastUpdatedAt'] != null) ...[
-                            const SizedBox(height: 8),
-                            _buildTimeDetail('Last updated', _formatDateTime(donation['lastUpdatedAt'])),
-                          ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Description
-                    Text(
-                      'About This Donation',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey[800],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      donation['description'] ?? 'No description available',
-                      style: TextStyle(
-                        fontSize: 15,
-                        height: 1.5,
-                        color: Colors.grey[800],
+                    Icon(Icons.error_outline, color: Colors.red.shade700),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        errorMessage!,
+                        style: TextStyle(color: Colors.red.shade700),
                       ),
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
+            if (successMessage != null)
+              Container(
+                width: double.infinity,
+                color: Colors.green.shade50,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle_outline, color: Colors.green.shade700),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        successMessage!,
+                        style: TextStyle(color: Colors.green.shade700),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Images Carousel
+                    _buildImageCarousel(),
+
+                    // Main content
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Product name and status
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  donation['name'] ?? 'Unknown Donation',
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '${donation['status']?.toUpperCase() ?? "AVAILABLE"}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.green,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Donor Details Section
+                          Text(
+                            'Donated By',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          InkWell(
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ViewProfileScreen(
+                                  userId: donation['donatedBy']?['_id'] ?? '',
+                                ),
+                              ),
+                            ),
+                            child: Container(
+                              padding: EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[50],
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey[200]!),
+                              ),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 20,
+                                    backgroundColor: Colors.grey[200],
+                                    child: Icon(Icons.person, color: Colors.grey[400]),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        donation['donatedBy']?['userName'] ?? 'Unknown',
+                                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Timestamps in blue box with black text
+                          Container(
+                            padding: EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.05),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.blue.withOpacity(0.1)),
+                            ),
+                            child: Column(
+                              children: [
+                                _buildTimeDetail('Posted on', _formatDateTime(donation['createdAt'])),
+                                if (donation['lastUpdatedAt'] != null) ...[
+                                  const SizedBox(height: 8),
+                                  _buildTimeDetail('Last updated', _formatDateTime(donation['lastUpdatedAt'])),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Description
+                          Text(
+                            'About This Item',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[800],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            donation['description'] ?? 'No description available',
+                            style: TextStyle(
+                              fontSize: 15,
+                              height: 1.5,
+                              color: Colors.grey[800],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                    // Add this block at the bottom of the Column
+                    if (donationDetails?['status'] == 'available' && userRole == 'volunteer')
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: _startChat,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                                child: const Text('Chat with Donor'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: isProcessing ? null : _collectDonation,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                ),
+                                child: isProcessing
+                                    ? const SizedBox(
+                                        height: 20,
+                                        width: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                        ),
+                                      )
+                                    : const Text('Mark as Collected'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -492,33 +738,6 @@ class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
     }).toList();
   }
 
-  Future<void> _collectDonation() async {
-    try {
-      final authCookie = await _secureStorage.read(key: 'authCookie');
-      final donationId = donationDetails!['_id'];
-      final response = await http.post(
-        Uri.parse('$serverUrl/api/donations/$donationId/collect'),
-        headers: {
-          'Content-Type': 'application/json',
-          'auth-cookie': authCookie ?? '',
-        },
-      );
-      final data = json.decode(response.body);
-      if (response.statusCode == 200 && data['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Donation collected successfully')),
-        );
-        Navigator.pop(context);
-      } else {
-        throw Exception(data['error'] ?? 'Collection failed');
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
-    }
-  }
-
   Widget _buildTimeDetail(String label, String value) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -527,7 +746,8 @@ class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
           label,
           style: TextStyle(
             fontSize: 14,
-            color: Colors.grey[700],
+            fontWeight: FontWeight.w500,
+            color: Colors.grey[900],
           ),
         ),
         Text(
@@ -535,7 +755,7 @@ class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
-            color: Colors.grey[800],
+            color: Colors.grey[900],
           ),
         ),
       ],

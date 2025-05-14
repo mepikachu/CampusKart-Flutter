@@ -216,7 +216,7 @@ class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Donation name and status
+                    // Product name and status
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -229,22 +229,23 @@ class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
                             ),
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '${donation['status']?.toUpperCase() ?? "AVAILABLE"}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.green,
-                            ),
-                          ),
-                        ),
                       ],
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${donation['status']?.toUpperCase() ?? "AVAILABLE"}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.green,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 24),
 
@@ -258,69 +259,47 @@ class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-
-                    // Clickable Donor Box
                     InkWell(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ViewProfileScreen(userId: donation['donatedBy']['_id']),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ViewProfileScreen(
+                            userId: donation['donatedBy']?['_id'] ?? '',
                           ),
-                        );
-                      },
+                        ),
+                      ),
                       child: Container(
                         padding: EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade200),
+                          color: Colors.grey[50],
                           borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey[200]!),
                         ),
                         child: Row(
                           children: [
                             CircleAvatar(
                               radius: 20,
-                              backgroundColor: Colors.grey.shade200,
-                              child: Text(
-                                donation['donatedBy']?['userName']?.substring(0, 1).toUpperCase() ?? '?',
-                                style: TextStyle(
-                                  color: Colors.grey.shade700,
-                                  fontWeight: FontWeight.w600,
+                              backgroundColor: Colors.grey[200],
+                              child: Icon(Icons.person, color: Colors.grey[400]),
+                            ),
+                            const SizedBox(width: 12),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  donation['donatedBy']?['userName'] ?? 'Unknown',
+                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
                                 ),
-                              ),
+                              ],
                             ),
-                            SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    donation['donatedBy']?['userName'] ?? 'Unknown',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  SizedBox(height: 4),
-                                  Text(
-                                    'View Profile',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.blue,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
                           ],
                         ),
                       ),
                     ),
                     const SizedBox(height: 24),
 
-                    // Timestamps in blue box
+                    // Timestamps in blue box with black text
                     Container(
-                      width: double.infinity,
                       padding: EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: Colors.blue.withOpacity(0.05),
@@ -341,7 +320,7 @@ class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
 
                     // Description
                     Text(
-                      'About This Donation',
+                      'About This Item',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -527,7 +506,8 @@ class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
           label,
           style: TextStyle(
             fontSize: 14,
-            color: Colors.grey[700],
+            fontWeight: FontWeight.w500,
+            color: Colors.grey[900],
           ),
         ),
         Text(
@@ -535,7 +515,7 @@ class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
-            color: Colors.grey[800],
+            color: Colors.grey[900],
           ),
         ),
       ],

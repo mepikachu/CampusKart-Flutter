@@ -45,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (storedRole == 'admin') {
         Navigator.pushReplacementNamed(context, '/admin_home');
       } else if (storedRole == 'volunteer' || storedRole == 'volunteer_pending') {
-        Navigator.pushReplacementNamed(context, '/volunteer_home');
+        Navigator.pushReplacementNamed(context, '/user_home');
       } else {
         Navigator.pushReplacementNamed(context, '/user_home');
       }
@@ -126,11 +126,14 @@ class _LoginScreenState extends State<LoginScreen> {
         }
 
         final role = responseBody['user']?['role'] ?? 'user';
+        await _secureStorage.write(key: 'userId', value: responseBody['user']['_id']);
+        await _secureStorage.write(key: 'userName', value: responseBody['user']['userName']);
+        await _secureStorage.write(key: 'userRole', value: responseBody['user']['role']);
         await prefs.setString('role', role);
         if (role == 'admin') {
           Navigator.pushReplacementNamed(context, '/admin_home');
         } else if (role == 'volunteer' || role == 'volunteer_pending') {
-          Navigator.pushReplacementNamed(context, '/volunteer_home');
+          Navigator.pushReplacementNamed(context, '/user_home');
         } else {
           Navigator.pushReplacementNamed(context, '/user_home');
         }

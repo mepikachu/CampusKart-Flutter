@@ -270,7 +270,7 @@ class _VolunteerDonationsPageState extends State<VolunteerDonationsPage>
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => DonationDescriptionScreen(
+              builder: (context) => DonationDetailsScreen(
                 donation: donation,
               ),
             ),
@@ -491,6 +491,27 @@ class _VolunteerDonationsPageState extends State<VolunteerDonationsPage>
       ),
       child: Scaffold(
         backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: const Text(
+            'Donations available for collection',
+            style: TextStyle(color: Colors.black, fontSize: 18),
+          ),
+          leading: Container(
+            margin: EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: Icon(Icons.arrow_back, color: Colors.black),
+              padding: EdgeInsets.zero,
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+        ),
         body: Column(
           children: [
             AnimatedContainer(
@@ -498,14 +519,8 @@ class _VolunteerDonationsPageState extends State<VolunteerDonationsPage>
               height: _showSearchBar ? 68 : 0,
               child: Container(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 4,
-                    ),
-                  ],
                 ),
                 child: Row(
                   children: [

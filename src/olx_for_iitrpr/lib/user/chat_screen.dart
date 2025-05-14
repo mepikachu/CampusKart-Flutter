@@ -2500,6 +2500,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       
       final bool replyingToProduct = message['replyTo'] != null &&
         message['replyTo']['type'] == 'product';
+
+      final bool replyingToDonation = message['replyTo'] != null &&
+        message['replyTo']['type'] == 'donation';
+      final bool replyingToMessage = message['replyTo'] != null &&
+        message['replyTo']['type'] == 'message';
       
       return Container(
         margin: const EdgeInsets.symmetric(vertical: 5, horizontal: 10),
@@ -2512,6 +2517,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                 if (replyingToProduct) {
                   final productId = message['replyTo']['id'];
                   _navigateToProduct(productId);
+                } else if (replyingToMessage) {
+                  final replyId = message['replyTo']['id'];
+                  _scrollToMessage(replyId);
+                } else if (replyingToDonation) {
+                  final donationId = message['replyTo']['id'];
                 }
               },
               child: Container(

@@ -9,6 +9,7 @@ import 'my_listings.dart';
 import 'my_donations.dart';
 import 'my_purchases.dart';
 import 'my_lost_items.dart';
+import 'my_donations_collected.dart';
 import 'edit_profile_screen.dart';
 import '../services/profile_service.dart';
 import '../services/product_cache_service.dart';
@@ -30,11 +31,15 @@ class _ProfileTabState extends State<ProfileTab> {
   bool isLoading = true;
   bool isLoadingImage = false;
   Uint8List? _profileImageBytes;
+  bool isVolunteer = false;
+  String userName = '';
+  String userRole = '';
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
+    _loadUserInfo();
   }
 
   /// Load user profile data with caching strategy
@@ -44,11 +49,17 @@ class _ProfileTabState extends State<ProfileTab> {
     }
     
     try {
-      // First try to get user ID from secure storage
-      final userId = await _secureStorage.read(key: 'userId');
+      // First try to get user ID and role from secure storage
+      String? userId = await _secureStorage.read(key: 'userId');
+      String? userRole = await _secureStorage.read(key: 'userRole');
       if (userId == null) {
-        throw Exception('User ID not found');
+        throw Exception('User ID not found in secure storage');
       }
+
+      // Set isVolunteer based on role
+      setState(() {
+        isVolunteer = userRole == 'volunteer';
+      });
 
       // Try to get cached profile data
       final cachedProfile = ProfileService.getProfileData(userId);
@@ -86,6 +97,7 @@ class _ProfileTabState extends State<ProfileTab> {
             setState(() {
               userData = data['user'];
               errorMessage = '';
+              isVolunteer = data['user']['role'] == 'volunteer'; // Check user role
             });
           }
           
@@ -390,6 +402,12 @@ class _ProfileTabState extends State<ProfileTab> {
                 MaterialPageRoute(builder: (context) => const MyDonationsPage()),
               );
               break;
+            case 'My Donations Collected':
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const MyDonationCollections()),
+              );
+              break;
             case 'My Lost Items':
               Navigator.push(
                 context,
@@ -514,6 +532,15 @@ class _ProfileTabState extends State<ProfileTab> {
     );
   }
 
+  Future<void> _loadUserInfo() async {
+    final name = await _secureStorage.read(key: 'userName');
+    final role = await _secureStorage.read(key: 'userRole');
+    setState(() {
+      userName = name ?? '';
+      userRole = role ?? '';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -603,6 +630,8 @@ class _ProfileTabState extends State<ProfileTab> {
                     _buildSection('My Listings', Icons.list),
                     _buildSection('My Purchases', Icons.shopping_bag),
                     _buildSection('My Donations', Icons.volunteer_activism),
+                    if (isVolunteer)
+                      _buildSection('My Donations Collected', Icons.volunteer_activism_outlined),
                     _buildSection('My Lost Items', Icons.search),
                     const SizedBox(height: 20),
                     if (errorMessage.isNotEmpty)
