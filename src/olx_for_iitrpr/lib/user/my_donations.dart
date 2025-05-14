@@ -20,6 +20,7 @@ class _MyDonationsPageState extends State<MyDonationsPage> {
   List<Map<String, dynamic>> donations = [];
   bool isLoading = true;
   String errorMessage = '';
+  String? userId;
   
   // For image caching
   final Map<String, Uint8List> _loadedImages = {};
@@ -28,33 +29,46 @@ class _MyDonationsPageState extends State<MyDonationsPage> {
   @override
   void initState() {
     super.initState();
-    _loadMyDonations();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      userId = await _secureStorage.read(key: 'userId');
+      if (userId == null) {
+        throw Exception('User ID not found');
+      }
+      await _loadMyDonations();
+    } catch (e) {
+      setState(() {
+        errorMessage = e.toString();
+        isLoading = false;
+      });
+    }
   }
 
   Future<void> _loadMyDonations() async {
     print('MyDonations - Starting to load donations');
+    if (userId == null) return;
+    
     try {
       if (mounted) {
         setState(() => isLoading = true);
       }
 
       print('MyDonations - Checking cached donation IDs');
-      final activityIds = ProfileService.activityIds;
+      final activityIds = ProfileService.getActivityIds(userId!);
       if (activityIds != null && activityIds['donations'] != null) {
         print('MyDonations - Found ${activityIds['donations']!.length} cached donation IDs');
         List<Map<String, dynamic>> cachedDonations = [];
-        for (var id in activityIds['donations']!) {
-          print('MyDonations - Loading cached donation: $id');
-          final donationId = id.toString();
-          final donation = await DonationCacheService.getCachedDonation(donationId);
+        for (String id in activityIds['donations']!) {
+          final donation = await DonationCacheService.getCachedDonation(id);
           if (donation != null) {
             cachedDonations.add(donation);
-            print('MyDonations - Successfully loaded cached donation: $donationId');
           }
         }
         
         if (cachedDonations.isNotEmpty && mounted) {
-          print('MyDonations - Setting ${cachedDonations.length} cached donations');
           setState(() {
             donations = cachedDonations;
             isLoading = false;
@@ -63,30 +77,45 @@ class _MyDonationsPageState extends State<MyDonationsPage> {
       }
       
       print('MyDonations - Checking if refresh needed');
-      if (donations.isEmpty || !ProfileService.hasValidActivityCache) {
+      if (donations.isEmpty || !ProfileService.hasValidActivityCache(userId!)) {
         print('MyDonations - Refreshing from server');
-        await ProfileService.fetchAndUpdateProfile();
-        
-        print('MyDonations - Loading fresh donation IDs');
-        final freshIds = ProfileService.activityIds;
-        if (freshIds != null && freshIds['donations'] != null) {
-          print('MyDonations - Found ${freshIds['donations']!.length} fresh donation IDs');
-          List<Map<String, dynamic>> freshDonations = [];
-          for (String id in freshIds['donations']!) {
-            print('MyDonations - Loading fresh donation: $id');
-            final donation = await DonationCacheService.getCachedDonation(id);
-            if (donation != null) {
-              freshDonations.add(donation);
-              print('MyDonations - Successfully loaded fresh donation: $id');
+        final authCookie = await _secureStorage.read(key: 'authCookie');
+        if (authCookie == null) {
+          throw Exception('Not authenticated');
+        }
+
+        final response = await http.get(
+          Uri.parse('$serverUrl/api/users/me'),
+          headers: {
+            'Content-Type': 'application/json',
+            'auth-cookie': authCookie,
+          },
+        );
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['success']) {
+            // Cache the complete response
+            await ProfileService.cacheUserProfile(data);
+            
+            // Try loading from cache again
+            final freshIds = ProfileService.getActivityIds(userId!);
+            if (freshIds != null && freshIds['donations'] != null) {
+              List<Map<String, dynamic>> freshDonations = [];
+              for (String id in freshIds['donations']!) {
+                final donation = await DonationCacheService.getCachedDonation(id);
+                if (donation != null) {
+                  freshDonations.add(donation);
+                }
+              }
+              
+              if (mounted) {
+                setState(() {
+                  donations = freshDonations;
+                  isLoading = false;
+                });
+              }
             }
-          }
-          
-          if (mounted) {
-            print('MyDonations - Setting ${freshDonations.length} fresh donations');
-            setState(() {
-              donations = freshDonations;
-              isLoading = false;
-            });
           }
         }
       }
@@ -94,7 +123,6 @@ class _MyDonationsPageState extends State<MyDonationsPage> {
       print('MyDonations - Loading images for donations');
       for (var donation in donations) {
         if (donation['_id'] != null && !_loadedImages.containsKey(donation['_id'])) {
-          print('MyDonations - Loading image for donation: ${donation['_id']}');
           await _loadCachedImage(donation['_id']);
         }
       }
@@ -107,7 +135,6 @@ class _MyDonationsPageState extends State<MyDonationsPage> {
         });
       }
     } finally {
-      print('MyDonations - Finished loading donations');
       if (mounted && isLoading) {
         setState(() => isLoading = false);
       }

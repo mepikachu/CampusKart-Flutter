@@ -20,6 +20,7 @@ class _MyLostItemsPageState extends State<MyLostItemsPage> {
   List<Map<String, dynamic>> myLostItems = [];
   bool isLoading = true;
   String errorMessage = '';
+  String? userId;
   
   // For image caching
   final Map<String, Uint8List> _loadedImages = {};
@@ -28,17 +29,34 @@ class _MyLostItemsPageState extends State<MyLostItemsPage> {
   @override
   void initState() {
     super.initState();
-    _loadMyLostItems();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      userId = await _secureStorage.read(key: 'userId');
+      if (userId == null) {
+        throw Exception('User ID not found');
+      }
+      await _loadMyLostItems();
+    } catch (e) {
+      setState(() {
+        errorMessage = e.toString();
+        isLoading = false;
+      });
+    }
   }
 
   Future<void> _loadMyLostItems() async {
+    if (userId == null) return;
+    
     try {
       if (mounted) {
         setState(() => isLoading = true);
       }
       
       // First try to get cached lost item IDs
-      final activityIds = ProfileService.activityIds;
+      final activityIds = ProfileService.getActivityIds(userId!);
       if (activityIds != null && activityIds['lost_items'] != null) {
         // Get cached items
         List<Map<String, dynamic>> cachedItems = [];
@@ -58,25 +76,44 @@ class _MyLostItemsPageState extends State<MyLostItemsPage> {
       }
       
       // If no cache or expired, refresh from server
-      if (myLostItems.isEmpty || !ProfileService.hasValidActivityCache) {
-        await ProfileService.fetchAndUpdateProfile();
-        
-        // Try loading from cache again
-        final freshIds = ProfileService.activityIds;
-        if (freshIds != null && freshIds['lost_items'] != null) {
-          List<Map<String, dynamic>> freshItems = [];
-          for (String id in freshIds['lost_items']!) {
-            final item = await LostFoundCacheService.getCachedItem(id);
-            if (item != null) {
-              freshItems.add(item);
+      if (myLostItems.isEmpty || !ProfileService.hasValidActivityCache(userId!)) {
+        final authCookie = await _secureStorage.read(key: 'authCookie');
+        if (authCookie == null) {
+          throw Exception('Not authenticated');
+        }
+
+        final response = await http.get(
+          Uri.parse('$serverUrl/api/users/me'),
+          headers: {
+            'Content-Type': 'application/json',
+            'auth-cookie': authCookie,
+          },
+        );
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['success']) {
+            // Cache the complete response
+            await ProfileService.cacheUserProfile(data);
+            
+            // Try loading from cache again
+            final freshIds = ProfileService.getActivityIds(userId!);
+            if (freshIds != null && freshIds['lost_items'] != null) {
+              List<Map<String, dynamic>> freshItems = [];
+              for (String id in freshIds['lost_items']!) {
+                final item = await LostFoundCacheService.getCachedItem(id);
+                if (item != null) {
+                  freshItems.add(item);
+                }
+              }
+              
+              if (mounted) {
+                setState(() {
+                  myLostItems = freshItems;
+                  isLoading = false;
+                });
+              }
             }
-          }
-          
-          if (mounted) {
-            setState(() {
-              myLostItems = freshItems;
-              isLoading = false;
-            });
           }
         }
       }

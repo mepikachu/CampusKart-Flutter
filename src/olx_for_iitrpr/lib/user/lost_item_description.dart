@@ -619,7 +619,9 @@ class _LostItemDetailsScreenState extends State<LostItemDetailsScreen> {
             ),
             
             // Chat button with improved styling
-            if (item['user'] != null && item['user']['_id'] != currentUserId)
+            if (item['user'] != null && 
+                item['user']['_id'] != currentUserId && 
+                item['status']?.toLowerCase() == 'lost')
               Container(
                 padding: const EdgeInsets.all(16.0),
                 decoration: BoxDecoration(

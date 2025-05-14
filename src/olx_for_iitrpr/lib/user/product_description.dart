@@ -899,9 +899,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: widget.product['status'] == 'sold' || 
+      bottomNavigationBar: (widget.product['status']?.toLowerCase() != 'available' || 
                           widget.product['seller']?['_id'] == currentUserId ||
-                          !widget.showOfferButton
+                          !widget.showOfferButton)
           ? null
           : SafeArea(
               child: Container(

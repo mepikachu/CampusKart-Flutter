@@ -11,6 +11,9 @@ import 'my_purchases.dart';
 import 'my_lost_items.dart';
 import 'edit_profile_screen.dart';
 import '../services/profile_service.dart';
+import '../services/product_cache_service.dart';
+import '../services/donation_cache_service.dart';
+import '../services/lost_found_cache_service.dart';
 import 'server.dart';
 
 class ProfileTab extends StatefulWidget {
@@ -41,8 +44,14 @@ class _ProfileTabState extends State<ProfileTab> {
     }
     
     try {
-      // First try to get cached profile data
-      final cachedProfile = ProfileService.profileData;
+      // First try to get user ID from secure storage
+      final userId = await _secureStorage.read(key: 'userId');
+      if (userId == null) {
+        throw Exception('User ID not found');
+      }
+
+      // Try to get cached profile data
+      final cachedProfile = ProfileService.getProfileData(userId);
       if (cachedProfile != null) {
         if (mounted) {
           setState(() {
@@ -54,18 +63,41 @@ class _ProfileTabState extends State<ProfileTab> {
       }
       
       // Fetch fresh data from server in the background
-      final success = await ProfileService.fetchAndUpdateProfile();
-      
-      if (success && mounted) {
-        setState(() {
-          userData = ProfileService.profileData;
-          errorMessage = '';
-        });
-        
-        // Reload profile image if needed
-        if (!isLoadingImage) {
-          await _loadProfileImage();
+      final authCookie = await _secureStorage.read(key: 'authCookie');
+      if (authCookie == null) {
+        throw Exception('Not authenticated');
+      }
+
+      final response = await http.get(
+        Uri.parse('$serverUrl/api/users/me'),
+        headers: {
+          'Content-Type': 'application/json',
+          'auth-cookie': authCookie,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success']) {
+          // Cache the complete response
+          await ProfileService.cacheUserProfile(data);
+          
+          if (mounted) {
+            setState(() {
+              userData = data['user'];
+              errorMessage = '';
+            });
+          }
+          
+          // Reload profile image if needed
+          if (!isLoadingImage) {
+            await _loadProfileImage();
+          }
+        } else {
+          throw Exception(data['message'] ?? 'Failed to load profile');
         }
+      } else {
+        throw Exception('Failed to load profile. Status: ${response.statusCode}');
       }
     } catch (e) {
       if (mounted) {
@@ -85,7 +117,7 @@ class _ProfileTabState extends State<ProfileTab> {
 
   /// Load and cache the user's profile image
   Future<void> _loadProfileImage() async {
-    if (isLoadingImage || userData == null || userData!['profilePicture'] == null) {
+    if (isLoadingImage || userData == null || userData!['_id'] == null) {
       return;
     }
     
@@ -94,9 +126,14 @@ class _ProfileTabState extends State<ProfileTab> {
         isLoadingImage = true;
       });
       
-      // Check for cached image first
+      // Use user-specific key for image caching
+      final userId = userData!['_id'];
       final prefs = await SharedPreferences.getInstance();
-      final cachedImageStr = prefs.getString('profile_image');
+      final cacheKey = 'profile_image_$userId';
+      final timestampKey = 'profile_image_timestamp_$userId';
+      
+      // Check for cached image first
+      final cachedImageStr = prefs.getString(cacheKey);
       
       if (cachedImageStr != null) {
         if (mounted) {
@@ -106,7 +143,7 @@ class _ProfileTabState extends State<ProfileTab> {
         }
         
         // Check if the profile was updated recently
-        final imageTimestamp = prefs.getString('profile_image_timestamp');
+        final imageTimestamp = prefs.getString(timestampKey);
         if (imageTimestamp != null) {
           final lastUpdate = DateTime.parse(imageTimestamp);
           if (DateTime.now().difference(lastUpdate) <= const Duration(hours: 1)) {
@@ -133,16 +170,16 @@ class _ProfileTabState extends State<ProfileTab> {
         if (data['success'] && data['image'] != null) {
           final imageBytes = base64Decode(data['image']['data']);
           
-          // Cache in memory and storage
+          // Cache in memory
           if (mounted) {
             setState(() {
               _profileImageBytes = imageBytes;
             });
           }
           
-          // Save to shared preferences
-          await prefs.setString('profile_image', data['image']['data']);
-          await prefs.setString('profile_image_timestamp', DateTime.now().toIso8601String());
+          // Save to shared preferences with user-specific keys
+          await prefs.setString(cacheKey, data['image']['data']);
+          await prefs.setString(timestampKey, DateTime.now().toIso8601String());
         }
       }
     } catch (e) {
@@ -162,7 +199,7 @@ class _ProfileTabState extends State<ProfileTab> {
       context: context,
       builder: (BuildContext context) => Theme(
         data: Theme.of(context).copyWith(
-          dialogBackgroundColor: Colors.white, // Force white background
+          dialogBackgroundColor: Colors.white,
         ),
         child: AlertDialog(
           title: const Text('Logout'),
@@ -185,15 +222,27 @@ class _ProfileTabState extends State<ProfileTab> {
 
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
-      
+      final userId = await _secureStorage.read(key: 'userId');
+
+      if (userId != null) {
+        // Clear user-specific data
+        await ProfileService.clearUserProfile(userId);
+        
+        // Clear user-specific image cache
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('profile_image_$userId');
+        await prefs.remove('profile_image_timestamp_$userId');
+      }
+
       // Clear all secure storage
       await _secureStorage.deleteAll();
       
-      // Clear SharedPreferences
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.clear();
+      // Clear all cache services
+      await ProductCacheService.clearAllCaches();
+      await DonationCacheService.clearAllCaches();
+      await LostFoundCacheService.clearAllCaches();
 
-      // Clear specific chat and notification data
+      // Clear notifications and chat data
       await _secureStorage.delete(key: 'notifications');
       await _secureStorage.delete(key: 'last_read_notification_time');
       await _secureStorage.delete(key: 'lastReadMessageIds');
@@ -570,19 +619,5 @@ class _ProfileTabState extends State<ProfileTab> {
         ),
       ),
     );
-  }
-
-  void _navigateToEditProfile() {
-    if (userData != null) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => EditProfileScreen(
-            userData: userData!,
-            onProfileUpdated: () => _loadUserData(),
-          ),
-        ),
-      );
-    }
   }
 }

@@ -13,7 +13,7 @@ import 'view_product.dart';
 import 'view_donation.dart';
 import 'view_lost_item.dart';
 import 'view_report.dart';
-import 'view_user_items.dart';
+
 import '../services/profile_service.dart';
 import '../services/product_cache_service.dart';
 import '../services/donation_cache_service.dart';
@@ -133,11 +133,27 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
 
     try {
       // Try to load from cache first
-      final cachedData = await ProfileService.getCachedUserProfile(widget.userId);
+      final cachedData = await ProfileService.getProfileData(widget.userId);
       if (cachedData != null) {
         setState(() {
           userData = cachedData;
-          // profilePictureData is already included in cachedData
+          // Get cached activity data
+          final cachedActivity = ProfileService.getActivityIds(widget.userId);
+          if (cachedActivity != null) {
+            userActivity = {
+              'products': [],
+              'donations': [],
+              'lost_items': [],
+              'purchasedProducts': [],
+              'reportsFiled': {
+                'user': [],
+                'product': []
+              },
+              'reportsAgainst': []
+            };
+            // Load items based on cached IDs
+            _loadItemsFromIds(cachedActivity);
+          }
           isLoading = false;
         });
       }
@@ -155,15 +171,11 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success']) {
-          // Cache the complete response
-          await ProfileService.cacheUserProfile(widget.userId, data);
+          // Cache the user data and activities
+          await ProfileService.cacheUserProfile(data);
 
           setState(() {
             userData = data['user'];
-            // profilePictureData comes directly from data['user']['profilePicture']
-            if (userData!['profilePicture']?.containsKey('data') ?? false) {
-              userData!['profilePictureData'] = userData!['profilePicture']['data'];
-            }
             userActivity = data['activity'] ?? userActivity;
             isLoading = false;
             allDataFetched = true;
@@ -183,6 +195,43 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
         isLoading = false;
       });
     }
+  }
+
+  // New method to load items from cached IDs
+  Future<void> _loadItemsFromIds(Map<String, List<String>> cachedIds) async {
+    // Handle products
+    for (String productId in cachedIds['products'] ?? []) {
+      final product = await ProductCacheService.getCachedProduct(productId);
+      if (product != null) {
+        userActivity['products'].add(product);
+      }
+    }
+
+    // Handle donations
+    for (String donationId in cachedIds['donations'] ?? []) {
+      final donation = await DonationCacheService.getCachedDonation(donationId);
+      if (donation != null) {
+        userActivity['donations'].add(donation);
+      }
+    }
+
+    // Handle lost items
+    for (String itemId in cachedIds['lost_items'] ?? []) {
+      final item = await LostFoundCacheService.getCachedItem(itemId);
+      if (item != null) {
+        userActivity['lost_items'].add(item);
+      }
+    }
+
+    // Handle purchased products
+    for (String productId in cachedIds['purchasedProducts'] ?? []) {
+      final product = await ProductCacheService.getCachedProduct(productId);
+      if (product != null) {
+        userActivity['purchasedProducts'].add(product);
+      }
+    }
+
+    setState(() {}); // Update UI with loaded items
   }
 
   Future<void> _loadProductImages() async {
@@ -398,34 +447,6 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     );
   }
 
-  void _viewAllProducts() {
-    if (userData == null) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => UserItemsView(
-          userId: widget.userId,
-          type: 'products',
-          userName: userData!['userName'] ?? 'User',
-        ),
-      ),
-    );
-  }
-
-  void _viewAllDonations() {
-    if (userData == null) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => UserItemsView(
-          userId: widget.userId,
-          type: 'donations',
-          userName: userData!['userName'] ?? 'User',
-        ),
-      ),
-    );
-  }
-
   String _formatDate(String? dateString) {
     if (dateString == null) return 'N/A';
     try {
@@ -612,28 +633,6 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String title, VoidCallback onViewAll) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          TextButton(
-            onPressed: onViewAll,
-            child: const Text('View All'),
-          ),
-        ],
-      ),
-    );
-  }
-  
   Widget _buildReportStatusBadge(String? status) {
     Color statusColor;
     switch (status?.toLowerCase()) {

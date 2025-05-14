@@ -195,6 +195,21 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
   }
 
   @override
+  void didUpdateWidget(ViewProfileScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.userId != widget.userId) {
+      setState(() {
+        userData = null;
+        userDonations = [];
+        isLoading = true;
+        isError = false;
+        errorMessage = '';
+      });
+      _fetchUserProfile();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(

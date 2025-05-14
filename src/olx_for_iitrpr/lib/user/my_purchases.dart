@@ -20,6 +20,7 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
   List<Map<String, dynamic>> myPurchases = [];
   bool isLoading = true;
   String errorMessage = '';
+  String? userId;
   
   // For image caching
   final Map<String, Uint8List> _loadedImages = {};
@@ -28,17 +29,34 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
   @override
   void initState() {
     super.initState();
-    _loadMyPurchases();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      userId = await _secureStorage.read(key: 'userId');
+      if (userId == null) {
+        throw Exception('User ID not found');
+      }
+      await _loadMyPurchases();
+    } catch (e) {
+      setState(() {
+        errorMessage = e.toString();
+        isLoading = false;
+      });
+    }
   }
 
   Future<void> _loadMyPurchases() async {
+    if (userId == null) return;
+    
     try {
       if (mounted) {
         setState(() => isLoading = true);
       }
       
       // First try to get cached purchase IDs
-      final activityIds = ProfileService.activityIds;
+      final activityIds = ProfileService.getActivityIds(userId!);
       if (activityIds != null && activityIds['purchasedProducts'] != null) {
         // Get cached products
         List<Map<String, dynamic>> cachedPurchases = [];
@@ -58,25 +76,44 @@ class _MyPurchasesPageState extends State<MyPurchasesPage> {
       }
       
       // If no cache or expired, refresh from server
-      if (myPurchases.isEmpty || !ProfileService.hasValidActivityCache) {
-        await ProfileService.fetchAndUpdateProfile();
-        
-        // Try loading from cache again
-        final freshIds = ProfileService.activityIds;
-        if (freshIds != null && freshIds['purchasedProducts'] != null) {
-          List<Map<String, dynamic>> freshPurchases = [];
-          for (String id in freshIds['purchasedProducts']!) {
-            final product = await ProductCacheService.getCachedProduct(id);
-            if (product != null) {
-              freshPurchases.add(product);
+      if (myPurchases.isEmpty || !ProfileService.hasValidActivityCache(userId!)) {
+        final authCookie = await _secureStorage.read(key: 'authCookie');
+        if (authCookie == null) {
+          throw Exception('Not authenticated');
+        }
+
+        final response = await http.get(
+          Uri.parse('$serverUrl/api/users/me'),
+          headers: {
+            'Content-Type': 'application/json',
+            'auth-cookie': authCookie,
+          },
+        );
+
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data['success']) {
+            // Cache the complete response
+            await ProfileService.cacheUserProfile(data);
+            
+            // Try loading from cache again
+            final freshIds = ProfileService.getActivityIds(userId!);
+            if (freshIds != null && freshIds['purchasedProducts'] != null) {
+              List<Map<String, dynamic>> freshPurchases = [];
+              for (String id in freshIds['purchasedProducts']!) {
+                final product = await ProductCacheService.getCachedProduct(id);
+                if (product != null) {
+                  freshPurchases.add(product);
+                }
+              }
+              
+              if (mounted) {
+                setState(() {
+                  myPurchases = freshPurchases;
+                  isLoading = false;
+                });
+              }
             }
-          }
-          
-          if (mounted) {
-            setState(() {
-              myPurchases = freshPurchases;
-              isLoading = false;
-            });
           }
         }
       }
