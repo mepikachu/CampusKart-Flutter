@@ -40,11 +40,18 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     setState(() => isLoading = true);
     try {
       final authCookie = await _secureStorage.read(key: 'authCookie');
+      
+      // First check if user is authenticated
+      if (authCookie == null) {
+        throw Exception('Not authenticated');
+      }
+
+      // Fetch notifications with proper error handling
       final response = await http.get(
-        Uri.parse('$serverUrl/api/notifications'),
+        Uri.parse('$serverUrl/api/user/notifications'),  // Updated endpoint
         headers: {
           'Content-Type': 'application/json',
-          'auth-cookie': authCookie ?? '',
+          'auth-cookie': authCookie,
         },
       );
 
@@ -52,18 +59,37 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         final data = json.decode(response.body);
         if (data['success'] == true) {
           setState(() {
-            notifications = data['notifications'];
+            notifications = data['notifications'].map((notification) {
+              // Add read status if not present
+              if (!notification.containsKey('read')) {
+                notification['read'] = false;
+              }
+              return notification;
+            }).toList();
             isLoading = false;
           });
+          
+          // Save last read time
+          await _saveLastReadTime();
         } else {
-          throw Exception(data['error'] ?? 'Failed to load notifications');
+          throw Exception(data['message'] ?? 'Failed to load notifications');
+        }
+      } else if (response.statusCode == 401) {
+        // Handle unauthorized access
+        await _secureStorage.delete(key: 'authCookie');
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/login');
         }
       } else {
         throw Exception('Server error: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching notifications: $e');
       if (mounted) {
+        setState(() {
+          isLoading = false;
+          notifications = [];  // Clear notifications on error
+        });
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: ${e.toString()}'),
@@ -71,7 +97,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           ),
         );
       }
-      setState(() => isLoading = false);
     }
   }
 
@@ -102,11 +127,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Icon _getNotificationIcon(String type) {
     switch (type) {
       case 'offer':
-        return const Icon(Icons.local_offer, color: Colors.blue);
-      case 'offer_response':
-        return const Icon(Icons.reply, color: Colors.green);
+      case 'offer_received':
+        return const Icon(Icons.local_offer, color: Colors.orange);
+      case 'offer_accepted':
+        return const Icon(Icons.check_circle, color: Colors.green);
+      case 'offer_rejected':
+        return const Icon(Icons.cancel, color: Colors.red);
       case 'product_update':
-        return const Icon(Icons.update, color: Colors.orange);
+        return const Icon(Icons.update, color: Colors.blue);
+      case 'product_deleted':
+        return const Icon(Icons.delete, color: Colors.red);
+      case 'warning':
+        return const Icon(Icons.warning, color: Colors.amber);
+      case 'account_blocked':
+        return const Icon(Icons.block, color: Colors.red);
+      case 'account_unblocked':
+        return const Icon(Icons.lock_open, color: Colors.green);
       default:
         return const Icon(Icons.notifications, color: Colors.grey);
     }
@@ -118,12 +154,40 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('Notifications'),
+        backgroundColor: Colors.white,
+        elevation: 1,
+        foregroundColor: Colors.black,
         actions: [
           if (notifications.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.done_all),
               onPressed: () async {
-                // Mark all as read functionality can be added here
+                try {
+                  final authCookie = await _secureStorage.read(key: 'authCookie');
+                  final response = await http.put(
+                    Uri.parse('$serverUrl/api/user/notifications/read-all'),
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'auth-cookie': authCookie ?? '',
+                    },
+                  );
+
+                  if (response.statusCode == 200) {
+                    setState(() {
+                      notifications = notifications.map((notification) {
+                        notification['read'] = true;
+                        return notification;
+                      }).toList();
+                    });
+                  }
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Failed to mark notifications as read'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
               },
             ),
         ],

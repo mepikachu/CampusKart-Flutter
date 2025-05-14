@@ -138,18 +138,20 @@ class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClie
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success']) {
-          final items = data['items'] as List;
+          // Filter out items with status 'found'
+          final allItems = data['items'] as List;
+          final lostOnlyItems = allItems.where((item) => item['status'] != 'found').toList();
           
-          // Cache the items
-          await LostFoundCacheService.cacheItems(items);
+          // Cache the filtered items
+          await LostFoundCacheService.cacheItems(lostOnlyItems);
           
           if (mounted) {
             setState(() {
-              lostItems = items;
+              lostItems = lostOnlyItems;
               
               // Only update filtered items if no filter is active
               if (_searchController.text.isEmpty) {
-                filteredItems = items;
+                filteredItems = lostOnlyItems;
               } else {
                 // Re-apply current filters
                 _filterItems(_searchController.text);
@@ -160,7 +162,7 @@ class _LostFoundTabState extends State<LostFoundTab> with AutomaticKeepAliveClie
           }
           
           // Fetch images for any items that don't have them
-          for (var item in items) {
+          for (var item in lostOnlyItems) {
             if (item['_id'] != null && !_loadedImages.containsKey(item['_id'])) {
               _fetchItemImage(item['_id']);
             }

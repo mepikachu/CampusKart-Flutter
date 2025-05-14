@@ -6,6 +6,7 @@ import 'my_purchases.dart';
 import 'product_description.dart';
 import 'product_management.dart';
 import 'server.dart';
+import '../services/notification_service.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -61,48 +62,37 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   void initState() {
     super.initState();
+    NotificationService.startPolling();
     _loadNotifications();
   }
 
   Future<void> _loadNotifications() async {
+    setState(() => isLoading = true);
+    
     try {
-      // Clear old notifications first
-      await _secureStorage.delete(key: 'notifications');
-      
-      setState(() {
-        notifications = []; // Clear in-memory notifications
-      });
-
+      await NotificationService.fetchNotifications();
       final notificationsJson = await _secureStorage.read(key: 'notifications');
       
-      if (mounted) {
+      if (mounted && notificationsJson != null) {
         setState(() {
-          if (notificationsJson != null) {
-            notifications = json.decode(notificationsJson);
-          }
+          notifications = json.decode(notificationsJson);
           isLoading = false;
         });
       }
     } catch (e) {
-      setState(() {
-        error = e.toString();
-        isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          error = e.toString();
+          isLoading = false;
+        });
+      }
     }
   }
 
   @override
   void dispose() {
-    _clearOldNotifications();
+    NotificationService.stopPolling();
     super.dispose();
-  }
-
-  Future<void> _clearOldNotifications() async {
-    try {
-      await _secureStorage.delete(key: 'notifications');
-    } catch (e) {
-      print('Error clearing old notifications: $e');
-    }
   }
 
   Widget _buildErrorWidget() {
