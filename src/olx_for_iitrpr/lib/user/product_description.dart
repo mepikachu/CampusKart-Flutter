@@ -804,7 +804,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Buyer Details',
+                              Text('Transaction Details',
                                 style: TextStyle(fontSize: 16),
                               ),
                               const SizedBox(height: 8),
@@ -824,24 +824,40 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                     borderRadius: BorderRadius.circular(8),
                                     border: Border.all(color: Colors.grey[200]!),
                                   ),
-                                  child: Row(
+                                  child: Column(
                                     children: [
-                                      CircleAvatar(
-                                        radius: 20,
-                                        backgroundColor: Colors.grey[200],
-                                        child: Icon(Icons.person, color: Colors.grey[400]),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                      Row(
                                         children: [
-                                          Text(
-                                            product['buyer']?['userName'] ?? 'Unknown',
-                                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                                          CircleAvatar(
+                                            radius: 20,
+                                            backgroundColor: Colors.grey[200],
+                                            child: Icon(Icons.person, color: Colors.grey[400]),
                                           ),
-                                          Text(
-                                            'Purchased on: ${_formatDateTime(product['soldAt'] ?? product['lastUpdatedAt'])}',
-                                            style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  'Buyer: ${product['buyer']?['userName'] ?? 'Unknown'}',
+                                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                                                ),
+                                                if (product['transactionDate'] != null)
+                                                  Text(
+                                                    'Date: ${_formatDateTime(product['transactionDate'])}',
+                                                    style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                                                  ),
+                                                if (product['transactionPrice'] != null)
+                                                  Text(
+                                                    'Final Price: ₹${product['transactionPrice']}',
+                                                    style: TextStyle(
+                                                      fontSize: 13, 
+                                                      color: Colors.green[700],
+                                                      fontWeight: FontWeight.w500,
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
                                           ),
                                         ],
                                       ),

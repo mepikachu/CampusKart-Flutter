@@ -535,6 +535,13 @@ class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
                                   const SizedBox(height: 8),
                                   _buildTimeDetail('Last updated', _formatDateTime(donation['lastUpdatedAt'])),
                                 ],
+                                if (donation['status'] == 'collected' && donation['donationDate'] != null) ...[
+                                  const SizedBox(height: 8),
+                                  _buildTimeDetail(
+                                    'Collected on',
+                                    _formatDateTime(donation['donationDate']),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -562,51 +569,64 @@ class _DonationDetailsScreenState extends State<DonationDetailsScreen> {
                       ),
                     ),
                     
-                    // Add this block at the bottom of the Column
-                    if (donationDetails?['status'] == 'available' && userRole == 'volunteer')
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: _startChat,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                ),
-                                child: const Text('Chat with Donor'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: isProcessing ? null : _collectDonation,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                ),
-                                child: isProcessing
-                                    ? const SizedBox(
-                                        height: 20,
-                                        width: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                        ),
-                                      )
-                                    : const Text('Mark as Collected'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    const SizedBox(height: 80), // Add bottom padding for buttons
                   ],
                 ),
               ),
             ),
+            // Fixed buttons at bottom
+            if (donationDetails?['status'] == 'available' && userRole == 'volunteer')
+              Container(
+                padding: const EdgeInsets.all(16.0),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
+                ),
+                child: SafeArea(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _startChat,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          child: const Text('Chat with Donor'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: isProcessing ? null : _collectDonation,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          child: isProcessing
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                  ),
+                                )
+                              : const Text('Mark as Collected'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
           ],
         ),
       ),

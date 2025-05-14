@@ -757,6 +757,8 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
         itemBuilder: (context, index) {
           switch(type) {
             case 'donation':
+              print('------------');
+              print(items[index]);
               return _buildItemPreview(
                 items[index], 
                 type, 
